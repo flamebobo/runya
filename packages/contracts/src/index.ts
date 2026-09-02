@@ -76,4 +76,5 @@ export * from './family.js';
 export * from './baby.js';
 export * from './bootstrap.js';
 export * from './records.js';
+export * from './growth.js';
 export * from './sync.js';

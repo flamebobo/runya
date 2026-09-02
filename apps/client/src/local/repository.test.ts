@@ -4,10 +4,13 @@ import { useFamilyRuntimeStore } from '@/stores/runtime';
 import {
   createRecordLocally,
   deleteRecordLocally,
+  rebaseConflictedUpdateLocally,
+  recoverPendingEntities,
+  restoreDeletedUpdateLocally,
   updateRecordLocally,
 } from '@/local/repository';
 import { getEntity, listEntities, putEntity } from '@/local/entityStore';
-import { loadPendingOperations } from '@/local/pendingStore';
+import { loadPendingOperations, savePendingOperations } from '@/local/pendingStore';
 
 const FAMILY_ID = '01JDEM3TESTFAMILY0000000000';
 const BABY_ID = '01JDEM3TESTBABY000000000000';
@@ -69,7 +72,7 @@ describe('local repository (offline persistence)', () => {
     expect(queued!.fullPayload?.recordedAt).toBe(recordedAt);
   });
 
-  it('offline create → delete before sync folds into nothing (no CREATE+DELETE roundtrip)', async () => {
+  it('keeps CREATE then DELETE so an in-flight create cannot survive on the server', async () => {
     const { entityId, operationId } = await createRecordLocally('DIAPER_RECORD', {
       babyId: BABY_ID,
       diaperType: 'DIRTY',
@@ -77,12 +80,17 @@ describe('local repository (offline persistence)', () => {
     });
 
     const deleteResult = await deleteRecordLocally('DIAPER_RECORD', entityId);
-    expect(deleteResult.operationId).toBe(operationId);
+    expect(deleteResult.operationId).not.toBe(operationId);
 
-    expect(await getEntity('DIAPER_RECORD', entityId)).toBeNull();
-    const pending = await loadPendingOperations();
-    expect(pending.find((operation) => operation.operationId === operationId)).toBeUndefined();
-    expect(pending.find((operation) => operation.entityId === entityId)).toBeUndefined();
+    expect((await getEntity('DIAPER_RECORD', entityId))?.deleted).toBe(true);
+    const pending = (await loadPendingOperations()).filter(
+      (operation) => operation.entityId === entityId,
+    );
+    expect(pending.map((operation) => operation.op)).toEqual(['CREATE', 'DELETE']);
+    expect(pending.map((operation) => operation.operationId)).toEqual([
+      operationId,
+      deleteResult.operationId,
+    ]);
   });
 
   it('offline update enqueues UPDATE with base snapshot and changed fields', async () => {
@@ -97,9 +105,13 @@ describe('local repository (offline persistence)', () => {
     const synced = await getEntity('FOOD_RECORD', entityId);
     if (synced) await putEntity({ ...synced, pendingOpId: null });
 
-    const update = await updateRecordLocally('FOOD_RECORD', entityId, { amountText: '50g' });
+    const update = await updateRecordLocally('FOOD_RECORD', entityId, {
+      amountText: '50g',
+    });
     const pending = await loadPendingOperations();
-    const queued = pending.find((operation) => operation.operationId === update.operationId);
+    const queued = pending.find(
+      (operation) => operation.operationId === update.operationId,
+    );
     expect(queued).toBeDefined();
     expect(queued!.op).toBe('UPDATE');
     expect(queued!.changedFields).toEqual(['amountText']);
@@ -122,7 +134,9 @@ describe('local repository (offline persistence)', () => {
     const after = await getEntity('DIAPER_RECORD', entityId);
     expect(after!.deleted).toBe(true);
     const pending = await loadPendingOperations();
-    expect(pending.find((operation) => operation.entityId === entityId)?.op).toBe('DELETE');
+    expect(pending.find((operation) => operation.entityId === entityId)?.op).toBe(
+      'DELETE',
+    );
   });
 
   it('pending operations keep stable unique ids across entries', async () => {
@@ -139,6 +153,111 @@ describe('local repository (offline persistence)', () => {
     const entities = await listEntities('DIAPER_RECORD' as SyncEntityType);
     expect(entities.filter((entity) => !entity.deleted)).toHaveLength(2);
     expect(await loadPendingOperations()).toHaveLength(2);
+  });
+
+  it('recovers an entity from the durable pending queue after an interrupted local write', async () => {
+    const entityId = '01JDEM3RECOVERY000000000000';
+    const operationId = '01JDEM3RECOVERYOP0000000000';
+    await savePendingOperations([
+      {
+        operationId,
+        deviceId: 'recovery-device',
+        familyId: FAMILY_ID,
+        entityType: 'GROWTH_RECORD',
+        entityId,
+        op: 'CREATE',
+        fullPayload: {
+          babyId: BABY_ID,
+          heightCm: 72.5,
+          recordedAt: Date.UTC(2026, 8, 1, 16),
+        },
+        clientCreatedAt: Date.now(),
+        retryCount: 0,
+      },
+    ]);
+
+    expect(await getEntity('GROWTH_RECORD', entityId)).toBeNull();
+    await recoverPendingEntities(['GROWTH_RECORD']);
+    expect(await getEntity('GROWTH_RECORD', entityId)).toMatchObject({
+      entityId,
+      pendingOpId: operationId,
+      deleted: false,
+      payload: { heightCm: 72.5 },
+    });
+  });
+
+  it('rebases keep-client on the latest server snapshot without dropping the pending intent', async () => {
+    const entityId = '01JDEM3CONFLICT000000000000';
+    await putEntity({
+      entityType: 'GROWTH_RECORD',
+      entityId,
+      version: 1,
+      deleted: false,
+      payload: { babyId: BABY_ID, heightCm: 70, note: null },
+      pendingOpId: null,
+    });
+    const update = await updateRecordLocally('GROWTH_RECORD', entityId, {
+      heightCm: 72,
+    });
+
+    await rebaseConflictedUpdateLocally({
+      operationId: update.operationId,
+      entityType: 'GROWTH_RECORD',
+      entityId,
+      serverVersion: 2,
+      serverSnapshot: { babyId: BABY_ID, heightCm: 71, note: '服务端备注' },
+      clientPatch: { heightCm: 72 },
+    });
+
+    const pending = await loadPendingOperations();
+    expect(pending).toHaveLength(1);
+    expect(pending[0]).toMatchObject({
+      operationId: update.operationId,
+      op: 'UPDATE',
+      baseVersion: 2,
+      baseSnapshot: { heightCm: 71, note: '服务端备注' },
+      patch: { heightCm: 72 },
+    });
+    expect(await getEntity('GROWTH_RECORD', entityId)).toMatchObject({
+      version: 3,
+      pendingOpId: update.operationId,
+      payload: { heightCm: 72, note: '服务端备注' },
+    });
+  });
+
+  it('replaces a deleted UPDATE with RESTORE then UPDATE in one queue write', async () => {
+    const entityId = '01JDEM3RESTORE0000000000000';
+    await putEntity({
+      entityType: 'MILESTONE',
+      entityId,
+      version: 1,
+      deleted: false,
+      payload: { babyId: BABY_ID, title: '第一次站立' },
+      pendingOpId: null,
+    });
+    const update = await updateRecordLocally('MILESTONE', entityId, {
+      title: '第一次独立站立',
+    });
+
+    await restoreDeletedUpdateLocally({
+      operationId: update.operationId,
+      entityType: 'MILESTONE',
+      entityId,
+      serverVersion: 2,
+      serverSnapshot: { babyId: BABY_ID, title: '第一次站立' },
+      clientPatch: { title: '第一次独立站立' },
+    });
+
+    const pending = await loadPendingOperations();
+    expect(pending.map((operation) => operation.op)).toEqual(['RESTORE', 'UPDATE']);
+    expect(pending[0]?.operationId).toBe(update.operationId);
+    expect(pending[1]?.operationId).not.toBe(update.operationId);
+    expect(await getEntity('MILESTONE', entityId)).toMatchObject({
+      version: 4,
+      deleted: false,
+      pendingOpId: pending[1]?.operationId,
+      payload: { title: '第一次独立站立' },
+    });
   });
 
   afterEach(() => {

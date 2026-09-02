@@ -248,7 +248,10 @@ function openSegment(segments: Array<typeof feedingSegments.$inferSelect>) {
   return [...segments].reverse().find((segment) => segment.endedAt == null) ?? null;
 }
 
-function closeSegmentValues(segment: typeof feedingSegments.$inferSelect, endedAt: number) {
+function closeSegmentValues(
+  segment: typeof feedingSegments.$inferSelect,
+  endedAt: number,
+) {
   return {
     endedAt,
     durationSeconds: elapsedSecondsFromRange(segment.startedAt, endedAt, endedAt),
@@ -553,7 +556,10 @@ export async function updateFeeding(
 ) {
   const { row, segments } = await requireFeedingAccess(db, userId, feedingId);
   assertVersion(row.version, expectedVersion);
-  if (row.status !== FeedingStatus.COMPLETED && (body.amountMl !== undefined || body.recordedAt)) {
+  if (
+    row.status !== FeedingStatus.COMPLETED &&
+    (body.amountMl !== undefined || body.recordedAt)
+  ) {
     throw new AppError('VALIDATION_ERROR', '进行中的喂奶请用计时操作', 400);
   }
   if (row.feedingType === FeedingType.BOTTLE && body.amountMl === null) {
@@ -663,7 +669,11 @@ export async function createSleep(
     status: SleepStatus.COMPLETED,
     startedAt: body.startedAt,
     endedAt: body.endedAt,
-    durationSeconds: elapsedSecondsFromRange(body.startedAt, body.endedAt, body.endedAt),
+    durationSeconds: elapsedSecondsFromRange(
+      body.startedAt,
+      body.endedAt,
+      body.endedAt,
+    ),
     startTimezone: body.timezoneName ?? DEFAULT_TZ,
     endTimezone: body.timezoneName ?? DEFAULT_TZ,
     note: body.note ?? null,
@@ -738,7 +748,9 @@ export async function updateSleep(
       startedAt,
       endedAt,
       durationSeconds:
-        endedAt != null ? elapsedSecondsFromRange(startedAt, endedAt, endedAt) : row.durationSeconds,
+        endedAt != null
+          ? elapsedSecondsFromRange(startedAt, endedAt, endedAt)
+          : row.durationSeconds,
       note: body.note === undefined ? row.note : body.note,
       updatedBy: userId,
       updatedAt: now,
@@ -789,7 +801,11 @@ export async function createDiaper(
     updatedBy: userId,
     updatedAt: now,
   });
-  const rows = await db.select().from(diaperRecords).where(eq(diaperRecords.id, id)).limit(1);
+  const rows = await db
+    .select()
+    .from(diaperRecords)
+    .where(eq(diaperRecords.id, id))
+    .limit(1);
   // 在线创建也进同步日志：离线端 pull 时能看到同一条真相。
   await appendSyncLog(
     db,
@@ -835,7 +851,8 @@ export async function updateDiaper(
     .set({
       diaperType: body.diaperType ?? current.diaperType,
       stoolColor: body.stoolColor === undefined ? current.stoolColor : body.stoolColor,
-      stoolTexture: body.stoolTexture === undefined ? current.stoolTexture : body.stoolTexture,
+      stoolTexture:
+        body.stoolTexture === undefined ? current.stoolTexture : body.stoolTexture,
       recordedAt: body.recordedAt ?? current.recordedAt,
       note: body.note === undefined ? current.note : body.note,
       updatedBy: userId,
@@ -854,7 +871,9 @@ export async function updateDiaper(
       entityId: diaperId,
       op: 'UPDATE',
       entityVersion: current.version + 1,
-      changedFields: Object.keys(body).filter((key) => body[key as keyof UpdateDiaperBody] !== undefined),
+      changedFields: Object.keys(body).filter(
+        (key) => body[key as keyof UpdateDiaperBody] !== undefined,
+      ),
     },
     now,
   );
@@ -916,7 +935,11 @@ export async function createFood(
     updatedBy: userId,
     updatedAt: now,
   });
-  const rows = await db.select().from(foodRecords).where(eq(foodRecords.id, id)).limit(1);
+  const rows = await db
+    .select()
+    .from(foodRecords)
+    .where(eq(foodRecords.id, id))
+    .limit(1);
   await appendSyncLog(
     db,
     {
@@ -981,7 +1004,9 @@ export async function updateFood(
       entityId: foodId,
       op: 'UPDATE',
       entityVersion: current.version + 1,
-      changedFields: Object.keys(body).filter((key) => body[key as keyof UpdateFoodBody] !== undefined),
+      changedFields: Object.keys(body).filter(
+        (key) => body[key as keyof UpdateFoodBody] !== undefined,
+      ),
     },
     now,
   );
@@ -1018,7 +1043,8 @@ export async function deleteFood(db: Database, userId: string, foodId: string) {
   return { ok: true as const };
 }
 
-function feedingTitle(row: typeof feedingRecords.$inferSelect) {  if (row.feedingType === FeedingType.BOTTLE) {
+function feedingTitle(row: typeof feedingRecords.$inferSelect) {
+  if (row.feedingType === FeedingType.BOTTLE) {
     const amount = row.amountMl != null ? `${Math.round(row.amountMl)}ml` : '';
     return amount ? `喂奶 · ${amount}` : '喂奶 · 奶瓶';
   }
@@ -1029,7 +1055,8 @@ function feedingTitle(row: typeof feedingRecords.$inferSelect) {  if (row.feedin
 
 function sleepTitle(row: typeof sleepRecords.$inferSelect) {
   if (row.status === SleepStatus.RUNNING) return '睡着了';
-  if (row.durationSeconds != null) return `睡着了 · ${formatDurationLabel(row.durationSeconds)}`;
+  if (row.durationSeconds != null)
+    return `睡着了 · ${formatDurationLabel(row.durationSeconds)}`;
   return '睡着了';
 }
 
@@ -1123,7 +1150,10 @@ export async function listTimeline(
       conditions.push(
         or(
           lt(sleepRecords.startedAt, cursorAfter.afterAt),
-          and(eq(sleepRecords.startedAt, cursorAfter.afterAt), lt(sleepRecords.id, cursorAfter.after)),
+          and(
+            eq(sleepRecords.startedAt, cursorAfter.afterAt),
+            lt(sleepRecords.id, cursorAfter.after),
+          ),
         )!,
       );
     }
@@ -1149,7 +1179,10 @@ export async function listTimeline(
   }
 
   if (kind === 'all' || kind === 'diaper') {
-    const conditions = [eq(diaperRecords.babyId, babyId), isNull(diaperRecords.deletedAt)];
+    const conditions = [
+      eq(diaperRecords.babyId, babyId),
+      isNull(diaperRecords.deletedAt),
+    ];
     if (query.from != null) conditions.push(gte(diaperRecords.recordedAt, query.from));
     if (query.to != null) conditions.push(lte(diaperRecords.recordedAt, query.to));
     if (cursorAfter) {
@@ -1193,7 +1226,10 @@ export async function listTimeline(
       conditions.push(
         or(
           lt(foodRecords.recordedAt, cursorAfter.afterAt),
-          and(eq(foodRecords.recordedAt, cursorAfter.afterAt), lt(foodRecords.id, cursorAfter.after)),
+          and(
+            eq(foodRecords.recordedAt, cursorAfter.afterAt),
+            lt(foodRecords.id, cursorAfter.after),
+          ),
         )!,
       );
     }
@@ -1209,7 +1245,9 @@ export async function listTimeline(
           id: row.id,
           kind: RecordKind.FOOD,
           recordedAt: row.recordedAt,
-          title: row.amountText ? `辅食 · ${row.foodName} ${row.amountText}` : `辅食 · ${row.foodName}`,
+          title: row.amountText
+            ? `辅食 · ${row.foodName} ${row.amountText}`
+            : `辅食 · ${row.foodName}`,
           subtitle: row.reaction,
           status: null,
           version: row.version,
@@ -1271,9 +1309,47 @@ interface StatsWindow {
   end: number;
 }
 
+function localDate(startMs: number, utcOffsetMinutes: number) {
+  return new Date(startMs + utcOffsetMinutes * 60_000);
+}
+
 function weekdayLabel(startMs: number, utcOffsetMinutes: number) {
-  // 取本地正午时刻的 UTC 星期，避免边界
-  return WEEKDAY_LABELS[new Date(startMs + (utcOffsetMinutes + 720) * 60_000).getUTCDay()] ?? '';
+  return WEEKDAY_LABELS[localDate(startMs, utcOffsetMinutes).getUTCDay()] ?? '';
+}
+
+function monthDayLabel(startMs: number, utcOffsetMinutes: number) {
+  const date = localDate(startMs, utcOffsetMinutes);
+  return `${date.getUTCMonth() + 1}/${date.getUTCDate()}`;
+}
+
+function calendarMonthWindows(
+  anchorStartMs: number,
+  utcOffsetMinutes: number,
+): StatsWindow[] {
+  const anchor = localDate(anchorStartMs, utcOffsetMinutes);
+  const anchorYear = anchor.getUTCFullYear();
+  const anchorMonth = anchor.getUTCMonth();
+
+  return Array.from({ length: 12 }, (_, index) => {
+    const monthIndex = anchorMonth - 11 + index;
+    const start = Date.UTC(anchorYear, monthIndex, 1) - utcOffsetMinutes * 60_000;
+    const end = Date.UTC(anchorYear, monthIndex + 1, 1) - utcOffsetMinutes * 60_000;
+    const month = localDate(start, utcOffsetMinutes).getUTCMonth() + 1;
+    return { label: `${month}月`, start, end };
+  });
+}
+
+function dailyWindows(
+  length: number,
+  anchorStartMs: number,
+  utcOffsetMinutes: number,
+  label: (startMs: number, utcOffsetMinutes: number) => string,
+): StatsWindow[] {
+  const firstStart = anchorStartMs - (length - 1) * MS_PER_DAY;
+  return Array.from({ length }, (_, index) => {
+    const start = firstStart + index * MS_PER_DAY;
+    return { label: label(start, utcOffsetMinutes), start, end: start + MS_PER_DAY };
+  });
 }
 
 function buildWindows(
@@ -1289,25 +1365,12 @@ function buildWindows(
     }));
   }
   if (range === 'week') {
-    return Array.from({ length: 7 }, (_, index) => {
-      const start = anchorStartMs + index * MS_PER_DAY;
-      return {
-        label: weekdayLabel(start, utcOffsetMinutes),
-        start,
-        end: start + MS_PER_DAY,
-      };
-    });
+    return dailyWindows(7, anchorStartMs, utcOffsetMinutes, weekdayLabel);
   }
-  const anchorLocalMidnight = anchorStartMs + utcOffsetMinutes * 60_000;
-  const anchorLocalDay = Math.floor(anchorLocalMidnight / MS_PER_DAY);
-  const anchorLocalDate = new Date((anchorLocalDay + 0.5) * MS_PER_DAY);
-  const daysInMonth = new Date(
-    Date.UTC(anchorLocalDate.getUTCFullYear(), anchorLocalDate.getUTCMonth() + 1, 0),
-  ).getUTCDate();
-  return Array.from({ length: daysInMonth }, (_, index) => {
-    const start = anchorStartMs + index * MS_PER_DAY;
-    return { label: `${index + 1}`, start, end: start + MS_PER_DAY };
-  });
+  if (range === 'month') {
+    return dailyWindows(30, anchorStartMs, utcOffsetMinutes, monthDayLabel);
+  }
+  return calendarMonthWindows(anchorStartMs, utcOffsetMinutes);
 }
 
 function overlapSeconds(start: number, end: number, window: StatsWindow) {
@@ -1327,27 +1390,37 @@ export async function getRecordStats(
   // 展示时区 = 客户端本地时区（缺省回落服务器时区）
   const utcOffsetMinutes = query.utcOffsetMinutes ?? -new Date().getTimezoneOffset();
   const anchorIso = query.date ?? localIsoToday(utcOffsetMinutes);
-  const [year, month, day] = anchorIso.split('-').map(Number) as [number, number, number];
+  const [year, month, day] = anchorIso.split('-').map(Number) as [
+    number,
+    number,
+    number,
+  ];
   // anchor 本地零点的 UTC 时刻 = Date.UTC(日期) - 偏移
   const anchorStartMs = Date.UTC(year, month - 1, day) - utcOffsetMinutes * 60_000;
   const windows = buildWindows(query.range, anchorStartMs, utcOffsetMinutes);
   const rangeStart = windows[0]!.start;
   const rangeEnd = windows[windows.length - 1]!.end;
 
-  function countsByWindows(rows: Array<{ recordedAt: number }>) {
-    const counts = windows.map(() => 0);
+  function valuesByWindows<T extends { recordedAt: number }>(
+    rows: T[],
+    value: (row: T) => number,
+  ) {
+    const totals = windows.map(() => 0);
     for (const row of rows) {
       const index = windows.findIndex(
         (window) => row.recordedAt >= window.start && row.recordedAt < window.end,
       );
-      if (index >= 0) counts[index]! += 1;
+      if (index >= 0) totals[index]! += value(row);
     }
-    return counts;
+    return totals;
   }
 
-  const feedingCounts = countsByWindows(
+  const feedingAmounts = valuesByWindows(
     await db
-      .select({ recordedAt: feedingRecords.recordedAt })
+      .select({
+        recordedAt: feedingRecords.recordedAt,
+        amountMl: feedingRecords.amountMl,
+      })
       .from(feedingRecords)
       .where(
         and(
@@ -1358,9 +1431,10 @@ export async function getRecordStats(
           lt(feedingRecords.recordedAt, rangeEnd),
         ),
       ),
+    (row) => row.amountMl ?? 0,
   );
 
-  const diaperCounts = countsByWindows(
+  const diaperCounts = valuesByWindows(
     await db
       .select({ recordedAt: diaperRecords.recordedAt })
       .from(diaperRecords)
@@ -1372,9 +1446,10 @@ export async function getRecordStats(
           lt(diaperRecords.recordedAt, rangeEnd),
         ),
       ),
+    () => 1,
   );
 
-  const foodCounts = countsByWindows(
+  const foodCounts = valuesByWindows(
     await db
       .select({ recordedAt: foodRecords.recordedAt })
       .from(foodRecords)
@@ -1386,6 +1461,7 @@ export async function getRecordStats(
           lt(foodRecords.recordedAt, rangeEnd),
         ),
       ),
+    () => 1,
   );
 
   const sleepTotals = windows.map(() => 0);
@@ -1415,7 +1491,7 @@ export async function getRecordStats(
     range: query.range,
     buckets: windows.map((window, index) => ({
       label: window.label,
-      feedingCount: feedingCounts[index]!,
+      feedingAmountMl: feedingAmounts[index]!,
       sleepSeconds: sleepTotals[index]!,
       diaperCount: diaperCounts[index]!,
       foodCount: foodCounts[index]!,

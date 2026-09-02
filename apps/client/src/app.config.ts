@@ -6,6 +6,7 @@ export default {
     'pages/onboarding/index',
     'pages/records/compose/index',
     'pages/records/detail/index',
+    'pages/growth/index',
     'pages/dev/design-system/index',
   ],
   window: {

@@ -2,18 +2,18 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { useState } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { StatsBucket, StatsRange } from '@runew/contracts';
-import { StatsChartView } from './StatsChart';
+import { StatsChartView, type RecordScope } from './StatsChart';
 
 const DAY_BUCKETS: StatsBucket[] = [
-  { label: '0', feedingCount: 0, sleepSeconds: 7200, diaperCount: 0, foodCount: 0 },
-  { label: '1', feedingCount: 0, sleepSeconds: 0, diaperCount: 0, foodCount: 0 },
-  { label: '2', feedingCount: 0, sleepSeconds: 0, diaperCount: 0, foodCount: 0 },
-  { label: '3', feedingCount: 2, sleepSeconds: 0, diaperCount: 0, foodCount: 0 },
+  { label: '0', feedingAmountMl: 0, sleepSeconds: 7200, diaperCount: 0, foodCount: 0 },
+  { label: '1', feedingAmountMl: 0, sleepSeconds: 0, diaperCount: 0, foodCount: 0 },
+  { label: '2', feedingAmountMl: 0, sleepSeconds: 0, diaperCount: 0, foodCount: 0 },
+  { label: '3', feedingAmountMl: 2, sleepSeconds: 0, diaperCount: 0, foodCount: 0 },
 ];
 
 const WEEK_BUCKETS: StatsBucket[] = Array.from({ length: 7 }, (_, index) => ({
   label: ['一', '二', '三', '四', '五', '六', '日'][index] ?? '',
-  feedingCount: index + 1,
+  feedingAmountMl: index + 1,
   sleepSeconds: 0,
   diaperCount: 0,
   foodCount: 0,
@@ -21,8 +21,16 @@ const WEEK_BUCKETS: StatsBucket[] = Array.from({ length: 7 }, (_, index) => ({
 
 function Harness({ buckets }: { buckets: StatsBucket[] }) {
   const [range, setRange] = useState<StatsRange>('day');
+  const [scope, setScope] = useState<RecordScope>('all');
   return (
-    <StatsChartView range={range} onRange={setRange} buckets={buckets} onRetry={() => {}} />
+    <StatsChartView
+      range={range}
+      onRange={setRange}
+      scope={scope}
+      onScopeChange={setScope}
+      buckets={buckets}
+      onRetry={() => {}}
+    />
   );
 }
 
@@ -31,46 +39,72 @@ describe('StatsChartView', () => {
     vi.clearAllMocks();
   });
 
-  it('renders segmented control, metric chips and bar columns', () => {
+  it('uses one record-type selector and shows an all-record overview', () => {
     render(<Harness buckets={DAY_BUCKETS} />);
     expect(screen.getByRole('tab', { name: '日' })).toBeTruthy();
     expect(screen.getByRole('tab', { name: '月' })).toBeTruthy();
-    expect(screen.getAllByRole('button', { name: '喂奶' }).length).toBeGreaterThan(0);
-    // 每个桶一根柱子：轨道数等于桶数
-    expect(screen.getAllByRole('button', { name: /时$/ })).toHaveLength(DAY_BUCKETS.length);
+    expect(screen.getByRole('tab', { name: '年' })).toBeTruthy();
+    expect(screen.getAllByRole('button', { name: '喂奶' })).toHaveLength(1);
+    expect(screen.getAllByRole('button', { name: '睡眠' })).toHaveLength(1);
+    expect(screen.getByText('小日子发芽中')).toBeTruthy();
+    expect(screen.getByText('2ml')).toBeTruthy();
+    expect(screen.getByText('2小时')).toBeTruthy();
   });
 
-  it('shows per-bucket readout when a bar is tapped', () => {
+  it('labels rolling month and year ranges explicitly', () => {
     render(<Harness buckets={DAY_BUCKETS} />);
-    // 默认指标 = 喂奶，汇总读数
-    expect(screen.getByText('2 次')).toBeTruthy();
+    fireEvent.click(screen.getByRole('tab', { name: '月' }));
+    expect(screen.getByText('最近 30 天 · 全部记录')).toBeTruthy();
+    fireEvent.click(screen.getByRole('tab', { name: '年' }));
+    expect(screen.getByText('最近 12 个月 · 全部记录')).toBeTruthy();
+  });
+
+  it('shows metric bars and per-bucket readout after a type is selected', () => {
+    render(<Harness buckets={DAY_BUCKETS} />);
+    fireEvent.click(screen.getByRole('button', { name: '喂奶' }));
+    expect(screen.getByText('2 ml')).toBeTruthy();
+    expect(screen.getAllByRole('button', { name: /时$/ })).toHaveLength(
+      DAY_BUCKETS.length,
+    );
     fireEvent.click(screen.getAllByRole('button', { name: /时$/ })[3]!);
-    // 3 时桶：喂奶 2 次
     expect(screen.getByText('3时 · 喂奶')).toBeTruthy();
   });
 
-  it('switching metric re-scales the readout', () => {
+  it('switching type re-scales the readout', () => {
     render(<Harness buckets={DAY_BUCKETS} />);
     fireEvent.click(screen.getByRole('button', { name: '睡眠' }));
-    // 睡眠汇总：2 小时
     expect(screen.getByText('2小时')).toBeTruthy();
   });
 
   it('week range renders weekday labels and 7 bars', () => {
     render(<Harness buckets={WEEK_BUCKETS} />);
     fireEvent.click(screen.getByRole('tab', { name: '周' }));
+    fireEvent.click(screen.getByRole('button', { name: '喂奶' }));
     expect(screen.getAllByRole('button', { name: /周/ })).toHaveLength(7);
   });
 
-  it('shows quiet state when all values are zero', () => {
+  it('shows quiet state when the selected type has no values', () => {
     render(
       <Harness
         buckets={[
-          { label: '0', feedingCount: 0, sleepSeconds: 0, diaperCount: 0, foodCount: 0 },
-          { label: '1', feedingCount: 0, sleepSeconds: 0, diaperCount: 0, foodCount: 0 },
+          {
+            label: '0',
+            feedingAmountMl: 0,
+            sleepSeconds: 0,
+            diaperCount: 0,
+            foodCount: 0,
+          },
+          {
+            label: '1',
+            feedingAmountMl: 0,
+            sleepSeconds: 0,
+            diaperCount: 0,
+            foodCount: 0,
+          },
         ]}
       />,
     );
+    fireEvent.click(screen.getByRole('button', { name: '喂奶' }));
     expect(screen.getByText('这段时间还很安静，记录会慢慢长出节奏。')).toBeTruthy();
   });
 });

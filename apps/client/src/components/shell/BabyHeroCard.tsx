@@ -35,7 +35,7 @@ export function BabyHeroCard({
       >
         <Image className={styles.art} src={heroArt} mode="aspectFit" />
         <View className={styles.avatarWrap}>
-          <Image className={styles.avatar} src={babyAvatar} mode="aspectFill" />
+          <Image className={styles.avatar} src={babyAvatar} mode="aspectFit" />
         </View>
         <View className={styles.identity}>
           <Text className={styles.name}>{name}</Text>

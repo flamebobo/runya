@@ -1,11 +1,37 @@
 import { useEffect, useState } from 'react';
-import type { DuplicateCandidate } from '@runew/contracts';
+import type {
+  DuplicateCandidate,
+  RecordPayload,
+  SyncEntityType,
+} from '@runew/contracts';
 import { useFamilyRuntimeStore, useSyncRuntimeStore } from '@/stores/runtime';
 import { runSyncCycle } from '@/local/syncEngine';
 import { listDuplicateCandidates } from '@/api/sync';
-import { updateRecordLocally, deleteRecordLocally } from '@/local/repository';
+import { putEntity } from '@/local/entityStore';
+import { removePendingOperation } from '@/local/pendingStore';
+import {
+  rebaseConflictedUpdateLocally,
+  restoreDeletedUpdateLocally,
+} from '@/local/repository';
 import { SyncBar } from './SyncBar';
 import { ConflictDialog, DeletionDialog, DuplicateDialog } from './SyncDialogs';
+
+async function alignLocalEntity(
+  entityType: SyncEntityType,
+  entityId: string,
+  version: number,
+  payload: RecordPayload,
+  deleted: boolean,
+) {
+  await putEntity({
+    entityType,
+    entityId,
+    version,
+    deleted,
+    payload: payload as Record<string, unknown>,
+    pendingOpId: null,
+  });
+}
 
 function ConflictHost() {
   const familyId = useFamilyRuntimeStore((state) => state.familyId);
@@ -19,30 +45,34 @@ function ConflictHost() {
   ) {
     if (!conflict || !familyId) return;
     if (choice === 'KEEP_CLIENT') {
-      // 用服务器最新值做 base，把本机 patch 重新入队。
-      await updateRecordLocally(
+      await rebaseConflictedUpdateLocally({
+        operationId: conflict.operationId,
+        entityType: conflict.entityType,
+        entityId: conflict.entityId,
+        serverVersion: conflict.serverVersion,
+        serverSnapshot: conflict.serverSnapshot,
+        clientPatch: conflict.clientPatch,
+      });
+    } else {
+      await alignLocalEntity(
         conflict.entityType,
         conflict.entityId,
-        conflict.clientPatch,
-        { baseVersion: undefined },
+        conflict.serverVersion,
+        conflict.serverSnapshot,
+        false,
       );
-    } else {
-      // 保留服务器版本：本地实体对齐服务端快照即可。
-      const { putEntity, getEntity } = await import('@/local/entityStore');
-      const local = await getEntity(conflict.entityType, conflict.entityId);
-      if (local) {
-        await putEntity({
-          ...local,
-          payload: conflict.serverSnapshot as Record<string, unknown>,
-          pendingOpId: null,
-        });
-      }
+      await removePendingOperation(conflict.operationId);
     }
     resolveConflict(conflict.operationId);
     void runSyncCycle(familyId);
   }
 
-  return <ConflictDialog conflict={active} onResolve={(c, choice) => void handleResolve(c, choice)} />;
+  return (
+    <ConflictDialog
+      conflict={active}
+      onResolve={(conflict, choice) => void handleResolve(conflict, choice)}
+    />
+  );
 }
 
 function DuplicateHost() {
@@ -88,8 +118,18 @@ function DuplicateHost() {
   return (
     <DuplicateDialog
       open={Boolean(pair)}
-      pair={pair ? { candidateId: pair.candidateId, summaryA: pair.summaryA, summaryB: pair.summaryB } : null}
-      onResolve={(candidateId, resolution, canonical) => void handleResolve(candidateId, resolution, canonical)}
+      pair={
+        pair
+          ? {
+              candidateId: pair.candidateId,
+              summaryA: pair.summaryA,
+              summaryB: pair.summaryB,
+            }
+          : null
+      }
+      onResolve={(candidateId, resolution, canonical) =>
+        void handleResolve(candidateId, resolution, canonical)
+      }
       onClose={() => setPair(null)}
     />
   );
@@ -102,19 +142,28 @@ function DeletionHost() {
 
   async function handleRestore(notice: NonNullable<typeof deletionNotice>) {
     if (!familyId) return;
-    await updateRecordLocally(
-      notice.entityType as 'DIAPER_RECORD',
-      notice.entityId,
-      {},
-    );
+    await restoreDeletedUpdateLocally({
+      operationId: notice.operationId,
+      entityType: notice.entityType,
+      entityId: notice.entityId,
+      serverVersion: notice.serverVersion,
+      serverSnapshot: notice.serverSnapshot,
+      clientPatch: notice.clientPatch,
+    });
     setDeletionNotice(null);
     void runSyncCycle(familyId);
   }
 
   async function handleDiscard(notice: NonNullable<typeof deletionNotice>) {
     if (!familyId) return;
-    // 放弃修改：本地实体对齐「已删除」状态。
-    await deleteRecordLocally(notice.entityType as 'DIAPER_RECORD', notice.entityId);
+    await alignLocalEntity(
+      notice.entityType,
+      notice.entityId,
+      notice.serverVersion,
+      notice.serverSnapshot,
+      true,
+    );
+    await removePendingOperation(notice.operationId);
     setDeletionNotice(null);
     void runSyncCycle(familyId);
   }

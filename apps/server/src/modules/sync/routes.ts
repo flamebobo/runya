@@ -9,6 +9,8 @@ import type { RecordPayload } from '@runew/contracts';
 import {
   diaperRecords,
   foodRecords,
+  growthRecords,
+  milestones,
   systemMetadata,
   SYSTEM_METADATA_KEYS,
 } from '@runew/db';
@@ -25,7 +27,10 @@ import {
   listPendingDuplicates,
   resolveDuplicate,
 } from './service.js';
-import { duplicateResolveBodySchema, duplicateResolveResponseSchema } from './schemas.js';
+import {
+  duplicateResolveBodySchema,
+  duplicateResolveResponseSchema,
+} from './schemas.js';
 
 type Database = LibSQLDatabase<typeof schema>;
 
@@ -48,13 +53,23 @@ export async function syncRoutes(app: FastifyInstance) {
       throw new AppError('VALIDATION_ERROR', '一次同步的操作有点多，请分批发送', 400);
     }
 
-    const results = [];
     for (const operation of body.operations) {
       if (operation.familyId !== body.familyId) {
-        // 拒绝跨家庭混包：整个 batch 一并拒绝，客户端会重试并修正。
-        throw new AppError('FAMILY_ACCESS_DENIED', '这份同步里有不属于你家庭的操作', 403);
+        throw new AppError(
+          'FAMILY_ACCESS_DENIED',
+          '这份同步里有不属于你家庭的操作',
+          403,
+        );
       }
-      results.push(await applyPendingOperation(app.db, userId, operation));
+    }
+
+    const results = [];
+    for (const operation of body.operations) {
+      results.push(
+        await app.db.transaction((tx) =>
+          applyPendingOperation(tx as unknown as typeof app.db, userId, operation),
+        ),
+      );
     }
 
     const serverCursor = await latestSeq(app.db);
@@ -70,7 +85,11 @@ export async function syncRoutes(app: FastifyInstance) {
   });
 
   app.get('/sync/pull', { preHandler: requireAuth }, async (request) => {
-    const query = request.query as { familyId?: string; cursor?: string; limit?: string };
+    const query = request.query as {
+      familyId?: string;
+      cursor?: string;
+      limit?: string;
+    };
     const familyId = query.familyId;
     if (!familyId) {
       throw new AppError('VALIDATION_ERROR', '缺少家庭信息', 400);
@@ -80,7 +99,10 @@ export async function syncRoutes(app: FastifyInstance) {
     if (!Number.isFinite(cursor) || cursor < 0) {
       throw new AppError('SYNC_CURSOR_EXPIRED', '同步进度失效，需要重新对齐', 409);
     }
-    const limit = Math.min(Math.max(Number.parseInt(query.limit ?? '200', 10) || 200, 1), 500);
+    const limit = Math.min(
+      Math.max(Number.parseInt(query.limit ?? '200', 10) || 200, 1),
+      500,
+    );
 
     const { changes, nextCursor, hasMore } = await readSyncLog(
       app.db,
@@ -128,7 +150,10 @@ export async function syncRoutes(app: FastifyInstance) {
         },
       });
     }
-    const foodRows = await app.db.select().from(foodRecords).where(eq(foodRecords.familyId, familyId));
+    const foodRows = await app.db
+      .select()
+      .from(foodRecords)
+      .where(eq(foodRecords.familyId, familyId));
     for (const row of foodRows) {
       entities.push({
         entityType: 'FOOD_RECORD' as const,
@@ -142,6 +167,47 @@ export async function syncRoutes(app: FastifyInstance) {
           recordedAt: row.recordedAt,
           timezoneName: row.timezoneName,
           note: row.note,
+        },
+      });
+    }
+    const growthRows = await app.db
+      .select()
+      .from(growthRecords)
+      .where(eq(growthRecords.familyId, familyId));
+    for (const row of growthRows) {
+      entities.push({
+        entityType: 'GROWTH_RECORD' as const,
+        entityId: row.id,
+        version: row.version,
+        deleted: row.deletedAt != null,
+        payload: {
+          babyId: row.babyId,
+          heightCm: row.heightCm,
+          weightKg: row.weightKg,
+          headCircumferenceCm: row.headCircumferenceCm,
+          recordedAt: row.recordedAt,
+          timezoneName: row.timezoneName,
+          note: row.note,
+        },
+      });
+    }
+    const milestoneRows = await app.db
+      .select()
+      .from(milestones)
+      .where(eq(milestones.familyId, familyId));
+    for (const row of milestoneRows) {
+      entities.push({
+        entityType: 'MILESTONE' as const,
+        entityId: row.id,
+        version: row.version,
+        deleted: row.deletedAt != null,
+        payload: {
+          babyId: row.babyId,
+          title: row.title,
+          description: row.description,
+          happenedAt: row.happenedAt,
+          timezoneName: row.timezoneName,
+          coverMediaId: row.coverMediaId,
         },
       });
     }
@@ -168,23 +234,30 @@ export async function syncRoutes(app: FastifyInstance) {
     return createSuccessEnvelope({ items }, request.requestId);
   });
 
-  app.post('/sync/duplicates/:id/resolve', { preHandler: requireAuth }, async (request) => {
-    const { id } = request.params as { id: string };
-    const body = duplicateResolveBodySchema.parse(request.body);
-    const query = request.query as { familyId?: string };
-    const familyId =
-      query.familyId ??
-      (
-        (request.body as { familyId?: string } | undefined) ??
-        {}
-      ).familyId;
-    if (!familyId) {
-      throw new AppError('VALIDATION_ERROR', '缺少家庭信息', 400);
-    }
-    const result = await resolveDuplicate(app.db, request.auth.userId!, familyId, id, body);
-    return createSuccessEnvelope(
-      duplicateResolveResponseSchema.parse(result),
-      request.requestId,
-    );
-  });
+  app.post(
+    '/sync/duplicates/:id/resolve',
+    { preHandler: requireAuth },
+    async (request) => {
+      const { id } = request.params as { id: string };
+      const body = duplicateResolveBodySchema.parse(request.body);
+      const query = request.query as { familyId?: string };
+      const familyId =
+        query.familyId ??
+        ((request.body as { familyId?: string } | undefined) ?? {}).familyId;
+      if (!familyId) {
+        throw new AppError('VALIDATION_ERROR', '缺少家庭信息', 400);
+      }
+      const result = await resolveDuplicate(
+        app.db,
+        request.auth.userId!,
+        familyId,
+        id,
+        body,
+      );
+      return createSuccessEnvelope(
+        duplicateResolveResponseSchema.parse(result),
+        request.requestId,
+      );
+    },
+  );
 }

@@ -6,8 +6,12 @@
   "description": "润芽 · RUNEW — 家庭成长工作台",
   "packageManager": "pnpm@9.15.0",
   "scripts": {
+    "build:packages": "pnpm --filter './packages/**' build",
+    "predev": "pnpm build:packages",
     "dev": "pnpm --parallel --filter @runew/client --filter @runew/server dev",
+    "predev:client": "pnpm build:packages",
     "dev:client": "pnpm --filter @runew/client dev:h5",
+    "predev:server": "pnpm build:packages",
     "dev:server": "pnpm --filter @runew/server dev",
     "typecheck": "pnpm -r typecheck",
     "lint": "eslint .",

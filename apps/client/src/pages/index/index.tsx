@@ -1,10 +1,7 @@
 import { Image, Text, View } from '@tarojs/components';
 import Taro from '@tarojs/taro';
 import { useState } from 'react';
-import {
-  stickerSmile,
-  stickerStar,
-} from '@/assets/figma';
+import { stickerSmile, stickerStar } from '@/assets/figma';
 import {
   AppDrawer,
   AppTopBar,
@@ -38,6 +35,7 @@ import {
   switchBreast,
 } from '@/api/records';
 import { useBootstrapQuery } from '@/hooks/useBootstrap';
+import { useGrowthQuery, useMilestonesQuery } from '@/hooks/useGrowth';
 import { useInvalidateCare, useTimelineQuery } from '@/hooks/useRecords';
 import { useUiOverlayStore } from '@/stores/runtime';
 import { formatBabyAgeLabel, todayIsoDate } from '@/utils/babyAge';
@@ -67,6 +65,18 @@ const TAB_COPY: Record<
     emptyDescription: '一起做的事会在这里轻轻排好，现在可以从今天开始逛逛。',
   },
 };
+
+function latestGrowthLabel(
+  label: string,
+  latest: { value: number } | null | undefined,
+  unit: string,
+) {
+  if (!latest) return `${label}待记录`;
+  const value = Number.isInteger(latest.value)
+    ? latest.value
+    : Number(latest.value.toFixed(2));
+  return `${label}${value}${unit}`;
+}
 
 function homeGreeting() {
   const hour = new Date().getHours();
@@ -98,8 +108,13 @@ function TodayShell() {
   const invalidate = useInvalidateCare(babyId);
   const todayRange = localDayRange(todayIsoDate());
   const timeline = useTimelineQuery(babyId, { ...todayRange, kind: 'all' });
+  const growth = useGrowthQuery(babyId);
+  const milestones = useMilestonesQuery(babyId);
   const running = timeline.data?.running ?? bootstrap.data?.running;
-  const [finished, setFinished] = useState<{ title: string; durationSeconds: number } | null>(null);
+  const [finished, setFinished] = useState<{
+    title: string;
+    durationSeconds: number;
+  } | null>(null);
   const [feedingChoiceOpen, setFeedingChoiceOpen] = useState(false);
   const {
     drawerOpen,
@@ -124,7 +139,10 @@ function TodayShell() {
     void Taro.navigateTo({ url: `/pages/records/compose/index?type=${type}` });
   }
 
-  async function runCare(action: () => Promise<{ durationSeconds?: number | null }>, notice?: string) {
+  async function runCare(
+    action: () => Promise<{ durationSeconds?: number | null }>,
+    notice?: string,
+  ) {
     try {
       const result = await action();
       invalidate();
@@ -154,9 +172,14 @@ function TodayShell() {
       openCompose('food');
       return;
     }
+    if (actionId === 'growth') {
+      setSheetOpen(false);
+      void Taro.navigateTo({ url: '/pages/growth/index?view=record' });
+      return;
+    }
     setSheetOpen(false);
     comingSoon(
-      { growth: '成长', photo: '照片', audio: '声音', quote: '宝宝语录', mood: '心情', diary: '日记' }[
+      { photo: '照片', audio: '声音', quote: '宝宝语录', mood: '心情', diary: '日记' }[
         actionId
       ] ?? '这一刻',
     );
@@ -176,10 +199,10 @@ function TodayShell() {
             <BabyHeroCard
               name={babyName}
               ageLabel={babyAgeLabel}
-              heightLabel="身高72.5cm ↑"
-              weightLabel="体重8.6kg"
-              headLabel="头围44.8cm"
-              onClick={() => comingSoon('宝宝档案')}
+              heightLabel={latestGrowthLabel('身高', growth.data?.latest.height, 'cm')}
+              weightLabel={latestGrowthLabel('体重', growth.data?.latest.weight, 'kg')}
+              headLabel={latestGrowthLabel('头围', growth.data?.latest.head, 'cm')}
+              onClick={() => void Taro.navigateTo({ url: '/pages/growth/index' })}
             />
             {running?.sleep ? (
               <SleepRunningBanner
@@ -201,9 +224,17 @@ function TodayShell() {
               />
             ) : null}
             {finished ? (
-              <FinishedNotice title={finished.title} durationSeconds={finished.durationSeconds} />
+              <FinishedNotice
+                title={finished.title}
+                durationSeconds={finished.durationSeconds}
+              />
             ) : null}
-            <SectionHeader title="快捷入口" />
+            <SectionHeader
+              title="快捷入口"
+              variant="guide"
+              glyph="grid"
+              tone="apricot"
+            />
             <View className={styles.quickRow}>
               <QuickTile
                 label="日常记录"
@@ -215,7 +246,7 @@ function TodayShell() {
                 label="成长"
                 glyph="growth"
                 tone="sage"
-                onClick={() => comingSoon('成长')}
+                onClick={() => void Taro.navigateTo({ url: '/pages/growth/index' })}
               />
               <QuickTile
                 label="健康"
@@ -230,7 +261,12 @@ function TodayShell() {
                 onClick={() => setBottomNavActive('memories')}
               />
             </View>
-            <SectionHeader title="今天记忆" />
+            <SectionHeader
+              title="今天记忆"
+              variant="guide"
+              glyph="sparkle"
+              tone="blush"
+            />
             <View className={styles.memoryRow}>
               <GlassSurface
                 level="tinted"
@@ -242,12 +278,29 @@ function TodayShell() {
                 <View
                   className={styles.memoryHit}
                   role="button"
-                  aria-label="今天第一次坐稳啦"
-                  onClick={() => comingSoon('成长小成就')}
+                  aria-label={milestones.data?.items[0]?.title ?? '收藏一个成长里程碑'}
+                  onClick={() => {
+                    const recent = milestones.data?.items[0];
+                    void Taro.navigateTo({
+                      url: recent
+                        ? `/pages/growth/index?view=milestone-detail&id=${recent.id}`
+                        : '/pages/growth/index?view=milestone-new',
+                    });
+                  }}
                 >
-                  <Image className={styles.sticker} src={stickerStar} mode="aspectFit" />
-                  <Text className={styles.memoryTitle}>今天第一次坐稳啦</Text>
-                  <Text className={styles.memoryCaption}>解锁新的小成就</Text>
+                  <Image
+                    className={`${styles.sticker} ${styles.starSticker}`}
+                    src={stickerStar}
+                    mode="aspectFit"
+                  />
+                  <Text className={styles.memoryTitle}>
+                    {milestones.data?.items[0]?.title ?? '收藏一个第一次'}
+                  </Text>
+                  <Text className={styles.memoryCaption}>
+                    {milestones.data?.items[0]
+                      ? '最近的成长里程碑'
+                      : '只发生一次的瞬间'}
+                  </Text>
                 </View>
               </GlassSurface>
               <GlassSurface
@@ -263,25 +316,42 @@ function TodayShell() {
                   aria-label="心情打卡"
                   onClick={() => comingSoon('心情')}
                 >
-                  <Image className={styles.sticker} src={stickerSmile} mode="aspectFit" />
+                  <Image
+                    className={`${styles.sticker} ${styles.smileSticker}`}
+                    src={stickerSmile}
+                    mode="aspectFit"
+                  />
                   <Text className={styles.memoryTitle}>心情打卡</Text>
                   <Text className={styles.memoryCaption}>今天也照顾妈妈</Text>
                 </View>
               </GlassSurface>
             </View>
-            <SectionHeader title="接下来事项" caption="健康提醒会在之后轻轻出现" />
+            <SectionHeader
+              title="接下来事项"
+              caption="健康提醒会在之后轻轻出现"
+              variant="guide"
+              glyph="bell"
+              tone="sage"
+            />
             <GlassSurface level="tinted" tone="sage" radius="card">
               <View className={styles.memoryHit}>
-                <Text className={styles.memoryCaption}>今天没有需要提前准备的事，先好好过这一天。</Text>
+                <Text className={styles.memoryCaption}>
+                  今天没有需要提前准备的事，先好好过这一天。
+                </Text>
               </View>
             </GlassSurface>
             <SectionHeader
               title="今日时间线"
               actionLabel="全部"
               onAction={() => setBottomNavActive('records')}
+              variant="guide"
+              glyph="list"
+              tone="sky"
             />
             {timeline.isLoading ? <Skeleton lines={4} /> : null}
-            {timeline.isError ? <ErrorState onRetry={() => void timeline.refetch()} /> : null}
+            {timeline.isError ? (
+              <ErrorState onRetry={() => void timeline.refetch()} />
+            ) : null}
             {timeline.data && timeline.data.items.length === 0 ? (
               <EmptyState
                 title="今天还很安静"
@@ -317,13 +387,19 @@ function TodayShell() {
                   : undefined
               }
               onPauseFeeding={() =>
-                running?.feeding ? void runCare(() => pauseBreast(running.feeding!.id)) : undefined
+                running?.feeding
+                  ? void runCare(() => pauseBreast(running.feeding!.id))
+                  : undefined
               }
               onResumeFeeding={() =>
-                running?.feeding ? void runCare(() => resumeBreast(running.feeding!.id)) : undefined
+                running?.feeding
+                  ? void runCare(() => resumeBreast(running.feeding!.id))
+                  : undefined
               }
               onSwitchFeeding={() =>
-                running?.feeding ? void runCare(() => switchBreast(running.feeding!.id)) : undefined
+                running?.feeding
+                  ? void runCare(() => switchBreast(running.feeding!.id))
+                  : undefined
               }
               onFinishFeeding={() =>
                 running?.feeding
@@ -375,7 +451,9 @@ function TodayShell() {
             else if (item.id === 'records') setBottomNavActive('records');
             else if (item.id === 'memories') setBottomNavActive('memories');
             else if (item.id === 'family') setBottomNavActive('family');
-            else comingSoon(item.title);
+            else if (item.id === 'growth') {
+              void Taro.navigateTo({ url: '/pages/growth/index' });
+            } else comingSoon(item.title);
           },
         }))}
         onClose={() => setDrawerOpen(false)}

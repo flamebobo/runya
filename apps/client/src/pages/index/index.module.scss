@@ -43,6 +43,58 @@
   pointer-events: none;
 }
 
+.starSticker {
+  transform-origin: 50% 50%;
+  animation: starTwinkle 5.6s var(--motion-ease) infinite;
+}
+
+.smileSticker {
+  transform-origin: 50% 70%;
+  animation: smileNod 6.4s var(--motion-ease) infinite;
+}
+
+@keyframes starTwinkle {
+  0%,
+  72%,
+  100% {
+    transform: scale(1) rotate(0deg);
+    filter: brightness(1);
+  }
+
+  77% {
+    transform: scale(1.08) rotate(-3deg);
+    filter: brightness(1.08);
+  }
+
+  82% {
+    transform: scale(0.98) rotate(2deg);
+    filter: brightness(1);
+  }
+}
+
+@keyframes smileNod {
+  0%,
+  74%,
+  100% {
+    transform: rotate(0deg) translateY(0);
+  }
+
+  79% {
+    transform: rotate(4deg) translateY(1px);
+  }
+
+  84% {
+    transform: rotate(-2deg) translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .starSticker,
+  .smileSticker {
+    animation: none;
+  }
+}
+
 .memoryTitle {
   display: block;
   position: relative;

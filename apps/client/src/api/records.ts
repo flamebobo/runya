@@ -48,6 +48,7 @@ export function fetchRecordStats(babyId: string, query: RecordStatsQuery) {
       range: query.range,
       date: query.date,
       timezoneName: query.timezoneName,
+      utcOffsetMinutes: query.utcOffsetMinutes,
     })}`,
   );
 }
@@ -95,15 +96,24 @@ export function switchBreast(id: string, side?: 'LEFT' | 'RIGHT') {
 }
 
 export function pauseBreast(id: string) {
-  return apiRequest<FeedingPublic>(`/feeding/${id}/breast/pause`, { method: 'POST', body: {} });
+  return apiRequest<FeedingPublic>(`/feeding/${id}/breast/pause`, {
+    method: 'POST',
+    body: {},
+  });
 }
 
 export function resumeBreast(id: string) {
-  return apiRequest<FeedingPublic>(`/feeding/${id}/breast/resume`, { method: 'POST', body: {} });
+  return apiRequest<FeedingPublic>(`/feeding/${id}/breast/resume`, {
+    method: 'POST',
+    body: {},
+  });
 }
 
 export function finishBreast(id: string) {
-  return apiRequest<FeedingPublic>(`/feeding/${id}/breast/finish`, { method: 'POST', body: {} });
+  return apiRequest<FeedingPublic>(`/feeding/${id}/breast/finish`, {
+    method: 'POST',
+    body: {},
+  });
 }
 
 export function startSleep(

@@ -3,11 +3,16 @@ import type { DiaperType, RecordKind } from '@runew/domain-types';
 import { diaperTypeSchema } from './records.js';
 
 const ulidSchema = z.string().regex(/^[0-7][0-9A-HJKMNP-TV-Z]{25}$/);
-const noteSchema = z.string().trim().max(500).nullable().optional();
+const noteSchema = z.string().trim().max(500, '备注不能超过 500 个字').nullable().optional();
 
 export const syncOpSchema = z.enum(['CREATE', 'UPDATE', 'DELETE', 'RESTORE']);
 
-export const entityTypeSchema = z.enum(['DIAPER_RECORD', 'FOOD_RECORD']);
+export const entityTypeSchema = z.enum([
+  'DIAPER_RECORD',
+  'FOOD_RECORD',
+  'GROWTH_RECORD',
+  'MILESTONE',
+]);
 
 // CREATE 的 fullPayload 字段；UPDATE 的 patch / baseSnapshot 复用同一形状（全部可选）。
 export const recordPayloadSchema = z
@@ -16,8 +21,15 @@ export const recordPayloadSchema = z
     diaperType: diaperTypeSchema.optional(),
     foodName: z.string().trim().min(1).max(64).optional(),
     amountText: z.string().trim().max(32).nullable().optional(),
-    recordedAt: z.number().int().positive().optional(),
-    timezoneName: z.string().trim().min(1).optional(),
+    heightCm: z.number().positive('身高必须大于 0').max(300, '身高数字有点大，再看一眼').nullable().optional(),
+    weightKg: z.number().positive('体重必须大于 0').max(500, '体重数字有点大，再看一眼').nullable().optional(),
+    headCircumferenceCm: z.number().positive('头围必须大于 0').max(150, '头围数字有点大，再看一眼').nullable().optional(),
+    title: z.string().trim().min(1, '里程碑需要一个名字').max(100, '里程碑名称不能超过 100 个字').optional(),
+    description: z.string().trim().max(2000, '里程碑描述不能超过 2000 个字').nullable().optional(),
+    happenedAt: z.number().int('时间必须是完整数字').positive('时间必须晚于 1970 年').optional(),
+    coverMediaId: ulidSchema.nullable().optional(),
+    recordedAt: z.number().int('时间必须是完整数字').positive('时间必须晚于 1970 年').optional(),
+    timezoneName: z.string().trim().min(1, '缺少时区信息').max(64, '时区信息过长').optional(),
     note: noteSchema,
   })
   .passthrough();
@@ -111,6 +123,7 @@ export const syncConflictInfoSchema = z.object({
   operationId: ulidSchema,
   entityType: entityTypeSchema,
   entityId: ulidSchema,
+  serverVersion: z.number().int().positive(),
   conflictFields: z.array(z.string()),
   serverSnapshot: recordPayloadSchema,
   clientPatch: recordPayloadSchema,

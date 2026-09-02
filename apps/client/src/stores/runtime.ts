@@ -1,6 +1,10 @@
 import { create } from 'zustand';
 import type { BottomNavKey } from '@runew/domain-types';
-import type { SyncConflictInfo } from '@runew/contracts';
+import type {
+  RecordPayload,
+  SyncConflictInfo,
+  SyncEntityType,
+} from '@runew/contracts';
 
 interface AuthRuntimeState {
   userId: string | null;
@@ -89,22 +93,29 @@ export const useThemeStore = create<ThemeState>((set) => ({
 // 同步状态只放「UI 需要的展示态」；实体数据在本地库，列表数据在 TanStack Query。
 export type SyncPhase = 'idle' | 'syncing' | 'offline' | 'error';
 
+export interface SyncDeletionNotice {
+  operationId: string;
+  entityType: SyncEntityType;
+  entityId: string;
+  serverVersion: number;
+  clientPatch: RecordPayload;
+  serverSnapshot: RecordPayload;
+}
+
 export interface SyncRuntimeState {
   phase: SyncPhase;
   pendingCount: number;
   lastSyncedAt: number | null;
   conflicts: SyncConflictInfo[];
   duplicateCount: number;
-  deletionNotice: { operationId: string; entityType: string; entityId: string } | null;
+  deletionNotice: SyncDeletionNotice | null;
   setPhase: (phase: SyncPhase) => void;
   setPendingCount: (count: number) => void;
   setLastSyncedAt: (at: number | null) => void;
   pushConflict: (conflict: SyncConflictInfo) => void;
   resolveConflict: (operationId: string) => void;
   setDuplicateCount: (count: number) => void;
-  setDeletionNotice: (
-    notice: { operationId: string; entityType: string; entityId: string } | null,
-  ) => void;
+  setDeletionNotice: (notice: SyncDeletionNotice | null) => void;
 }
 
 export const useSyncRuntimeStore = create<SyncRuntimeState>((set) => ({

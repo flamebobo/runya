@@ -1,21 +1,16 @@
-import { Image, Text, View } from '@tarojs/components';
+import { Text, View } from '@tarojs/components';
 import type { TimelineItem } from '@runew/contracts';
-import {
-  dotApricot,
-  dotBlush,
-  dotLavender,
-  dotSage,
-} from '@/assets/figma';
+import { Glyph, type GlyphName } from '@/components/icons/Glyph';
 import { SyncBadge } from '@/components/sync/SyncBar';
 import { formatClock } from '@/utils/recordTime';
 import styles from './TimelineList.module.scss';
 
-const DOTS = {
-  FEEDING: dotApricot,
-  SLEEP: dotLavender,
-  DIAPER: dotSage,
-  FOOD: dotBlush,
-} as const;
+const MARKER_GLYPHS: Record<TimelineItem['kind'], GlyphName> = {
+  FEEDING: 'bottle',
+  SLEEP: 'moon',
+  DIAPER: 'diaper',
+  FOOD: 'bowl',
+};
 
 export function TimelineList({
   items,
@@ -35,13 +30,18 @@ export function TimelineList({
           onClick={() => onSelect?.(item)}
         >
           <Text className={styles.time}>{formatClock(item.recordedAt)}</Text>
-          <Image className={styles.dot} src={DOTS[item.kind]} mode="aspectFit" />
+          <View className={styles.marker} data-kind={item.kind} aria-hidden>
+            <Glyph name={MARKER_GLYPHS[item.kind]} size="sm" />
+          </View>
           <View className={styles.eventRow}>
             <Text className={styles.event}>{item.title}</Text>
             <SyncBadge state={item.syncState} />
           </View>
         </View>
       ))}
+      <View className={styles.trailEnd} aria-hidden>
+        <Glyph name="growth" size="sm" />
+      </View>
     </View>
   );
 }

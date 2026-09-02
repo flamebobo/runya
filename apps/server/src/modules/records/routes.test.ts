@@ -244,9 +244,13 @@ describe('records api', () => {
       headers,
     });
     expect(paused.json().data.status).toBe('PAUSED');
-    expect(paused.json().data.segments.every((segment: { endedAt: number | null }) => segment.endedAt != null)).toBe(
-      true,
-    );
+    expect(
+      paused
+        .json()
+        .data.segments.every(
+          (segment: { endedAt: number | null }) => segment.endedAt != null,
+        ),
+    ).toBe(true);
 
     const resumed = await app.inject({
       method: 'POST',
@@ -268,7 +272,10 @@ describe('records api', () => {
       endedAt: number;
       durationSeconds: number;
     }>;
-    const segmentSum = segments.reduce((sum, segment) => sum + segment.durationSeconds, 0);
+    const segmentSum = segments.reduce(
+      (sum, segment) => sum + segment.durationSeconds,
+      0,
+    );
     expect(finished.json().data.durationSeconds).toBe(segmentSum);
     expect(segmentSum).toBeGreaterThanOrEqual(40);
   });
@@ -354,7 +361,9 @@ describe('records api', () => {
       url: `/api/v1/babies/${babyId}/records`,
       headers,
     });
-    const times = all.json().data.items.map((item: { recordedAt: number }) => item.recordedAt);
+    const times = all
+      .json()
+      .data.items.map((item: { recordedAt: number }) => item.recordedAt);
     expect(times).toEqual([t3, t2, t1]);
 
     const day = await app.inject({
@@ -363,9 +372,11 @@ describe('records api', () => {
       headers,
     });
     expect(day.json().data.items).toHaveLength(2);
-    expect(day.json().data.items.every((item: { recordedAt: number }) => item.recordedAt >= t2)).toBe(
-      true,
-    );
+    expect(
+      day
+        .json()
+        .data.items.every((item: { recordedAt: number }) => item.recordedAt >= t2),
+    ).toBe(true);
   });
 
   it('denies cross-family record access', async () => {
@@ -408,13 +419,12 @@ describe('records api', () => {
     expect(food.json().error.message).toBe('先写一写今天吃了什么');
   });
 
-  it('aggregates record stats per day bucket with cross-midnight sleep split', async () => {
+  it('aggregates today by hour using feeding amount and splits sleep at local midnight', async () => {
     const { babyId, headers } = await readyUser();
-    // 本地时区（Asia/Shanghai, UTC+8）下 9 月 1 日的锚点
     const anchorIso = '2026-09-01';
-    const localDayStartMs = new Date(2026, 8, 1).getTime();
+    const utcOffsetMinutes = 480;
+    const localDayStartMs = Date.UTC(2026, 8, 1) - utcOffsetMinutes * 60_000;
 
-    // 喂奶 x2（09:00 / 21:00 本地）+ 尿布 x1（09:00 本地）
     await app.inject({
       method: 'POST',
       url: `/api/v1/babies/${babyId}/feeding`,
@@ -433,8 +443,6 @@ describe('records api', () => {
       headers: { ...headers, 'idempotency-key': createUlid() },
       payload: { diaperType: 'WET', recordedAt: localDayStartMs + 9 * 3_600_000 },
     });
-
-    // 跨午夜睡眠：23:00 入睡 → 次日 07:00 醒（本地），8 小时应拆成 1h + 7h
     await app.inject({
       method: 'POST',
       url: `/api/v1/babies/${babyId}/sleep`,
@@ -447,64 +455,118 @@ describe('records api', () => {
 
     const day = await app.inject({
       method: 'GET',
-      url: `/api/v1/babies/${babyId}/records/stats?range=day&date=${anchorIso}`,
+      url: `/api/v1/babies/${babyId}/records/stats?range=day&date=${anchorIso}&utcOffsetMinutes=${utcOffsetMinutes}`,
       headers,
     });
     expect(day.statusCode).toBe(200);
     const dayBuckets = day.json().data.buckets as Array<{
       label: string;
-      feedingCount: number;
+      feedingAmountMl: number;
       diaperCount: number;
       sleepSeconds: number;
     }>;
     expect(dayBuckets).toHaveLength(24);
-    expect(dayBuckets[9]!.feedingCount).toBe(1);
+    expect(dayBuckets[9]!.feedingAmountMl).toBe(120);
     expect(dayBuckets[9]!.diaperCount).toBe(1);
-    expect(dayBuckets[21]!.feedingCount).toBe(1);
+    expect(dayBuckets[21]!.feedingAmountMl).toBe(90);
     expect(dayBuckets[23]!.sleepSeconds).toBe(3600);
     expect(dayBuckets[0]!.sleepSeconds).toBe(0);
 
-    // 跨午夜的后 7 小时按本地日拆分，落在 9 月 2 日的 0-6 点桶
     const nextDay = await app.inject({
       method: 'GET',
-      url: `/api/v1/babies/${babyId}/records/stats?range=day&date=2026-09-02`,
+      url: `/api/v1/babies/${babyId}/records/stats?range=day&date=2026-09-02&utcOffsetMinutes=${utcOffsetMinutes}`,
       headers,
     });
-    const nextDayBuckets = nextDay.json().data.buckets as Array<{ sleepSeconds: number }>;
+    const nextDayBuckets = nextDay.json().data.buckets as Array<{
+      sleepSeconds: number;
+    }>;
     expect(nextDayBuckets[0]!.sleepSeconds).toBe(3600);
     expect(nextDayBuckets[6]!.sleepSeconds).toBe(3600);
     expect(nextDayBuckets[7]!.sleepSeconds).toBe(0);
+  });
 
-    // 周维度：7 个桶，标签是周一到周日的「一…日」
+  it('uses rolling 7-day and 30-day windows ending on the selected date', async () => {
+    const { babyId, headers } = await readyUser();
+    const utcOffsetMinutes = 480;
+    const localMs = (year: number, month: number, day: number, hour = 9) =>
+      Date.UTC(year, month - 1, day, hour) - utcOffsetMinutes * 60_000;
+    const addBottle = (amountMl: number, recordedAt: number) =>
+      app.inject({
+        method: 'POST',
+        url: `/api/v1/babies/${babyId}/feeding`,
+        headers: { ...headers, 'idempotency-key': createUlid() },
+        payload: { amountMl, recordedAt },
+      });
+
+    await addBottle(60, localMs(2026, 8, 3));
+    await addBottle(80, localMs(2026, 8, 26));
+    await addBottle(120, localMs(2026, 9, 1));
+    await addBottle(999, localMs(2026, 9, 2));
+
     const week = await app.inject({
       method: 'GET',
-      url: `/api/v1/babies/${babyId}/records/stats?range=week&date=${anchorIso}`,
+      url: `/api/v1/babies/${babyId}/records/stats?range=week&date=2026-09-01&utcOffsetMinutes=${utcOffsetMinutes}`,
       headers,
     });
     expect(week.statusCode).toBe(200);
-    const weekData = week.json().data as { range: string; buckets: Array<{ label: string }> };
-    expect(weekData.range).toBe('week');
-    expect(weekData.buckets).toHaveLength(7);
-    expect(weekData.buckets[0]!.label).toBe('二'); // 2026-09-01 是周二
-    expect(
-      (weekData.buckets as Array<{ label: string; feedingCount: number; sleepSeconds: number }>)[0]!
-        .feedingCount,
-    ).toBe(2);
-    expect(
-      (weekData.buckets as Array<{ label: string; feedingCount: number; sleepSeconds: number }>)[1]!
-        .sleepSeconds,
-    ).toBe(7 * 3600);
+    const weekBuckets = week.json().data.buckets as Array<{
+      label: string;
+      feedingAmountMl: number;
+    }>;
+    expect(weekBuckets).toHaveLength(7);
+    expect(weekBuckets[0]).toMatchObject({ label: '三', feedingAmountMl: 80 });
+    expect(weekBuckets[6]).toMatchObject({ label: '二', feedingAmountMl: 120 });
 
-    // 月维度：9 月有 30 个桶
     const month = await app.inject({
       method: 'GET',
-      url: `/api/v1/babies/${babyId}/records/stats?range=month&date=${anchorIso}`,
+      url: `/api/v1/babies/${babyId}/records/stats?range=month&date=2026-09-01&utcOffsetMinutes=${utcOffsetMinutes}`,
       headers,
     });
     expect(month.statusCode).toBe(200);
-    const monthBuckets = month.json().data.buckets as Array<{ feedingCount: number }>;
+    const monthBuckets = month.json().data.buckets as Array<{
+      label: string;
+      feedingAmountMl: number;
+    }>;
     expect(monthBuckets).toHaveLength(30);
-    expect(monthBuckets[0]!.feedingCount).toBe(2);
+    expect(monthBuckets[0]).toMatchObject({ label: '8/3', feedingAmountMl: 60 });
+    expect(monthBuckets[23]).toMatchObject({ label: '8/26', feedingAmountMl: 80 });
+    expect(monthBuckets[29]).toMatchObject({ label: '9/1', feedingAmountMl: 120 });
+    expect(monthBuckets.reduce((sum, bucket) => sum + bucket.feedingAmountMl, 0)).toBe(
+      260,
+    );
+  });
+
+  it('uses 12 natural-month buckets including the selected month across years', async () => {
+    const { babyId, headers } = await readyUser();
+    const utcOffsetMinutes = 480;
+    const localMs = (year: number, month: number, day: number) =>
+      Date.UTC(year, month - 1, day, 9) - utcOffsetMinutes * 60_000;
+
+    for (const [amountMl, recordedAt] of [
+      [70, localMs(2025, 10, 15)],
+      [130, localMs(2026, 9, 1)],
+    ] as const) {
+      await app.inject({
+        method: 'POST',
+        url: `/api/v1/babies/${babyId}/feeding`,
+        headers: { ...headers, 'idempotency-key': createUlid() },
+        payload: { amountMl, recordedAt },
+      });
+    }
+
+    const year = await app.inject({
+      method: 'GET',
+      url: `/api/v1/babies/${babyId}/records/stats?range=year&date=2026-09-01&utcOffsetMinutes=${utcOffsetMinutes}`,
+      headers,
+    });
+    expect(year.statusCode).toBe(200);
+    const buckets = year.json().data.buckets as Array<{
+      label: string;
+      feedingAmountMl: number;
+    }>;
+    expect(buckets).toHaveLength(12);
+    expect(buckets[0]).toMatchObject({ label: '10月', feedingAmountMl: 70 });
+    expect(buckets[11]).toMatchObject({ label: '9月', feedingAmountMl: 130 });
   });
 
   it('rejects stats for cross-family baby', async () => {

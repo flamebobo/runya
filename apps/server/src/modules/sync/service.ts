@@ -1,4 +1,9 @@
-import { diaperRecords, duplicateCandidates, foodRecords, syncOperations } from '@runew/db';
+import {
+  diaperRecords,
+  duplicateCandidates,
+  foodRecords,
+  syncOperations,
+} from '@runew/db';
 import type { schema } from '@runew/db';
 import type {
   DuplicateCandidate,
@@ -12,7 +17,10 @@ import { and, desc, eq, gte, isNull, lte, ne, or } from 'drizzle-orm';
 import type { LibSQLDatabase } from 'drizzle-orm/libsql';
 import { AppError } from '../../lib/errors.js';
 import { appendSyncLog } from './log.js';
+import { applyGrowthPendingOperation } from '../growth/sync.js';
 import { requireFamilyMembership } from '../identity/service.js';
+
+type DailySyncEntityType = Extract<SyncEntityType, 'DIAPER_RECORD' | 'FOOD_RECORD'>;
 
 type Database = LibSQLDatabase<typeof schema>;
 
@@ -53,7 +61,7 @@ function stripRecordFields(row: RecordRow): RecordPayload {
   };
 }
 
-function tableFor(entityType: SyncEntityType) {
+function tableFor(entityType: DailySyncEntityType) {
   return entityType === 'DIAPER_RECORD' ? diaperRecords : foodRecords;
 }
 
@@ -65,9 +73,19 @@ function stripUndefined(payload: RecordPayload): RecordPayload {
   return result as RecordPayload;
 }
 
-function payloadSummary(entityType: SyncEntityType, payload: RecordPayload): string {
+function payloadSummary(
+  entityType: DailySyncEntityType,
+  payload: RecordPayload,
+): string {
   if (entityType === 'DIAPER_RECORD') {
-    const type = payload.diaperType === 'WET' ? '湿' : payload.diaperType === 'DIRTY' ? '便' : payload.diaperType === 'BOTH' ? '湿+便' : '干';
+    const type =
+      payload.diaperType === 'WET'
+        ? '湿'
+        : payload.diaperType === 'DIRTY'
+          ? '便'
+          : payload.diaperType === 'BOTH'
+            ? '湿+便'
+            : '干';
     return `尿布 · ${type}`;
   }
   return `辅食 · ${payload.foodName ?? ''}`;
@@ -75,12 +93,68 @@ function payloadSummary(entityType: SyncEntityType, payload: RecordPayload): str
 
 async function findEntityRow(
   db: Database,
-  entityType: SyncEntityType,
+  entityType: DailySyncEntityType,
   entityId: string,
 ): Promise<RecordRow | null> {
   const table = tableFor(entityType);
   const rows = await db.select().from(table).where(eq(table.id, entityId)).limit(1);
   return (rows[0] as RecordRow | undefined) ?? null;
+}
+
+async function replayOperation(
+  db: Database,
+  operation: PendingOperation,
+): Promise<SyncOperationResult | null> {
+  const rows = await db
+    .select()
+    .from(syncOperations)
+    .where(eq(syncOperations.operationId, operation.operationId))
+    .limit(1);
+  const existing = rows[0];
+  if (!existing) return null;
+  if (
+    existing.familyId !== operation.familyId ||
+    existing.entityType !== operation.entityType ||
+    existing.entityId !== operation.entityId ||
+    existing.op !== operation.op
+  ) {
+    throw new AppError(
+      'ENTITY_ID_REUSED',
+      '这次同步的操作编号已被占用，请重新提交',
+      409,
+    );
+  }
+  const stored = existing.resultJson
+    ? (JSON.parse(existing.resultJson) as {
+        payload?: RecordPayload;
+        status?: SyncOperationResult['status'];
+        duplicateCandidates?: SyncOperationResult['duplicateCandidates'];
+      })
+    : {};
+  return {
+    operationId: operation.operationId,
+    status: stored.status ?? 'APPLIED',
+    entityId: operation.entityId,
+    version: existing.entityVersion,
+    serverSnapshot: stored.payload,
+    duplicateCandidates: stored.duplicateCandidates,
+  };
+}
+
+async function storeOperationResult(
+  db: Database,
+  operationId: string,
+  result: {
+    payload: RecordPayload;
+    deleted: boolean;
+    status?: SyncOperationResult['status'];
+    duplicateCandidates?: SyncOperationResult['duplicateCandidates'];
+  },
+) {
+  await db
+    .update(syncOperations)
+    .set({ resultJson: JSON.stringify(result) })
+    .where(eq(syncOperations.operationId, operationId));
 }
 
 function rowDeleted(row: RecordRow): boolean {
@@ -104,9 +178,14 @@ function resolveThreeWay(
     const baseValue = base[field];
     const serverValue = server[field];
     const clientValue = patch[field];
-    if (serverValue === baseValue || (serverValue == null && baseValue == null)) {
+    const serverMatchesBase = JSON.stringify(serverValue) === JSON.stringify(baseValue);
+    const clientMatchesBase = JSON.stringify(clientValue) === JSON.stringify(baseValue);
+    const serverMatchesClient =
+      JSON.stringify(serverValue) === JSON.stringify(clientValue);
+    if (clientMatchesBase) continue;
+    if (serverMatchesBase || serverMatchesClient) {
       merged[field] = clientValue;
-    } else if (JSON.stringify(serverValue) !== JSON.stringify(clientValue)) {
+    } else {
       conflictFields.push(field);
     }
   }
@@ -116,7 +195,7 @@ function resolveThreeWay(
 async function detectDuplicates(
   db: Database,
   familyId: string,
-  entityType: SyncEntityType,
+  entityType: DailySyncEntityType,
   entity: RecordRow,
   actorUserId: string,
   now: number,
@@ -139,7 +218,11 @@ async function detectDuplicates(
     .from(table)
     .where(and(...conditions));
 
-  const candidates: Array<{ candidateId: string; otherEntityId: string; otherSummary: string }> = [];
+  const candidates: Array<{
+    candidateId: string;
+    otherEntityId: string;
+    otherSummary: string;
+  }> = [];
   for (const other of others) {
     const pairA = entity.id < other.id ? entity.id : other.id;
     const pairB = entity.id < other.id ? other.id : entity.id;
@@ -177,14 +260,17 @@ export async function listPendingDuplicates(
     .select()
     .from(duplicateCandidates)
     .where(
-      and(eq(duplicateCandidates.familyId, familyId), eq(duplicateCandidates.status, 'PENDING')),
+      and(
+        eq(duplicateCandidates.familyId, familyId),
+        eq(duplicateCandidates.status, 'PENDING'),
+      ),
     )
     .orderBy(desc(duplicateCandidates.detectedAt))
     .limit(50);
 
   const results: DuplicateCandidate[] = [];
   for (const row of rows) {
-    const entityType = row.entityType as SyncEntityType;
+    const entityType = row.entityType as DailySyncEntityType;
     const rowA = await findEntityRow(db, entityType, row.entityAId);
     const rowB = await findEntityRow(db, entityType, row.entityBId);
     if (!rowA || !rowB) continue;
@@ -203,7 +289,7 @@ export async function listPendingDuplicates(
 
 async function softDeleteEntity(
   db: Database,
-  entityType: SyncEntityType,
+  entityType: DailySyncEntityType,
   entityId: string,
   userId: string,
   now: number,
@@ -229,24 +315,42 @@ export async function resolveDuplicate(
   userId: string,
   familyId: string,
   candidateId: string,
-  body: { resolution: 'MERGE' | 'KEEP_BOTH'; canonical?: 'A' | 'B'; mergedFields?: RecordPayload },
+  body: {
+    resolution: 'MERGE' | 'KEEP_BOTH';
+    canonical?: 'A' | 'B';
+    mergedFields?: RecordPayload;
+  },
 ) {
   await requireFamilyMembership(db, userId, familyId);
   const rows = await db
     .select()
     .from(duplicateCandidates)
-    .where(and(eq(duplicateCandidates.id, candidateId), eq(duplicateCandidates.familyId, familyId)))
+    .where(
+      and(
+        eq(duplicateCandidates.id, candidateId),
+        eq(duplicateCandidates.familyId, familyId),
+      ),
+    )
     .limit(1);
   const candidate = rows[0];
   if (!candidate) throw new AppError('NOT_FOUND', '这条重复提示不存在', 404);
   if (candidate.status !== 'PENDING') {
-    return { candidateId, resolution: candidate.status, canonicalId: null, mergedId: null };
+    return {
+      candidateId,
+      resolution: candidate.status,
+      canonicalId: null,
+      mergedId: null,
+    };
   }
 
   const now = utcNowMs();
   await db
     .update(duplicateCandidates)
-    .set({ status: body.resolution === 'MERGE' ? 'MERGED' : 'KEEP_BOTH', resolvedBy: userId, resolvedAt: now })
+    .set({
+      status: body.resolution === 'MERGE' ? 'MERGED' : 'KEEP_BOTH',
+      resolvedBy: userId,
+      resolvedAt: now,
+    })
     .where(eq(duplicateCandidates.id, candidateId));
 
   if (body.resolution === 'KEEP_BOTH') {
@@ -254,8 +358,9 @@ export async function resolveDuplicate(
   }
 
   // Merge：canonical 保留并应用选定字段，另一方 soft delete（可从最近删除恢复）。
-  const entityType = candidate.entityType as SyncEntityType;
-  const canonicalId = body.canonical === 'B' ? candidate.entityBId : candidate.entityAId;
+  const entityType = candidate.entityType as DailySyncEntityType;
+  const canonicalId =
+    body.canonical === 'B' ? candidate.entityBId : candidate.entityAId;
   const mergedId = body.canonical === 'B' ? candidate.entityAId : candidate.entityBId;
 
   if (body.mergedFields && Object.keys(stripUndefined(body.mergedFields)).length > 0) {
@@ -266,9 +371,15 @@ export async function resolveDuplicate(
       await db
         .update(table)
         .set({
-          ...(patch.diaperType !== undefined && 'diaperType' in table ? { diaperType: patch.diaperType } : {}),
-          ...(patch.foodName !== undefined && 'foodName' in table ? { foodName: patch.foodName } : {}),
-          ...(patch.amountText !== undefined && 'amountText' in table ? { amountText: patch.amountText } : {}),
+          ...(patch.diaperType !== undefined && 'diaperType' in table
+            ? { diaperType: patch.diaperType }
+            : {}),
+          ...(patch.foodName !== undefined && 'foodName' in table
+            ? { foodName: patch.foodName }
+            : {}),
+          ...(patch.amountText !== undefined && 'amountText' in table
+            ? { amountText: patch.amountText }
+            : {}),
           ...(patch.recordedAt !== undefined ? { recordedAt: patch.recordedAt } : {}),
           ...(patch.note !== undefined ? { note: patch.note } : {}),
           updatedBy: userId,
@@ -321,11 +432,22 @@ export async function applyPendingOperation(
   userId: string,
   operation: PendingOperation,
 ): Promise<SyncOperationResult> {
+  if (
+    operation.entityType === 'GROWTH_RECORD' ||
+    operation.entityType === 'MILESTONE'
+  ) {
+    return applyGrowthPendingOperation(db, userId, operation);
+  }
   await requireFamilyMembership(db, userId, operation.familyId);
-  const entityType = operation.entityType as SyncEntityType;
+  const replayed = await replayOperation(db, operation);
+  if (replayed) return replayed;
+  const entityType = operation.entityType as DailySyncEntityType;
   const table = tableFor(entityType);
   const now = utcNowMs();
-  const base: SyncOperationResult = { operationId: operation.operationId, status: 'APPLIED' };
+  const base: SyncOperationResult = {
+    operationId: operation.operationId,
+    status: 'APPLIED',
+  };
 
   if (operation.op === 'CREATE') {
     const existing = await findEntityRow(db, entityType, operation.entityId);
@@ -341,7 +463,12 @@ export async function applyPendingOperation(
       if (!same) {
         throw new AppError('ENTITY_ID_REUSED', '这条记录编号已被占用，请重新添加', 409);
       }
-      return { ...base, status: 'APPLIED', entityId: existing.id, version: existing.version };
+      return {
+        ...base,
+        entityId: existing.id,
+        version: existing.version,
+        serverSnapshot: existingPayload,
+      };
     }
 
     const fullPayload = stripUndefined(operation.fullPayload ?? {});
@@ -400,30 +527,33 @@ export async function applyPendingOperation(
       },
       now,
     );
-    if (row) {
-      await db
-        .update(syncOperations)
-        .set({
-          resultJson: JSON.stringify({ payload: stripRecordFields(row), deleted: false }),
-        })
-        .where(eq(syncOperations.operationId, operation.operationId));
-      const duplicateCandidatesFound = await detectDuplicates(
-        db,
-        operation.familyId,
-        entityType,
-        row,
-        userId,
-        now,
-      );
-      return {
-        ...base,
-        status: duplicateCandidatesFound.length > 0 ? 'DUPLICATE_QUEUED' : 'APPLIED',
-        entityId: operation.entityId,
-        version,
-        duplicateCandidates: duplicateCandidatesFound,
-      };
+    if (!row) {
+      throw new AppError('INTERNAL_ERROR', '记录还没安全保存，请再试一次', 500);
     }
-    return { ...base, status: 'APPLIED', entityId: operation.entityId, version };
+    const payload = stripRecordFields(row);
+    const duplicateCandidatesFound = await detectDuplicates(
+      db,
+      operation.familyId,
+      entityType,
+      row,
+      userId,
+      now,
+    );
+    const status = duplicateCandidatesFound.length > 0 ? 'DUPLICATE_QUEUED' : 'APPLIED';
+    await storeOperationResult(db, operation.operationId, {
+      payload,
+      deleted: false,
+      status,
+      duplicateCandidates: duplicateCandidatesFound,
+    });
+    return {
+      ...base,
+      status,
+      entityId: operation.entityId,
+      version,
+      serverSnapshot: payload,
+      duplicateCandidates: duplicateCandidatesFound,
+    };
   }
 
   const row = await findEntityRow(db, entityType, operation.entityId);
@@ -433,7 +563,12 @@ export async function applyPendingOperation(
       return { ...base, status: 'APPLIED' };
     }
     if (rowDeleted(row)) {
-      return { ...base, status: 'APPLIED' };
+      return {
+        ...base,
+        entityId: row.id,
+        version: row.version,
+        serverSnapshot: stripRecordFields(row),
+      };
     }
     await softDeleteEntity(db, entityType, operation.entityId, userId, now, row);
     await appendSyncLog(
@@ -450,19 +585,42 @@ export async function applyPendingOperation(
       },
       now,
     );
-    return { ...base, status: 'APPLIED', entityId: row.id, version: row.version + 1 };
+    const deletedPayload = stripRecordFields(row);
+    await storeOperationResult(db, operation.operationId, {
+      payload: deletedPayload,
+      deleted: true,
+    });
+    return {
+      ...base,
+      entityId: row.id,
+      version: row.version + 1,
+      serverSnapshot: deletedPayload,
+    };
   }
 
   if (operation.op === 'RESTORE') {
     if (!row) {
       throw new AppError('NOT_FOUND', '这条记录不存在，可能已被彻底删除', 404);
     }
+    const restoredPayload = stripRecordFields(row);
     if (!rowDeleted(row)) {
-      return { ...base, status: 'APPLIED', entityId: row.id, version: row.version };
+      return {
+        ...base,
+        entityId: row.id,
+        version: row.version,
+        serverSnapshot: restoredPayload,
+      };
     }
+    const nextVersion = row.version + 1;
     await db
       .update(table)
-      .set({ deletedAt: null, deletedBy: null, updatedBy: userId, updatedAt: now })
+      .set({
+        deletedAt: null,
+        deletedBy: null,
+        updatedBy: userId,
+        updatedAt: now,
+        version: nextVersion,
+      })
       .where(eq(table.id, operation.entityId));
     await appendSyncLog(
       db,
@@ -474,11 +632,20 @@ export async function applyPendingOperation(
         entityType,
         entityId: operation.entityId,
         op: 'RESTORE',
-        entityVersion: row.version,
+        entityVersion: nextVersion,
       },
       now,
     );
-    return { ...base, status: 'APPLIED', entityId: row.id, version: row.version };
+    await storeOperationResult(db, operation.operationId, {
+      payload: restoredPayload,
+      deleted: false,
+    });
+    return {
+      ...base,
+      entityId: row.id,
+      version: nextVersion,
+      serverSnapshot: restoredPayload,
+    };
   }
 
   // UPDATE：三方合并。已删除实体不自动复活也不丢修改 → ENTITY_DELETED 交给 UI 决策。
@@ -490,6 +657,8 @@ export async function applyPendingOperation(
       ...base,
       status: 'ENTITY_DELETED',
       entityId: row.id,
+      version: row.version,
+      serverSnapshot: stripRecordFields(row),
       errorCode: 'ENTITY_DELETED',
       message: '这条记录刚被其他家庭成员删掉了',
     };
@@ -498,7 +667,11 @@ export async function applyPendingOperation(
   const serverCurrent = stripRecordFields(row);
   const baseSnapshot = stripUndefined(operation.baseSnapshot ?? {});
   const patch = stripUndefined(operation.patch ?? {});
-  const { merged, conflictFields } = resolveThreeWay(baseSnapshot, serverCurrent, patch);
+  const { merged, conflictFields } = resolveThreeWay(
+    baseSnapshot,
+    serverCurrent,
+    patch,
+  );
 
   if (conflictFields.length > 0) {
     return {
@@ -545,18 +718,23 @@ export async function applyPendingOperation(
     },
     now,
   );
-  await db
-    .update(syncOperations)
-    .set({ resultJson: JSON.stringify({ payload: merged, deleted: false }) })
-    .where(eq(syncOperations.operationId, operation.operationId));
+  await storeOperationResult(db, operation.operationId, {
+    payload: merged,
+    deleted: false,
+  });
 
-  return { ...base, status: 'APPLIED', entityId: operation.entityId, version: nextVersion };
+  return {
+    ...base,
+    entityId: operation.entityId,
+    version: nextVersion,
+    serverSnapshot: merged,
+  };
 }
 
 export async function findPotentialDuplicateIds(
   db: Database,
   familyId: string,
-  entityType: SyncEntityType,
+  entityType: DailySyncEntityType,
   entityId: string,
 ) {
   const rows = await db

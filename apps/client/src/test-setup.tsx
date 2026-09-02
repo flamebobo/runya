@@ -37,6 +37,7 @@ vi.mock('@tarojs/components', () => ({
   ),
   Input: (props: Record<string, unknown>) => <input {...props} />,
   Textarea: (props: Record<string, unknown>) => <textarea {...props} />,
+  Canvas: (props: Record<string, unknown>) => <canvas {...props} />,
   Button: ({ children, ...props }: PropsWithChildren<Record<string, unknown>>) => (
     <button type="button" {...props}>
       {children}

@@ -144,11 +144,11 @@ export const timelineQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(50),
 });
 
-export const statsRangeSchema = z.enum(['day', 'week', 'month']);
+export const statsRangeSchema = z.enum(['day', 'week', 'month', 'year']);
 
 export const statsBucketSchema = z.object({
   label: z.string(),
-  feedingCount: z.number().int(),
+  feedingAmountMl: z.number().int().nonnegative(),
   sleepSeconds: z.number().int(),
   diaperCount: z.number().int(),
   foodCount: z.number().int(),
@@ -240,7 +240,10 @@ export const updateDiaperBodySchema = createDiaperBodySchema.partial();
 
 export const createFoodBodySchema = z.object({
   foodName: z
-    .string({ required_error: '先写一写今天吃了什么', invalid_type_error: '先写一写今天吃了什么' })
+    .string({
+      required_error: '先写一写今天吃了什么',
+      invalid_type_error: '先写一写今天吃了什么',
+    })
     .trim()
     .min(1, '先写一写今天吃了什么')
     .max(64, '名字有点长，缩短一点点就好'),

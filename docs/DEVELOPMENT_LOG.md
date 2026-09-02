@@ -315,6 +315,222 @@
 
 ### Next
 
-- M3 收尾：真机双端联调（断网 → 记录 → 杀 App → 重启 → 恢复网络 → server 单条）；Visual 回归 375/390/430
+- M3 收尾：真機雙端聯調（斷網 → 記錄 → 殺 App → 重啟 → 恢復網路 → server 單條）；Visual 回歸 375/390/430
 
+## Tooling Fix — 啟動前建置 Workspace 套件
 
+**日期：** 2026-09-02
+
+### Changed
+
+- 新增根指令 `build:packages`，按 workspace 依賴順序建置 `packages/*` 的正式 `dist` 匯出。
+- `dev`、`dev:client`、`dev:server` 現在透過 pnpm lifecycle 在啟動前執行共用套件建置，修復乾淨工作區首次啟動時 `@runew/shared-utils`、`@runew/domain-types` 等套件入口不存在的問題。
+- 保留套件 `exports` 指向 `dist`，避免把正式 Node 執行錯誤地綁到 TypeScript 原始碼。
+
+### Database
+
+- 無 Migration。
+
+### API / Contract
+
+- 無行為或 Contract 變更。
+
+### UI / States
+
+- 無 UI 變更。
+
+### Verification
+
+- `pnpm run predev:client && pnpm --filter @runew/client build:h5`：通過，原 11 個 workspace 套件解析錯誤已消失。
+- `pnpm typecheck`：7/7 workspace project 通過。
+- `pnpm lint`：通過，0 錯誤。
+- `pnpm test`：17 個測試檔、74 個測試通過。
+- `pnpm build`：通過，H5、微信小程式與 Server 均完成建置；仍有既有 bundle 體積、CSS 順序及 `postcss-calc` 警告。
+
+### Known Issues
+
+- 已在錯誤狀態中執行的 watch process 不會可靠監看新生成的 package entry；套用此修復後需重啟一次 `pnpm dev`。
+
+## M2 Visual Pass — 日常記錄資訊層級與趣味細節
+
+**日期：** 2026-09-02
+
+### Changed
+
+- 將 `RecordScope` 提升到 `RecordsHome`，統計與時間線共用同一個「全部 / 餵奶 / 睡眠 / 尿布 / 輔食」選擇，不再要求使用者選兩次。
+- `日 / 週 / 月` 改為統計卡內完整寬度 `SegmentedControl`；移除第二組類型篩選與四張狹窄摘要卡。
+- 「全部」改用統計卡內 2×2 概覽；單一類型維持讀數與柱狀圖，統計卡與時間線之間保留 32px 節奏。
+- 在不修改 Warm Glass 材質與按鈕結構的前提下，加入「小日子發芽中」小芽標記、四類記錄線稿圖示、空狀態圖形與「每一筆，都是今天的小腳印」微文案。
+- 修正 local-first 時間線合併只套日期、不套 `kind` 的問題；本機尿布 / 輔食現在會服從同一個類型篩選。
+
+### Database
+
+- 無 Migration；瀏覽器視覺驗證使用既有本機開發資料。
+
+### API / Contract
+
+- 無 API 或 Contract 變更；沿用既有 timeline `kind` 與 stats range。
+
+### UI / States
+
+- `all`：2×2 四類概覽，搭配奶瓶、月亮、尿布與小碗線稿圖示。
+- `feeding / sleep / diaper / food`：單類讀數、柱狀圖與時間線同步切換。
+- 空資料：保留溫柔文案並增加低干擾圖形；所有控制熱區維持至少 48px。
+- 裝飾動畫服從全域 Reduce Motion 規則。
+
+### Verification
+
+- `pnpm typecheck`：通過。
+- `pnpm lint`：通過。
+- `pnpm test`：18 個測試檔、76 個測試通過（含 local timeline kind regression）。
+- `pnpm build`：通過，H5、微信小程式與 Server 均完成建置；仍有既有 bundle 體積、CSS 順序及 `postcss-calc` 警告。
+- Playwright H5：已用真實 API / 本機資料檢查 375×812、390×844、430×932；類型 chips 無溢出、控制熱區正常、概覽數值未拆行、BottomNav 未遮住可捲動內容。
+
+### Known Issues
+
+- 全倉 `pnpm format:check` 仍會因 88 個既有未格式化檔案失敗；本次變更檔案已單獨通過 Prettier。
+
+## M2 Cute Accent Follow-up — 日常記錄照護小隊
+
+**日期：** 2026-09-02
+
+### Changed
+
+- 保留既有 Warm Glass 卡片、分段控制與篩選按鈕，未改動任何核心操作或資料流程。
+- 將統計卡右上小芽標記升級為「小芽寶寶」貼紙角色，四類概覽圖示改為帶高光的不規則柔軟徽章。
+- 將時間線純色圓點改為奶瓶、月亮、尿布、小碗四種語義圖示節點，並以柔和虛線串成一天的路徑，末端用小芽收尾。
+- 時間線節點保留整列 52px 點擊區；按壓回饋只作用於圖示，不改變導航行為，Reduce Motion 仍由全域規則接管。
+
+### Database
+
+- 無 Migration；未修改 Schema 或業務資料。
+
+### API / Contract
+
+- 無 API 或 Contract 變更。
+
+### Verification
+
+- 日常記錄定向測試：`StatsChart` / `TimelineList` 共 2 個測試檔、6 個測試通過；時間線測試覆蓋四種記錄圖示映射。
+- `pnpm test`：在本次 UI 變更完成後，19 個測試檔、81 個測試通過。
+- `pnpm lint`：最終重跑通過。
+- `pnpm typecheck`：本次 UI 變更完成後曾通過；最終重跑被同工作區並行中的 M4 Growth 變更阻斷，錯誤為 `GrowthTrendChart.tsx` 從 `echarts/core` 匯入不存在的 `LineSeriesOption`，與日常記錄變更無關。
+- `pnpm build`：本次 UI 變更完成後，H5、微信小程式與 Server 建置通過；保留既有 Taro bundle 體積、CSS order、`postcss-calc` 與 Sass legacy API 警告。
+- Playwright H5：375×812、390×844、430×932 通過；已檢查標記辨識、文字重疊、篩選按鈕溢出、時間線對齊、可捲動內容及 BottomNav。
+
+### Known Issues
+
+- 最終全倉 TypeScript 檢查需等待並行 M4 Growth 的 ECharts 型別匯入修正；本次日常記錄檔案無 Lint 或編輯器診斷。
+
+## M2 Statistics + Today Guide Pass
+
+**日期：** 2026-09-03
+
+### Changed
+
+- Records 統計統一為以選定日期為終點的自然時間窗口：今天 24 小時、最近 7 天、最近 30 天、最近 12 個自然月；年範圍可正確跨年。
+- 餵奶統計由次數改為奶瓶毫升加總；母乳計時沒有毫升資料，因此維持 `0 ml`，Timeline 的 `feedingCount` 不變。
+- 客戶端統計請求補傳本地 `utcOffsetMinutes`，服務端依使用者本地日界線分桶。
+- Today 四個重複大標題改用共用 `SectionHeader` 的可選 `guide` 變體，搭配快捷入口、記憶、提醒與時間線的語義圖示；其他頁面的預設變體未改動。
+- 小熊頭像改由固定圓形展示容器置中；星星偶爾閃爍、笑臉輕點頭，快捷入口按下時只有圖示回應，所有位移與循環動畫均服從 Reduce Motion。
+
+### Database
+
+- 無 Migration；未修改原始記錄 Schema。
+
+### API / Contract
+
+- `statsRangeSchema` 新增 `year`。
+- 統計桶欄位由 `feedingCount` 改為非負整數 `feedingAmountMl`；Timeline summary contract 不變。
+- `fetchRecordStats` 查詢新增客戶端本地 UTC offset。
+
+### UI / States
+
+- Records 新增「年」分頁，月／年分別顯示「最近 30 天」與「最近 12 个月」，餵奶讀數使用 `ml`。
+- Today 保留既有 Warm Glass、點擊行為與至少 48px 的操作熱區，只降低章節標題層級並加入低干擾 CSS 回饋。
+- H5 截圖：`output/playwright/today-final-375x812.png`、`today-final-390x844.png`、`today-final-430x932.png`。
+
+### Verification
+
+- TDD 定向測試：3 個測試檔、19 個測試通過，覆蓋四種時間窗口、跨年 12 個自然月、奶量加總、`ml` 顯示與本地 UTC offset。
+- `pnpm test`：23 個測試檔、92 個測試全部通過。
+- 本次需求檔案定向 ESLint：通過；`pnpm lint`：通過。
+- `pnpm build`：通過，H5、微信小程式與 Server 均完成建置；保留既有 CSS order、`postcss-calc`、bundle 體積及 Sass legacy API 警告。
+- `pnpm typecheck`：重建共用套件後，統計型別已通過；全倉仍被工作區既有的 `MilestoneViews` 測試 matcher／Taro `TextProps` 與 `SyncHost` 刪除通知型別錯誤阻斷，均不在本次修改範圍。
+- Playwright H5：375×812、390×844、430×932 均無頁面水平溢出；小熊容器、章節層級、圖示對齊、BottomNav 與文字換行已實際截圖檢查。App 級 Reduce Motion 驗證結果為星星／笑臉 `animation-name: none`、快捷圖示 `transition-duration: 0s`。
+
+### Known Issues
+
+- 全倉 TypeScript 仍需由目前的 M4 Growth 與 Sync 工作修正其既有型別錯誤後重跑；本次需求本身的定向測試、Lint、完整測試與 Build 均通過。
+
+## M4 Growth Visual Completion — 成長收藏冊
+
+**日期：** 2026-09-03
+
+### Changed
+
+- 重整 Growth 首頁資訊層級：保留三項真實指標、趨勢圖與記錄入口，將「成長里程碑」與「這個月的潤潤」從普通列表提升為可閱讀的收藏預覽。
+- 成長里程碑頁改為「成長星圖」時間軸，呈現里程碑數量、順序、日期與真實描述；空狀態仍提供第一個收藏入口。
+- 里程碑詳情改為獨立紀念頁，包含紀念插畫、事件標題、發生時間、家人描述與同步狀態；編輯仍由詳情頁明確進入，不再混成同一張表單。
+- 月度故事改為完整閱讀頁：故事封面、真實測量數量、第一次數量、三項指標變化與里程碑章節；月度里程碑可直接回到其詳情。
+- 統一 Growth 趨勢圖與相關頁面文案為簡體中文，並保留數值列表作為圖表的文字替代。
+- 將 `DeletionDialog` 的 callback 型別對齊完整 `SyncDeletionNotice`，收掉 Client typecheck 的適配層錯誤，未改變同步決策行為。
+
+### Database
+
+- 無 Migration；本輪只調整 Client UI 與既有同步對話框型別。
+
+### API / Contract
+
+- 無 API 或 Contract 變更；里程碑與月度故事繼續使用既有真實 Growth API。
+
+### UI / States
+
+- Growth 首頁：指標 Hero、真實趨勢、變化摘要、里程碑收藏預覽、月度故事封面、最近一次測量。
+- 里程碑：空狀態、時間軸列表、獨立詳情、詳情進入編輯。
+- 月度故事：有資料時顯示真實統計與章節；無資料時保留溫柔空白頁，不生成假故事。
+- 核心新增熱區維持至少 48px，375 / 390 / 430 寬度均無頁面橫向溢出。
+
+### Verification
+
+- `pnpm typecheck`：通過，7 個 workspace package 全部完成。
+- `pnpm lint`：通過。
+- `pnpm test`：23 個測試檔、93 個測試通過。
+- Growth 定向測試：3 個測試檔、8 個測試通過，覆蓋圖表數值替代、里程碑列表／詳情、月度故事與里程碑回連。
+- `pnpm --filter @runew/client build`：H5 與微信小程式建置通過；保留既有 bundle 體積、CSS ordering、`postcss-calc` 與 Sass legacy API 警告。
+- H5 真實 API / 本機 DB：已檢查 Growth 首頁、里程碑列表、里程碑詳情與月度故事；375×812、390×844、430×932 均完成截圖，未發現文字重疊、頁面橫向溢出或新增熱區不足。
+
+### Known Issues
+
+- ECharts 仍使 Growth 微信分包超過建議體積；這是既有效能警告，不阻斷本輪 UI 功能。
+- 測試環境的 Taro Canvas mock 仍會輸出 `canvasId` / `disableScroll` DOM 警告，不影響 H5 或微信實際建置。
+
+## M4 Growth Final Review — 同步一致性與離線故事
+
+**日期：** 2026-09-03
+
+### Changed
+
+- 將 Growth 與共用同步操作改為單操作資料庫事務；實體更新、版本遞增、同步日誌與最終結果要嘛一起成功，要嘛一起回滾。
+- 所有已套用的同步結果回傳完整 `serverSnapshot`；相同 `operationId` 重試直接重播第一次結果，不再重複遞增版本。
+- 衝突與「對端已刪除」操作保留在持久化佇列，直到使用者明確選擇；App 重啟後可由同一佇列重建提示。
+- 「保留本機」直接將原操作改基於伺服器最新版本；「恢復這條記錄」改為原子替換成 `RESTORE`，再接續使用者原本的 `UPDATE`。
+- 待同步佇列成為本機寫入的恢復來源；若 App 在佇列寫入後、實體寫入前中止，重新啟動可重建本機實體。
+- 三方合併辨識「客戶端值仍等於基準值」為未修改欄位，避免把伺服器的有效更新誤判成衝突。
+- 月度故事改由伺服器資料與本機待同步 Growth／里程碑合併生成，離線新增、修改與刪除都會立即反映。
+- Growth 使用者可見文案完成簡體中文掃描；里程碑保留 8 個可點選、可繼續編輯的常用選項。
+- 將 Playwright 暫存資料與本機驗證輸出加入 `.gitignore`，避免把生成檔提交到版本庫。
+
+### Verification
+
+- `pnpm typecheck`：通過，7 個 workspace package 全部完成。
+- `pnpm lint`：通過，0 錯誤。
+- `pnpm test`：24 個測試檔、104 個測試全部通過。
+- 同步與 Growth 定向測試：5 個測試檔、34 個測試通過，覆蓋冪等重試、最終快照、自動合併、持久化決策、真正恢復與中斷寫入重建。
+- `pnpm db:check`：通過，Schema、Migration 與資料庫約束一致。
+- `pnpm build`：Server、H5 與微信小程式全部建置通過。
+- `git diff --check` 與簡繁體字元掃描：通過。
+
+### Known Issues
+
+- 保留既有的 Taro bundle 體積、CSS ordering、`postcss-calc`、Sass legacy API、Fastify deprecation 與測試 DOM mock 警告；均未造成建置或測試失敗，本輪沒有新增阻斷問題。

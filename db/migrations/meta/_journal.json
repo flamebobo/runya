@@ -29,6 +29,13 @@
       "when": 1788252279000,
       "tag": "0003_m3_sync",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1788384000000,
+      "tag": "0004_m4_growth",
+      "breakpoints": true
     }
   ]
 }

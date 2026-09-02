@@ -1,5 +1,11 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import type { PendingOperation, RecordStatsQuery, TimelineItem, TimelineQuery, TimelineResponse } from '@runew/contracts';
+import type {
+  PendingOperation,
+  RecordStatsQuery,
+  TimelineItem,
+  TimelineQuery,
+  TimelineResponse,
+} from '@runew/contracts';
 import { DiaperType } from '@runew/domain-types';
 import { formatDurationLabel } from '@runew/shared-utils';
 import { fetchRecordStats, fetchTimeline } from '@/api/records';
@@ -35,7 +41,9 @@ async function localTimelineItems(babyId: string): Promise<TimelineItem[]> {
     listEntities('FOOD_RECORD'),
     loadPendingOperations(),
   ]);
-  const pendingByEntity = new Map(pending.map((operation) => [operation.entityId, operation]));
+  const pendingByEntity = new Map(
+    pending.map((operation) => [operation.entityId, operation]),
+  );
 
   const diaperItems = diapers
     .filter((entity) => !entity.deleted && entity.payload.babyId === babyId)
@@ -73,7 +81,11 @@ function toDiaperItem(entity: StoredEntity, pending?: PendingOperation): Timelin
 }
 
 function toFoodItem(entity: StoredEntity, pending?: PendingOperation): TimelineItem {
-  const payload = entity.payload as { foodName?: string; amountText?: string | null; recordedAt?: number };
+  const payload = entity.payload as {
+    foodName?: string;
+    amountText?: string | null;
+    recordedAt?: number;
+  };
   return {
     id: entity.entityId,
     kind: 'FOOD',
@@ -88,9 +100,29 @@ function toFoodItem(entity: StoredEntity, pending?: PendingOperation): TimelineI
   };
 }
 
-function isWithinRange(recordedAt: number, query: Partial<TimelineQuery>) {
-  if (query.from != null && recordedAt < query.from) return false;
-  if (query.to != null && recordedAt > query.to) return false;
+const ITEM_KIND_BY_FILTER = {
+  feeding: 'FEEDING',
+  sleep: 'SLEEP',
+  diaper: 'DIAPER',
+  food: 'FOOD',
+} as const satisfies Record<
+  Exclude<TimelineQuery['kind'], 'all'>,
+  TimelineItem['kind']
+>;
+
+export function matchesTimelineQuery(
+  item: Pick<TimelineItem, 'kind' | 'recordedAt'>,
+  query: Partial<TimelineQuery>,
+) {
+  if (query.from != null && item.recordedAt < query.from) return false;
+  if (query.to != null && item.recordedAt > query.to) return false;
+  if (
+    query.kind &&
+    query.kind !== 'all' &&
+    item.kind !== ITEM_KIND_BY_FILTER[query.kind]
+  ) {
+    return false;
+  }
   return true;
 }
 
@@ -105,10 +137,13 @@ export function useTimelineQuery(babyId: string | null, query: Partial<TimelineQ
       void syncNow;
       const server = await fetchTimeline(babyId!, query).catch(() => null);
       const localItems = await localTimelineItems(babyId!);
-      const serverIds = new Set(server?.items.map((item) => `${item.kind}-${item.id}`) ?? []);
+      const serverIds = new Set(
+        server?.items.map((item) => `${item.kind}-${item.id}`) ?? [],
+      );
       const localOnly = localItems.filter(
         (item) =>
-          !serverIds.has(`${item.kind}-${item.id}`) && isWithinRange(item.recordedAt, query),
+          !serverIds.has(`${item.kind}-${item.id}`) &&
+          matchesTimelineQuery(item, query),
       );
 
       if (!server) {
@@ -130,15 +165,22 @@ export function useTimelineQuery(babyId: string | null, query: Partial<TimelineQ
         items,
         summary: {
           ...server.summary,
-          diaperCount: server.summary.diaperCount + localOnly.filter((item) => item.kind === 'DIAPER').length,
-          foodCount: server.summary.foodCount + localOnly.filter((item) => item.kind === 'FOOD').length,
+          diaperCount:
+            server.summary.diaperCount +
+            localOnly.filter((item) => item.kind === 'DIAPER').length,
+          foodCount:
+            server.summary.foodCount +
+            localOnly.filter((item) => item.kind === 'FOOD').length,
         },
       };
     },
   });
 }
 
-function buildSummary(items: TimelineItem[], sleepSeconds: number): TimelineResponse['summary'] {
+function buildSummary(
+  items: TimelineItem[],
+  sleepSeconds: number,
+): TimelineResponse['summary'] {
   return {
     feedingCount: items.filter((item) => item.kind === 'FEEDING').length,
     sleepSeconds,
@@ -158,7 +200,9 @@ export function useInvalidateCare(babyId: string | null) {
     }
     const familyId = getFamilyRuntimeStore().familyId;
     if (familyId) {
-      void import('@/local/syncEngine').then(({ runSyncCycle }) => runSyncCycle(familyId));
+      void import('@/local/syncEngine').then(({ runSyncCycle }) =>
+        runSyncCycle(familyId),
+      );
     }
   };
 }

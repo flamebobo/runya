@@ -62,3 +62,55 @@
   font-size: var(--font-caption);
   color: var(--color-text-secondary);
 }
+
+.guide {
+  margin-bottom: 10px;
+}
+
+.guide .mark {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+}
+
+.guide .title {
+  font-size: var(--font-body-sm);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--color-text-secondary);
+  text-shadow: none;
+}
+
+.guide .accent {
+  display: none;
+}
+
+.guide .caption {
+  margin-top: 3px;
+  margin-left: 34px;
+}
+
+.mark-apricot {
+  color: var(--color-apricot-strong);
+  background: var(--color-apricot-soft);
+}
+
+.mark-sage {
+  color: var(--color-sage-strong);
+  background: var(--color-sage-soft);
+}
+
+.mark-lavender {
+  color: var(--color-lavender-strong);
+  background: var(--color-lavender-soft);
+}
+
+.mark-sky {
+  color: var(--color-sky-strong);
+  background: var(--color-sky-soft);
+}
+
+.mark-blush {
+  color: var(--color-blush-strong);
+  background: var(--color-blush-soft);
+}

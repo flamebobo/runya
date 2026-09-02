@@ -16,15 +16,41 @@ export async function loadPendingOperations(): Promise<PendingOperation[]> {
   }
 }
 
-export async function savePendingOperations(operations: PendingOperation[]): Promise<void> {
+export async function savePendingOperations(
+  operations: PendingOperation[],
+): Promise<void> {
   await platformAdapters.storage.setItem(QUEUE_KEY, JSON.stringify(operations));
 }
 
-export async function enqueuePendingOperation(operation: PendingOperation): Promise<void> {
+export async function enqueuePendingOperation(
+  operation: PendingOperation,
+): Promise<void> {
   const operations = await loadPendingOperations();
   if (operations.some((existing) => existing.operationId === operation.operationId)) {
     return;
   }
   operations.push(operation);
+  await savePendingOperations(operations);
+}
+
+export async function removePendingOperation(operationId: string): Promise<void> {
+  const operations = await loadPendingOperations();
+  await savePendingOperations(
+    operations.filter((operation) => operation.operationId !== operationId),
+  );
+}
+
+export async function replacePendingOperation(
+  operationId: string,
+  replacements: PendingOperation[],
+): Promise<void> {
+  const operations = await loadPendingOperations();
+  const index = operations.findIndex(
+    (operation) => operation.operationId === operationId,
+  );
+  if (index < 0) {
+    throw new Error('待同步操作已经处理，请刷新后重试');
+  }
+  operations.splice(index, 1, ...replacements);
   await savePendingOperations(operations);
 }

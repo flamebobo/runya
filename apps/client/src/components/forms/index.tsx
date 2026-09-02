@@ -84,15 +84,23 @@ export interface SegmentedControlProps<T extends string> {
   options: Array<{ value: T; label: string }>;
   value: T;
   onChange?: (value: T) => void;
+  className?: string;
+  ariaLabel?: string;
 }
 
 export function SegmentedControl<T extends string>({
   options,
   value,
   onChange,
+  className,
+  ariaLabel,
 }: SegmentedControlProps<T>) {
   return (
-    <View className={classNames(styles.segmented, 'glass-control')} role="tablist">
+    <View
+      className={classNames(styles.segmented, 'glass-control', className)}
+      role="tablist"
+      aria-label={ariaLabel}
+    >
       {options.map((option) => (
         <View
           key={option.value}
@@ -115,10 +123,17 @@ export interface FilterChipProps {
   label: string;
   selected?: boolean;
   disabled?: boolean;
+  className?: string;
   onClick?: () => void;
 }
 
-export function FilterChip({ label, selected, disabled, onClick }: FilterChipProps) {
+export function FilterChip({
+  label,
+  selected,
+  disabled,
+  className,
+  onClick,
+}: FilterChipProps) {
   return (
     <View
       className={classNames(
@@ -126,6 +141,7 @@ export function FilterChip({ label, selected, disabled, onClick }: FilterChipPro
         'glass-control',
         selected ? styles.chipSelected : undefined,
         disabled ? styles.disabled : undefined,
+        className,
       )}
       role="button"
       aria-pressed={selected}
@@ -179,7 +195,9 @@ export function GlassDateField({
           aria-label={label ?? '选择日期'}
           aria-invalid={error}
         >
-          <Text className={value ? styles.dateValue : styles.datePlaceholder}>{display}</Text>
+          <Text className={value ? styles.dateValue : styles.datePlaceholder}>
+            {display}
+          </Text>
           <View className={styles.dateChevron} aria-hidden>
             <Glyph name="chevron" size="sm" />
           </View>
@@ -208,9 +226,19 @@ export function GlassTimeField({
   return (
     <View className={styles.field}>
       {label ? <Text className={styles.label}>{label}</Text> : null}
-      <Picker mode="time" value={pickerValue} onChange={(event) => onChange?.(event.detail.value)}>
-        <View className={classNames(styles.dateControl, 'glass-control')} role="button" aria-label={label ?? '选择时间'}>
-          <Text className={value ? styles.dateValue : styles.datePlaceholder}>{display}</Text>
+      <Picker
+        mode="time"
+        value={pickerValue}
+        onChange={(event) => onChange?.(event.detail.value)}
+      >
+        <View
+          className={classNames(styles.dateControl, 'glass-control')}
+          role="button"
+          aria-label={label ?? '选择时间'}
+        >
+          <Text className={value ? styles.dateValue : styles.datePlaceholder}>
+            {display}
+          </Text>
           <View className={styles.dateChevron} aria-hidden>
             <Glyph name="chevron" size="sm" />
           </View>

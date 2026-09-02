@@ -17,3 +17,5 @@ apps/client/dist/
 apps/server/dist/
 data/
 backups/
+.playwright-cli/
+output/

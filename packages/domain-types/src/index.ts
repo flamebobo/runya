@@ -185,5 +185,7 @@ export type DuplicateStatus = (typeof DuplicateStatus)[keyof typeof DuplicateSta
 export const EntityType = {
   DIAPER_RECORD: 'DIAPER_RECORD',
   FOOD_RECORD: 'FOOD_RECORD',
+  GROWTH_RECORD: 'GROWTH_RECORD',
+  MILESTONE: 'MILESTONE',
 } as const;
 export type EntityType = (typeof EntityType)[keyof typeof EntityType];

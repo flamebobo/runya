@@ -111,7 +111,7 @@ describe('sync api', () => {
     };
   }
 
-  it('A + B: offline create, replay same operation twice �?one server row (idempotent)', async () => {
+  it('A + B: offline create, replay same operation twice → one server row (idempotent)', async () => {
     const family = await readyFamily();
     const op = diaperCreateOp({ familyId: family.familyId, babyId: family.babyId });
 
@@ -139,16 +139,20 @@ describe('sync api', () => {
       url: `/api/v1/babies/${family.babyId}/records?kind=diaper`,
       headers: family.headers,
     });
-    const diaperItems = timeline.json().data.items.filter(
-      (item: { kind: string }) => item.kind === 'DIAPER',
-    );
+    const diaperItems = timeline
+      .json()
+      .data.items.filter((item: { kind: string }) => item.kind === 'DIAPER');
     expect(diaperItems).toHaveLength(1);
   });
 
   it('rejects same operationId with different payload (ENTITY_ID_REUSED)', async () => {
     const family = await readyFamily();
     const entityId = createUlid();
-    const op = diaperCreateOp({ familyId: family.familyId, babyId: family.babyId, entityId });
+    const op = diaperCreateOp({
+      familyId: family.familyId,
+      babyId: family.babyId,
+      entityId,
+    });
     const first = await app.inject({
       method: 'POST',
       url: '/api/v1/sync/push',
@@ -179,7 +183,7 @@ describe('sync api', () => {
     expect(conflict.json().error.code).toBe('ENTITY_ID_REUSED');
   });
 
-  it('C: A edits note, B edits recordedAt (non-overlap) �?auto merge, both fields land', async () => {
+  it('C: A edits note, B edits recordedAt (non-overlap) → auto merge, both fields land', async () => {
     const family = await readyFamily();
     const entityId = createUlid();
     const create = diaperCreateOp({
@@ -192,7 +196,11 @@ describe('sync api', () => {
       method: 'POST',
       url: '/api/v1/sync/push',
       headers: family.headers,
-      payload: { deviceId: 'device-a', familyId: family.familyId, operations: [create] },
+      payload: {
+        deviceId: 'device-a',
+        familyId: family.familyId,
+        operations: [create],
+      },
     });
 
     const baseSnapshot = {
@@ -203,7 +211,7 @@ describe('sync api', () => {
       note: null,
     };
 
-    // 设备 A �?note
+    // 设备 A → note
     const patchA = diaperUpdateOp({
       familyId: family.familyId,
       entityId,
@@ -216,11 +224,15 @@ describe('sync api', () => {
       method: 'POST',
       url: '/api/v1/sync/push',
       headers: family.headers,
-      payload: { deviceId: 'device-a', familyId: family.familyId, operations: [patchA] },
+      payload: {
+        deviceId: 'device-a',
+        familyId: family.familyId,
+        operations: [patchA],
+      },
     });
     expect(resultA.json().data.results[0]!.status).toBe('APPLIED');
 
-    // 设备 B �?diaperType（非重叠字段�?
+    // 设备 B 修改 diaperType（非重叠字段）
     const patchB = diaperUpdateOp({
       familyId: family.familyId,
       entityId,
@@ -233,9 +245,33 @@ describe('sync api', () => {
       method: 'POST',
       url: '/api/v1/sync/push',
       headers: family.headers,
-      payload: { deviceId: 'device-b', familyId: family.familyId, operations: [patchB] },
+      payload: {
+        deviceId: 'device-b',
+        familyId: family.familyId,
+        operations: [patchB],
+      },
     });
     expect(resultB.json().data.results[0]!.status).toBe('APPLIED');
+    expect(resultB.json().data.results[0]).toMatchObject({
+      version: 3,
+      serverSnapshot: { note: '睡得很沉', diaperType: 'BOTH' },
+    });
+
+    const retryB = await app.inject({
+      method: 'POST',
+      url: '/api/v1/sync/push',
+      headers: family.headers,
+      payload: {
+        deviceId: 'device-b',
+        familyId: family.familyId,
+        operations: [patchB],
+      },
+    });
+    expect(retryB.json().data.results[0]).toMatchObject({
+      status: 'APPLIED',
+      version: 3,
+      serverSnapshot: { note: '睡得很沉', diaperType: 'BOTH' },
+    });
 
     const pulled = await app.inject({
       method: 'GET',
@@ -246,21 +282,31 @@ describe('sync api', () => {
       entityId: string;
       payload: { note?: string | null; diaperType?: string } | null;
     }>;
-    const lastForEntity = [...changes].reverse().find((change) => change.entityId === entityId);
-    // 最新日志带合并后的完整 payload：note �?diaperType 同时在场�?
+    const lastForEntity = [...changes]
+      .reverse()
+      .find((change) => change.entityId === entityId);
+    // 最新日志带合并后的完整 payload：note 与 diaperType 同时存在
     expect(lastForEntity?.payload?.note).toBe('睡得很沉');
     expect(lastForEntity?.payload?.diaperType).toBe('BOTH');
   });
 
-  it('D: A/B both change diaperType �?CONFLICT with conflictFields, no silent overwrite', async () => {
+  it('D: A/B both change diaperType → CONFLICT with conflictFields, no silent overwrite', async () => {
     const family = await readyFamily();
     const entityId = createUlid();
-    const create = diaperCreateOp({ familyId: family.familyId, babyId: family.babyId, entityId });
+    const create = diaperCreateOp({
+      familyId: family.familyId,
+      babyId: family.babyId,
+      entityId,
+    });
     await app.inject({
       method: 'POST',
       url: '/api/v1/sync/push',
       headers: family.headers,
-      payload: { deviceId: 'device-a', familyId: family.familyId, operations: [create] },
+      payload: {
+        deviceId: 'device-a',
+        familyId: family.familyId,
+        operations: [create],
+      },
     });
 
     const baseSnapshot = {
@@ -283,7 +329,11 @@ describe('sync api', () => {
       method: 'POST',
       url: '/api/v1/sync/push',
       headers: family.headers,
-      payload: { deviceId: 'device-a', familyId: family.familyId, operations: [patchA] },
+      payload: {
+        deviceId: 'device-a',
+        familyId: family.familyId,
+        operations: [patchA],
+      },
     });
 
     const patchB = diaperUpdateOp({
@@ -298,7 +348,11 @@ describe('sync api', () => {
       method: 'POST',
       url: '/api/v1/sync/push',
       headers: family.headers,
-      payload: { deviceId: 'device-b', familyId: family.familyId, operations: [patchB] },
+      payload: {
+        deviceId: 'device-b',
+        familyId: family.familyId,
+        operations: [patchB],
+      },
     });
     const result = resultB.json().data.results[0];
     expect(result.status).toBe('CONFLICT');
@@ -307,15 +361,23 @@ describe('sync api', () => {
     expect(result.errorCode).toBe('ENTITY_VERSION_CONFLICT');
   });
 
-  it('E: delete vs offline update �?ENTITY_DELETED, entity stays deleted', async () => {
+  it('E: delete vs offline update → ENTITY_DELETED, entity stays deleted', async () => {
     const family = await readyFamily();
     const entityId = createUlid();
-    const create = diaperCreateOp({ familyId: family.familyId, babyId: family.babyId, entityId });
+    const create = diaperCreateOp({
+      familyId: family.familyId,
+      babyId: family.babyId,
+      entityId,
+    });
     await app.inject({
       method: 'POST',
       url: '/api/v1/sync/push',
       headers: family.headers,
-      payload: { deviceId: 'device-a', familyId: family.familyId, operations: [create] },
+      payload: {
+        deviceId: 'device-a',
+        familyId: family.familyId,
+        operations: [create],
+      },
     });
 
     const deleteOp = {
@@ -331,7 +393,11 @@ describe('sync api', () => {
       method: 'POST',
       url: '/api/v1/sync/push',
       headers: family.headers,
-      payload: { deviceId: 'device-b', familyId: family.familyId, operations: [deleteOp] },
+      payload: {
+        deviceId: 'device-b',
+        familyId: family.familyId,
+        operations: [deleteOp],
+      },
     });
 
     const offlineUpdate = diaperUpdateOp({
@@ -352,21 +418,30 @@ describe('sync api', () => {
       method: 'POST',
       url: '/api/v1/sync/push',
       headers: family.headers,
-      payload: { deviceId: 'device-a', familyId: family.familyId, operations: [offlineUpdate] },
+      payload: {
+        deviceId: 'device-a',
+        familyId: family.familyId,
+        operations: [offlineUpdate],
+      },
     });
     const outcome = result.json().data.results[0];
     expect(outcome.status).toBe('ENTITY_DELETED');
     expect(outcome.errorCode).toBe('ENTITY_DELETED');
+    expect(outcome.version).toBe(2);
+    expect(outcome.serverSnapshot).toMatchObject({
+      babyId: family.babyId,
+      diaperType: 'WET',
+    });
 
-    // 不自动复活：记录仍是删除态�?
+    // 不自动复活：记录仍是删除状态
     const timeline = await app.inject({
       method: 'GET',
       url: `/api/v1/babies/${family.babyId}/records?kind=diaper`,
       headers: family.headers,
     });
-    const diaperItems = timeline.json().data.items.filter(
-      (item: { kind: string }) => item.kind === 'DIAPER',
-    );
+    const diaperItems = timeline
+      .json()
+      .data.items.filter((item: { kind: string }) => item.kind === 'DIAPER');
     expect(diaperItems).toHaveLength(0);
   });
 
@@ -380,7 +455,13 @@ describe('sync api', () => {
       payload: {
         deviceId: 'device-a',
         familyId: family.familyId,
-        operations: [diaperCreateOp({ familyId: family.familyId, babyId: family.babyId, entityId })],
+        operations: [
+          diaperCreateOp({
+            familyId: family.familyId,
+            babyId: family.babyId,
+            entityId,
+          }),
+        ],
       },
     });
 
@@ -397,7 +478,7 @@ describe('sync api', () => {
     expect(data.serverCursor).toBeGreaterThan(0);
   });
 
-  it('H + I: duplicate detection �?merge keeps one, keep both keeps two', async () => {
+  it('H + I: duplicate detection → merge keeps one, keep both keeps two', async () => {
     const family = await readyFamily();
     const baseTime = Date.UTC(2026, 8, 1, 10, 0, 0);
     const idA = createUlid();
@@ -410,7 +491,11 @@ describe('sync api', () => {
         deviceId: 'device-a',
         familyId: family.familyId,
         operations: [
-          diaperCreateOp({ familyId: family.familyId, babyId: family.babyId, entityId: idA }),
+          diaperCreateOp({
+            familyId: family.familyId,
+            babyId: family.babyId,
+            entityId: idA,
+          }),
           diaperCreateOp({
             familyId: family.familyId,
             babyId: family.babyId,
@@ -435,7 +520,7 @@ describe('sync api', () => {
     expect(items).toHaveLength(1);
     expect(items[0]!.candidateId).toBeTruthy();
 
-    // 准备第二对重复（用于 MERGE 分支），保证两个场景各用独立�?candidate�?
+    // 准备第二对重复（用于 MERGE 分支），保证两个场景各用独立 candidate
     const idC = createUlid();
     const idD = createUlid();
     await app.inject({
@@ -469,7 +554,7 @@ describe('sync api', () => {
     const items2 = list2.json().data.items as Array<{ candidateId: string }>;
     expect(items2).toHaveLength(2);
 
-    // KEEP BOTH：两条都�?
+    // KEEP BOTH：两条都保留
     const keepBoth = await app.inject({
       method: 'POST',
       url: `/api/v1/sync/duplicates/${items[0]!.candidateId}/resolve?familyId=${family.familyId}`,
@@ -482,10 +567,14 @@ describe('sync api', () => {
       url: `/api/v1/babies/${family.babyId}/records?kind=diaper`,
       headers: family.headers,
     });
-    expect(timeline.json().data.items.filter((i: { kind: string }) => i.kind === 'DIAPER')).toHaveLength(4);
+    expect(
+      timeline.json().data.items.filter((i: { kind: string }) => i.kind === 'DIAPER'),
+    ).toHaveLength(4);
 
-    // MERGE：canonical 保留，另一方进入最近删�?
-    const mergeTarget = items2.find((item) => item.candidateId !== items[0]!.candidateId)!;
+    // MERGE：canonical 保留，另一方进入最近删除
+    const mergeTarget = items2.find(
+      (item) => item.candidateId !== items[0]!.candidateId,
+    )!;
     const merge = await app.inject({
       method: 'POST',
       url: `/api/v1/sync/duplicates/${mergeTarget.candidateId}/resolve?familyId=${family.familyId}`,
@@ -498,7 +587,9 @@ describe('sync api', () => {
       url: `/api/v1/babies/${family.babyId}/records?kind=diaper`,
       headers: family.headers,
     });
-    expect(timeline.json().data.items.filter((i: { kind: string }) => i.kind === 'DIAPER')).toHaveLength(3);
+    expect(
+      timeline.json().data.items.filter((i: { kind: string }) => i.kind === 'DIAPER'),
+    ).toHaveLength(3);
   });
 
   it('J: unauthorized family push is rejected', async () => {
@@ -528,7 +619,13 @@ describe('sync api', () => {
       payload: {
         deviceId: 'device-a',
         familyId: family.familyId,
-        operations: [diaperCreateOp({ familyId: family.familyId, babyId: family.babyId, entityId })],
+        operations: [
+          diaperCreateOp({
+            familyId: family.familyId,
+            babyId: family.babyId,
+            entityId,
+          }),
+        ],
       },
     });
 
@@ -543,7 +640,11 @@ describe('sync api', () => {
     // sync_epoch 行在迁移时不 seed，readSyncEpoch 缺行时兜底为 1，因此这里用 upsert。
     await app.db
       .insert(systemMetadata)
-      .values({ key: SYSTEM_METADATA_KEYS.SYNC_EPOCH, value: '2', updatedAt: Date.now() })
+      .values({
+        key: SYSTEM_METADATA_KEYS.SYNC_EPOCH,
+        value: '2',
+        updatedAt: Date.now(),
+      })
       .onConflictDoUpdate({
         target: systemMetadata.key,
         set: { value: '2', updatedAt: Date.now() },
@@ -555,9 +656,9 @@ describe('sync api', () => {
       headers: family.headers,
     });
     expect(after.json().data.serverEpoch).toBe(2);
-    expect(after.json().data.entities.map((e: { entityId: string }) => e.entityId)).toContain(
-      entityId,
-    );
+    expect(
+      after.json().data.entities.map((e: { entityId: string }) => e.entityId),
+    ).toContain(entityId);
 
     const pull = await app.inject({
       method: 'GET',
@@ -565,9 +666,9 @@ describe('sync api', () => {
       headers: family.headers,
     });
     expect(pull.json().data.serverEpoch).toBe(2);
-    expect(pull.json().data.changes.map((c: { entityId: string }) => c.entityId)).toContain(
-      entityId,
-    );
+    expect(
+      pull.json().data.changes.map((c: { entityId: string }) => c.entityId),
+    ).toContain(entityId);
   });
 
   it('unauthenticated sync endpoints are rejected', async () => {
@@ -597,7 +698,13 @@ describe('sync api', () => {
       payload: {
         deviceId: 'device-a',
         familyId: family.familyId,
-        operations: [diaperCreateOp({ familyId: family.familyId, babyId: family.babyId, entityId })],
+        operations: [
+          diaperCreateOp({
+            familyId: family.familyId,
+            babyId: family.babyId,
+            entityId,
+          }),
+        ],
       },
     });
     const good = await app.inject({
@@ -605,7 +712,10 @@ describe('sync api', () => {
       url: `/api/v1/sync/pull?familyId=${family.familyId}&cursor=0`,
       headers: family.headers,
     });
-    const changes = good.json().data.changes as Array<{ seq: number; entityId: string }>;
+    const changes = good.json().data.changes as Array<{
+      seq: number;
+      entityId: string;
+    }>;
     expect(changes.length).toBeGreaterThan(0);
     expect(changes.map((change) => change.seq)).toEqual(
       [...changes.map((change) => change.seq)].sort((a, b) => a - b),

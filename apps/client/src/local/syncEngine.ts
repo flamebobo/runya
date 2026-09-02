@@ -3,8 +3,14 @@ import { platformAdapters } from '@/adapters/platform';
 import { ApiError } from '@/api/client';
 import { fetchSnapshot, pullChanges, pushOperations } from '@/api/sync';
 import { getEntity, listEntities, putEntity, removeEntity } from './entityStore';
+import { recoverPendingEntities } from './repository';
 import { loadPendingOperations, savePendingOperations } from './pendingStore';
-import { getSyncCursor, getSyncEpoch, setSyncCursor, setSyncEpoch } from './syncCursorStore';
+import {
+  getSyncCursor,
+  getSyncEpoch,
+  setSyncCursor,
+  setSyncEpoch,
+} from './syncCursorStore';
 import { getSyncRuntimeStore } from './syncRuntime';
 
 // sync_epoch 变化（Restore 等）→ cursor 失效 → full resync。
@@ -14,7 +20,12 @@ export async function fullResync(familyId: string) {
   const pending = await loadPendingOperations();
   const pendingEntityIds = new Set(pending.map((operation) => operation.entityId));
 
-  for (const entityType of ['DIAPER_RECORD', 'FOOD_RECORD']) {
+  for (const entityType of [
+    'DIAPER_RECORD',
+    'FOOD_RECORD',
+    'GROWTH_RECORD',
+    'MILESTONE',
+  ]) {
     for (const entity of await listEntities(entityType)) {
       if (entity.pendingOpId == null && !pendingEntityIds.has(entity.entityId)) {
         await removeEntity(entityType, entity.entityId);
@@ -70,14 +81,35 @@ async function pushPending(familyId: string): Promise<number> {
   const deviceId = batch[0]?.deviceId;
   if (!deviceId) return await getSyncCursor();
   const response = await pushOperations({ deviceId, familyId, operations: batch });
+  const latestPendingByEntity = new Map<string, string>();
+  for (const operation of pending) {
+    latestPendingByEntity.set(
+      `${operation.entityType}:${operation.entityId}`,
+      operation.operationId,
+    );
+  }
 
   const keepIds = new Set<string>();
   for (const result of response.results) {
-    const operation = pending.find((candidate) => candidate.operationId === result.operationId);
+    const operation = pending.find(
+      (candidate) => candidate.operationId === result.operationId,
+    );
     if (!operation) continue;
     if (result.status === 'APPLIED' || result.status === 'DUPLICATE_QUEUED') {
       const local = await getEntity(operation.entityType, operation.entityId);
-      if (local && local.pendingOpId === operation.operationId) {
+      const isLatestIntent =
+        latestPendingByEntity.get(`${operation.entityType}:${operation.entityId}`) ===
+        operation.operationId;
+      if (isLatestIntent && result.serverSnapshot) {
+        await putEntity({
+          entityType: operation.entityType,
+          entityId: operation.entityId,
+          version: result.version ?? local?.version ?? 1,
+          deleted: operation.op === 'DELETE',
+          payload: result.serverSnapshot as Record<string, unknown>,
+          pendingOpId: null,
+        });
+      } else if (isLatestIntent && local) {
         await putEntity({
           ...local,
           version: result.version ?? local.version,
@@ -94,26 +126,30 @@ async function pushPending(familyId: string): Promise<number> {
         operationId: operation.operationId,
         entityType: operation.entityType as SyncEntityType,
         entityId: operation.entityId,
+        serverVersion: result.version ?? operation.baseVersion ?? 1,
         conflictFields: result.conflictFields ?? [],
         serverSnapshot: result.serverSnapshot ?? {},
         clientPatch: operation.patch ?? {},
         baseSnapshot: operation.baseSnapshot,
       });
-      // 冲突操作移出队列：用户在 ConflictDialog 决策后重新入队。
+      keepIds.add(operation.operationId);
     } else if (result.status === 'ENTITY_DELETED') {
       runtime.setDeletionNotice({
         operationId: operation.operationId,
         entityType: operation.entityType,
         entityId: operation.entityId,
+        serverVersion: result.version ?? operation.baseVersion ?? 1,
+        clientPatch: operation.patch ?? {},
+        serverSnapshot: result.serverSnapshot ?? operation.baseSnapshot ?? {},
       });
-      // 本地数据保留，UI 询问「恢复 / 放弃」；操作移出队列。
+      keepIds.add(operation.operationId);
     } else {
       keepIds.add(operation.operationId);
     }
   }
 
-  // 只有「明确已决议」的操作才移出队列：APPLIED / DUPLICATE_QUEUED / CONFLICT / ENTITY_DELETED。
-  // 其余（本批未发送、响应缺失、可重试错误）原样保留——禁止任何静默丢弃（AGENTS §26）。
+  // 只有已应用的操作才移出队列；冲突与删除决策保留到用户明确处理，重启后可再次恢复提示。
+  // 本批未发送、响应缺失、可重试错误同样原样保留。
   const resolvedIds = new Set(response.results.map((result) => result.operationId));
   const remaining = pending.filter(
     (operation) =>
@@ -159,7 +195,9 @@ async function runPull(familyId: string, startCursor: number) {
 let syncing = false;
 
 // 同步主循环：epoch 检查 → push → pull。禁止并发。
-export async function runSyncCycle(familyId: string): Promise<{ pulled: number; fullResynced: boolean } | null> {
+export async function runSyncCycle(
+  familyId: string,
+): Promise<{ pulled: number; fullResynced: boolean } | null> {
   const runtime = getSyncRuntimeStore();
   if (syncing) return null;
   syncing = true;
@@ -167,10 +205,12 @@ export async function runSyncCycle(familyId: string): Promise<{ pulled: number; 
   try {
     const online = await platformAdapters.network.isOnline();
     if (!online) {
+      await recoverPendingEntities();
       runtime.setPhase('offline');
       return null;
     }
 
+    await recoverPendingEntities();
     let didResync = false;
     const localEpoch = await getSyncEpoch();
     if (localEpoch > 0) {
