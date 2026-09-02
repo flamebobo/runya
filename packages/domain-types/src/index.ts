@@ -56,12 +56,47 @@ export const BottomNavKey = {
 } as const;
 export type BottomNavKey = (typeof BottomNavKey)[keyof typeof BottomNavKey];
 
+export const FamilyRelationship = {
+  MOM: 'MOM',
+  DAD: 'DAD',
+  GRANDPARENT: 'GRANDPARENT',
+  OTHER: 'OTHER',
+} as const;
+export type FamilyRelationship =
+  (typeof FamilyRelationship)[keyof typeof FamilyRelationship];
+
+export const BabySex = {
+  MALE: 'MALE',
+  FEMALE: 'FEMALE',
+  UNKNOWN: 'UNKNOWN',
+} as const;
+export type BabySex = (typeof BabySex)[keyof typeof BabySex];
+
+export const BootstrapStatus = {
+  FIRST_RUN: 'FIRST_RUN',
+  MISSING_FAMILY: 'MISSING_FAMILY',
+  MISSING_BABY: 'MISSING_BABY',
+  READY: 'READY',
+} as const;
+export type BootstrapStatus =
+  (typeof BootstrapStatus)[keyof typeof BootstrapStatus];
+
 export type ApiErrorCode =
   | 'VALIDATION_ERROR'
   | 'AUTHENTICATION_REQUIRED'
+  | 'AUTH_REQUIRED'
+  | 'AUTH_INVALID_CREDENTIALS'
+  | 'AUTH_SESSION_EXPIRED'
+  | 'AUTH_SESSION_REVOKED'
+  | 'AUTH_ACCOUNT_DISABLED'
+  | 'AUTH_RATE_LIMITED'
+  | 'CSRF_INVALID'
   | 'PERMISSION_DENIED'
+  | 'FAMILY_ACCESS_DENIED'
+  | 'BABY_ACCESS_DENIED'
   | 'NOT_FOUND'
   | 'CONFLICT'
+  | 'IDEMPOTENCY_KEY_REUSED'
   | 'GONE'
   | 'RATE_LIMITED'
   | 'RETRYABLE_ERROR'

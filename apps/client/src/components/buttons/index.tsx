@@ -66,6 +66,7 @@ export function SecondaryGlassButton({
       type="button"
       className={classNames(
         styles.secondary,
+        'glass-control',
         fullWidth ? styles.fullWidth : undefined,
         disabled ? styles.disabled : undefined,
         className,

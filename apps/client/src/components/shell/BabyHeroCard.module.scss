@@ -52,8 +52,10 @@
 .name {
   display: block;
   font-size: var(--font-card-title);
-  font-weight: 700;
+  font-weight: 800;
   line-height: 1.2;
+  letter-spacing: 0.02em;
+  text-shadow: var(--text-emboss);
 }
 
 .age {

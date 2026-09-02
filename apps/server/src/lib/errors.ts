@@ -1,6 +1,7 @@
 import { createErrorEnvelope } from '@runew/contracts';
 import type { ApiErrorCode } from '@runew/domain-types';
 import type { FastifyError, FastifyReply, FastifyRequest } from 'fastify';
+import { ZodError } from 'zod';
 
 export class AppError extends Error {
   constructor(
@@ -20,10 +21,26 @@ export function isAppError(error: unknown): error is AppError {
 }
 
 export function errorHandler(
-  error: FastifyError | AppError,
+  error: FastifyError | AppError | ZodError,
   request: FastifyRequest,
   reply: FastifyReply,
 ) {
+  if (error instanceof ZodError) {
+    const firstIssue = error.issues[0];
+    return reply.status(400).send(
+      createErrorEnvelope(
+        'VALIDATION_ERROR',
+        firstIssue?.message ?? '输入有误，请检查后再试',
+        request.requestId,
+        {
+          details: {
+            field: firstIssue?.path.join('.') ?? undefined,
+          },
+        },
+      ),
+    );
+  }
+
   if (isAppError(error)) {
     request.log.warn(
       {

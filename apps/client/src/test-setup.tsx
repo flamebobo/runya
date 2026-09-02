@@ -38,4 +38,7 @@ vi.mock('@tarojs/components', () => ({
   Image: ({ src, ...props }: Record<string, unknown>) => (
     <img src={typeof src === 'string' ? src : ''} alt="" {...props} />
   ),
+  Picker: ({ children, ...props }: PropsWithChildren<Record<string, unknown>>) => (
+    <div {...props}>{children}</div>
+  ),
 }));

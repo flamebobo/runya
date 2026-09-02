@@ -1,10 +1,14 @@
 import cors from '@fastify/cors';
+import cookie from '@fastify/cookie';
 import helmet from '@fastify/helmet';
+import { runMigrations } from '@runew/db';
 import { loadConfig } from './config/index.js';
 import { errorHandler } from './lib/errors.js';
 import configContextPlugin from './plugins/config-context.js';
 import dbPlugin from './plugins/db.js';
+import { attachAuthContext } from './plugins/auth.js';
 import { healthRoutes } from './modules/health/routes.js';
+import { identityRoutes } from './modules/identity/routes.js';
 import Fastify from 'fastify';
 
 export async function buildApp() {
@@ -26,6 +30,7 @@ export async function buildApp() {
   });
 
   app.decorate('config', config);
+  await runMigrations(config.DATABASE_PATH);
 
   app.addHook('onRequest', async (request) => {
     request.requestId = request.id;
@@ -46,6 +51,7 @@ export async function buildApp() {
   await app.register(helmet, {
     contentSecurityPolicy: false,
   });
+  await app.register(cookie);
   await app.register(cors, {
     origin: config.NODE_ENV === 'development',
     credentials: true,
@@ -53,9 +59,12 @@ export async function buildApp() {
   await app.register(configContextPlugin);
   await app.register(dbPlugin);
 
+  app.addHook('onRequest', attachAuthContext);
+
   app.setErrorHandler(errorHandler);
 
   await app.register(healthRoutes, { prefix: '/api/v1' });
+  await app.register(identityRoutes, { prefix: '/api/v1' });
 
   return app;
 }

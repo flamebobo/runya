@@ -18,9 +18,12 @@ import {
   SectionHeader,
 } from '@/components';
 import { AddMomentOverlay } from '@/components/overlay/AddMomentOverlay';
+import { AppBootstrapGate } from '@/components/shell/AppBootstrapGate';
 import { BabyHeroCard } from '@/components/shell/BabyHeroCard';
 import { QuickTile } from '@/components/shell/QuickTile';
+import { useBootstrapQuery } from '@/hooks/useBootstrap';
 import { useUiOverlayStore } from '@/stores/runtime';
+import { formatBabyAgeLabel } from '@/utils/babyAge';
 import styles from './index.module.scss';
 
 const TIMELINE = [
@@ -69,6 +72,17 @@ function homeGreeting() {
 }
 
 export default function IndexPage() {
+  return (
+    <AppBootstrapGate>
+      <TodayShell />
+    </AppBootstrapGate>
+  );
+}
+
+function TodayShell() {
+  const bootstrap = useBootstrapQuery(false);
+  const baby = bootstrap.data?.currentBaby;
+  const gemAmount = bootstrap.data?.gemBalance ?? 0;
   const {
     drawerOpen,
     bottomNavActive,
@@ -79,6 +93,8 @@ export default function IndexPage() {
     showToast,
   } = useUiOverlayStore();
   const greeting = homeGreeting();
+  const babyName = baby?.nickname ?? baby?.name ?? '宝宝';
+  const babyAgeLabel = baby ? formatBabyAgeLabel(baby.birthday) : '成长中';
 
   const comingSoon = (label: string) => {
     showToast(`${label}正在布置，先把今天收好`);
@@ -91,13 +107,13 @@ export default function IndexPage() {
           <AppTopBar
             title={greeting.title}
             subtitle={greeting.subtitle}
-            gemAmount={1280}
+            gemAmount={gemAmount}
             onMenuClick={() => setDrawerOpen(true)}
           />
           <View className={`page-content ${styles.today}`}>
             <BabyHeroCard
-              name="润润"
-              ageLabel="8个月12天"
+              name={babyName}
+              ageLabel={babyAgeLabel}
               heightLabel="身高72.5cm ↑"
               weightLabel="体重8.6kg"
               headLabel="头围44.8cm"
@@ -196,7 +212,7 @@ export default function IndexPage() {
           <AppTopBar
             title={TAB_COPY[bottomNavActive].title}
             subtitle={TAB_COPY[bottomNavActive].subtitle}
-            gemAmount={1280}
+            gemAmount={gemAmount}
             onMenuClick={() => setDrawerOpen(true)}
           />
           <View className="page-content">
@@ -218,9 +234,9 @@ export default function IndexPage() {
       ) : null}
       <AppDrawer
         open={drawerOpen}
-        babyName="润润"
-        babyAgeLabel="8个月12天"
-        gemAmount={1280}
+        babyName={babyName}
+        babyAgeLabel={babyAgeLabel}
+        gemAmount={gemAmount}
         items={DEFAULT_DRAWER_ITEMS.map((item) => ({
           ...item,
           active:
@@ -243,7 +259,7 @@ export default function IndexPage() {
       />
       <AddMomentOverlay
         open={sheetOpen}
-        gemAmount={1280}
+        gemAmount={gemAmount}
         onClose={() => setSheetOpen(false)}
         onSelect={(label) => comingSoon(label)}
       />

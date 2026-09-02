@@ -5,7 +5,6 @@
   margin-inline: auto;
   min-height: 100vh;
   overflow-x: hidden;
-  contain: paint;
   background: var(--color-bg-page);
   padding-top: max(var(--safe-top), 8px);
 }
@@ -18,7 +17,7 @@
 }
 
 .withBottomNav {
-  padding-bottom: calc(96px + var(--safe-bottom));
+  padding-bottom: calc(88px + var(--safe-bottom));
 }
 
 .scroll {

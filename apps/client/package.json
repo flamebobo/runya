@@ -12,7 +12,10 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@runew/contracts": "workspace:*",
     "@runew/domain-types": "workspace:*",
+    "@runew/shared-utils": "workspace:*",
+    "@runew/validation": "workspace:*",
     "@tanstack/react-query": "^5.62.8",
     "@tarojs/components": "4.0.9",
     "@tarojs/helper": "4.0.9",

@@ -6,9 +6,9 @@ import styles from './BabyHeroCard.module.scss';
 export interface BabyHeroCardProps {
   name: string;
   ageLabel: string;
-  heightLabel: string;
-  weightLabel: string;
-  headLabel: string;
+  heightLabel?: string;
+  weightLabel?: string;
+  headLabel?: string;
   onClick?: () => void;
 }
 
@@ -41,11 +41,13 @@ export function BabyHeroCard({
           <Text className={styles.name}>{name}</Text>
           <Text className={styles.age}>{ageLabel}</Text>
         </View>
-        <View className={styles.stats}>
-          <Text className={styles.height}>{heightLabel}</Text>
-          <Text className={styles.stat}>{weightLabel}</Text>
-          <Text className={styles.stat}>{headLabel}</Text>
-        </View>
+        {heightLabel || weightLabel || headLabel ? (
+          <View className={styles.stats}>
+            {heightLabel ? <Text className={styles.height}>{heightLabel}</Text> : null}
+            {weightLabel ? <Text className={styles.stat}>{weightLabel}</Text> : null}
+            {headLabel ? <Text className={styles.stat}>{headLabel}</Text> : null}
+          </View>
+        ) : null}
       </View>
     </GlassSurface>
   );

@@ -3,6 +3,8 @@ import { describe, expect, it } from 'vitest';
 import { AppDrawer, DEFAULT_DRAWER_ITEMS } from './navigation/AppDrawer';
 import { BottomNav } from './navigation/BottomNav';
 import { PrimaryActionButton } from './buttons';
+import { GlassDateField } from './forms';
+import { ChoiceCard } from './shell/ChoiceCard';
 
 describe('design system components', () => {
   it('renders BottomNav with five hit areas', () => {
@@ -58,5 +60,26 @@ describe('design system components', () => {
     const disabled = container.querySelector('button') as HTMLButtonElement;
     expect(disabled.disabled).toBe(true);
     expect(loadingWidth).toBeGreaterThanOrEqual(defaultWidth * 0.9);
+  });
+
+  it('renders a date field as a picker trigger', () => {
+    render(<GlassDateField label="生日" value="2026-03-22" onChange={() => undefined} />);
+    expect(screen.getByLabelText('生日')).toBeTruthy();
+    expect(screen.getByText('2026年3月22日')).toBeTruthy();
+  });
+
+  it('renders identity choice cards with a selected state', () => {
+    render(
+      <ChoiceCard
+        title="爸爸"
+        caption="把陪伴收进时间线"
+        glyph="family"
+        tone="sage"
+        selected
+        onClick={() => undefined}
+      />,
+    );
+    expect(screen.getByLabelText('爸爸')).toBeTruthy();
+    expect(screen.getByLabelText('爸爸').getAttribute('aria-pressed')).toBe('true');
   });
 });

@@ -59,7 +59,10 @@
   --shadow-card: 0 5px 14px rgba(87, 64, 46, 0.07);
   --shadow-soft-card: 0 7px 16px rgba(115, 82, 51, 0.07);
   --shadow-hero: 0 8px 24px rgba(125, 96, 64, 0.09);
-  --shadow-floating: 0 8px 22px rgba(97, 69, 46, 0.12);
+  --shadow-floating: 0 12px 32px rgba(97, 69, 46, 0.14);
+  --text-emboss:
+    0 1px 0 rgba(255, 255, 255, 0.82),
+    0 2px 8px rgba(125, 96, 64, 0.12);
 
   --z-overlay: 1000;
   --z-sheet: 1100;
@@ -91,4 +94,7 @@
   --shadow-soft-card: 0 7px 16px rgba(0, 0, 0, 0.22);
   --shadow-hero: 0 8px 24px rgba(0, 0, 0, 0.28);
   --shadow-floating: 0 8px 22px rgba(0, 0, 0, 0.32);
+  --text-emboss:
+    0 1px 0 rgba(255, 255, 255, 0.12),
+    0 3px 10px rgba(0, 0, 0, 0.35);
 }

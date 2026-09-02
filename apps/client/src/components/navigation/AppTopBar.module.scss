@@ -25,10 +25,12 @@
 .title {
   display: block;
   font-size: var(--font-page-title);
-  font-weight: 700;
-  line-height: 1.2;
+  font-weight: 800;
+  line-height: 1.18;
+  letter-spacing: 0.01em;
   color: var(--color-text-primary);
   text-wrap: balance;
+  text-shadow: var(--text-emboss);
 }
 
 .subtitle {

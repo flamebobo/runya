@@ -7,6 +7,12 @@ export function PageAmbient() {
     <View className={styles.root} aria-hidden>
       <Image className={styles.blobTr} src={blobTr} mode="aspectFill" />
       <Image className={styles.blobBl} src={blobBl} mode="aspectFill" />
+      <View className={styles.orbSage} />
+      <View className={styles.orbLavender} />
+      <View className={styles.orbApricot} />
+      <View className={styles.sparkA} />
+      <View className={styles.sparkB} />
+      <View className={styles.sparkC} />
     </View>
   );
 }

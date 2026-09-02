@@ -8,30 +8,148 @@
 }
 
 .blobTr,
-.blobBl {
+.blobBl,
+.orbSage,
+.orbLavender,
+.orbApricot,
+.sparkA,
+.sparkB,
+.sparkC {
   position: absolute;
   display: block;
+  will-change: transform, opacity;
 }
 
 .blobTr {
   top: -90px;
-  right: -60px;
+  right: -40px;
   width: 280px;
   height: 280px;
-  opacity: 0.72;
+  opacity: 0.78;
+  animation: floatA 18s var(--motion-ease) infinite;
 }
 
 .blobBl {
   top: 520px;
-  left: -80px;
+  left: -70px;
   width: 240px;
   height: 240px;
-  opacity: 0.58;
+  opacity: 0.62;
+  animation: floatB 22s var(--motion-ease) infinite;
+}
+
+.orbSage {
+  top: 210px;
+  left: -36px;
+  width: 120px;
+  height: 120px;
+  border-radius: 60px;
+  background: radial-gradient(circle, rgba(155, 196, 163, 0.28), rgba(155, 196, 163, 0));
+  animation: floatB 26s var(--motion-ease) infinite;
+}
+
+.orbLavender {
+  top: 430px;
+  right: -28px;
+  width: 96px;
+  height: 96px;
+  border-radius: 48px;
+  background: radial-gradient(circle, rgba(199, 185, 232, 0.26), rgba(199, 185, 232, 0));
+  animation: floatA 20s var(--motion-ease) infinite;
+}
+
+.orbApricot {
+  top: 86px;
+  left: 42%;
+  width: 72px;
+  height: 72px;
+  border-radius: 36px;
+  background: radial-gradient(circle, rgba(243, 160, 91, 0.16), rgba(243, 160, 91, 0));
+  animation: floatA 16s var(--motion-ease) infinite;
+}
+
+.sparkA,
+.sparkB,
+.sparkC {
+  width: 10px;
+  height: 10px;
+  background: var(--color-apricot);
+  clip-path: polygon(50% 0, 62% 38%, 100% 50%, 62% 62%, 50% 100%, 38% 62%, 0 50%, 38% 38%);
+  opacity: 0.22;
+}
+
+.sparkA {
+  top: 72px;
+  right: 28px;
+  animation: twinkle 3.6s ease-in-out infinite;
+}
+
+.sparkB {
+  top: 348px;
+  left: 22px;
+  width: 8px;
+  height: 8px;
+  background: var(--color-sage);
+  animation: twinkle 4.4s ease-in-out 0.8s infinite;
+}
+
+.sparkC {
+  top: 618px;
+  right: 48px;
+  width: 7px;
+  height: 7px;
+  background: var(--color-lavender);
+  animation: twinkle 5.2s ease-in-out 1.4s infinite;
+}
+
+@keyframes floatA {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+  50% {
+    transform: translate3d(-10px, 14px, 0);
+  }
+}
+
+@keyframes floatB {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+  50% {
+    transform: translate3d(12px, -16px, 0);
+  }
+}
+
+@keyframes twinkle {
+  0%,
+  100% {
+    opacity: 0.1;
+    transform: scale(0.8) rotate(0deg);
+  }
+  50% {
+    opacity: 0.42;
+    transform: scale(1.08) rotate(16deg);
+  }
 }
 
 @media (max-height: 780px) {
   .blobBl {
     top: auto;
     bottom: -40px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .blobTr,
+  .blobBl,
+  .orbSage,
+  .orbLavender,
+  .orbApricot,
+  .sparkA,
+  .sparkB,
+  .sparkC {
+    animation: none;
   }
 }

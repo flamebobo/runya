@@ -7,6 +7,7 @@ export const users = sqliteTable('users', {
   status: text('status').notNull().default('ACTIVE'),
   locale: text('locale').notNull().default('zh-CN'),
   timezoneName: text('timezone_name'),
+  topicPreferencesJson: text('topic_preferences_json'),
   createdAt: integer('created_at').notNull(),
   updatedAt: integer('updated_at').notNull(),
 });
@@ -69,6 +70,8 @@ export const devices = sqliteTable(
     appVersion: text('app_version'),
     syncCursor: integer('sync_cursor').notNull().default(0),
     pushCapabilitiesJson: text('push_capabilities_json'),
+    currentFamilyId: text('current_family_id'),
+    currentBabyId: text('current_baby_id'),
     lastSeenAt: integer('last_seen_at').notNull(),
     createdAt: integer('created_at').notNull(),
   },

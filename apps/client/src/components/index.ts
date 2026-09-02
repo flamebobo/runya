@@ -6,6 +6,8 @@ export * from './navigation/RoundIconButton';
 export * from './navigation/GemBadge';
 export * from './navigation/BottomNav';
 export * from './navigation/AppDrawer';
+export * from './shell/AuthScreen';
+export * from './shell/ChoiceCard';
 export * from './shell/PageAmbient';
 export * from './shell/QuickTile';
 export * from './shell/BabyHeroCard';

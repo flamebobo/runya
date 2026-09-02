@@ -1,40 +1,58 @@
 .wrapper {
   position: fixed;
-  left: 18px;
-  right: 18px;
-  bottom: calc(14px + var(--safe-bottom));
+  left: 16px;
+  right: 16px;
+  bottom: calc(12px + var(--safe-bottom));
   z-index: var(--z-nav);
   pointer-events: none;
 }
 
 .nav {
   width: 100%;
-  height: 56px;
+  height: 64px;
   overflow: visible;
   pointer-events: auto;
+}
+
+.nav::before {
+  content: '';
+  position: absolute;
+  left: 18px;
+  right: 18px;
+  top: 1px;
+  height: 1px;
+  border-radius: 1px;
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0),
+    rgba(255, 255, 255, 0.92) 22%,
+    rgba(255, 255, 255, 0.92) 78%,
+    rgba(255, 255, 255, 0)
+  );
+  pointer-events: none;
 }
 
 .grid {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
   align-items: stretch;
-  height: 56px;
+  height: 64px;
 }
 
 .item {
-  min-height: 56px;
+  min-height: 64px;
   min-width: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 2px;
+  gap: 4px;
   position: relative;
   overflow: visible;
 }
 
 .addHitArea {
-  min-height: 56px;
+  min-height: 64px;
   min-width: 0;
   display: flex;
   align-items: flex-start;
@@ -48,29 +66,40 @@
   font-size: var(--font-nav-label);
   color: var(--color-text-secondary);
   line-height: 1;
-  font-weight: 500;
-  letter-spacing: 0.04em;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.55);
 }
 
 .itemActive .itemLabel {
   color: var(--color-apricot-strong);
-  font-weight: 700;
+  font-weight: 800;
+  text-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.8),
+    0 2px 6px rgba(232, 125, 56, 0.16);
 }
 
 .icon {
-  width: 32px;
-  height: 32px;
+  width: 34px;
+  height: 34px;
   display: flex;
   align-items: center;
   justify-content: center;
   color: var(--color-text-secondary);
-  border-radius: 16px;
+  border-radius: 17px;
 }
 
 .itemActive .icon {
   color: var(--color-apricot-strong);
-  background: rgba(247, 224, 199, 0.72);
-  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.7);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0) 70%),
+    rgba(247, 224, 199, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  box-shadow:
+    inset 0 1px 1px rgba(255, 255, 255, 0.8),
+    0 4px 10px rgba(232, 125, 56, 0.12);
+  backdrop-filter: blur(12px) saturate(1.4);
+  -webkit-backdrop-filter: blur(12px) saturate(1.4);
 }
 
 .addHitArea:active .addButton {
@@ -78,21 +107,24 @@
 }
 
 .addButton {
-  width: 56px;
-  height: 56px;
-  margin-top: -18px;
-  border-radius: 28px;
+  width: 58px;
+  height: 58px;
+  margin-top: -16px;
+  border-radius: 29px;
   display: flex;
   align-items: center;
   justify-content: center;
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0) 48%),
-    rgba(247, 224, 199, 0.96);
-  border: 1px solid rgba(243, 167, 100, 0.38);
+    linear-gradient(180deg, rgba(255, 255, 255, 0.62), rgba(255, 255, 255, 0.08) 46%),
+    rgba(247, 224, 199, 0.46);
+  border: 1px solid rgba(255, 255, 255, 0.72);
   box-shadow:
-    0 8px 20px rgba(232, 125, 56, 0.22),
-    0 0 0 4px rgba(247, 224, 199, 0.62),
-    inset 0 1px 1px rgba(255, 255, 255, 0.72);
+    0 10px 24px rgba(232, 125, 56, 0.28),
+    0 0 0 5px rgba(255, 252, 247, 0.28),
+    inset 0 1px 1px rgba(255, 255, 255, 0.86),
+    inset 0 -8px 14px rgba(232, 125, 56, 0.12);
+  backdrop-filter: blur(22px) saturate(1.7);
+  -webkit-backdrop-filter: blur(22px) saturate(1.7);
   transition: transform var(--motion-fast) var(--motion-ease);
 }
 
@@ -102,4 +134,5 @@
   justify-content: center;
   color: var(--color-apricot-strong);
   line-height: 0;
+  filter: drop-shadow(0 1px 0 rgba(255, 255, 255, 0.7));
 }

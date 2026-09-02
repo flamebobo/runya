@@ -31,15 +31,17 @@ export function AppTopBar({
     <View className={styles.root}>
       <View className={styles.left}>
         {variant === 'standard' || variant === 'admin' ? (
-          <RoundIconButton
-            label="返回"
-            icon={
-              <View className={styles.backIcon}>
-                <Glyph name="chevron" size="md" />
-              </View>
-            }
-            onClick={onBackClick}
-          />
+          onBackClick ? (
+            <RoundIconButton
+              label="返回"
+              icon={
+                <View className={styles.backIcon}>
+                  <Glyph name="chevron" size="md" />
+                </View>
+              }
+              onClick={onBackClick}
+            />
+          ) : null
         ) : (
           <RoundIconButton label="打开菜单" onClick={onMenuClick} />
         )}

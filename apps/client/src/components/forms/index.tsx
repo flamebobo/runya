@@ -1,5 +1,7 @@
-import { Input, Textarea, View, Text } from '@tarojs/components';
+import { Input, Picker, Textarea, View, Text } from '@tarojs/components';
 import classNames from '@/utils/classNames';
+import { Glyph } from '@/components/icons/Glyph';
+import { formatBirthdayLabel, todayIsoDate } from '@/utils/babyAge';
 import styles from './forms.module.scss';
 
 export interface GlassInputProps {
@@ -7,6 +9,8 @@ export interface GlassInputProps {
   value?: string;
   placeholder?: string;
   disabled?: boolean;
+  password?: boolean;
+  error?: boolean;
   onInput?: (value: string) => void;
 }
 
@@ -15,17 +19,27 @@ export function GlassInput({
   value,
   placeholder,
   disabled,
+  password = false,
+  error = false,
   onInput,
 }: GlassInputProps) {
   return (
     <View className={styles.field}>
       {label ? <Text className={styles.label}>{label}</Text> : null}
       <Input
-        className={classNames(styles.control, disabled ? styles.disabled : undefined)}
+        className={classNames(
+          styles.control,
+          'glass-control',
+          disabled ? styles.disabled : undefined,
+          error ? styles.controlError : undefined,
+        )}
         value={value}
+        password={password}
         placeholder={placeholder}
+        placeholderStyle="color: #8D7D70"
         disabled={disabled}
         aria-label={label ?? placeholder}
+        aria-invalid={error}
         onInput={(event) => onInput?.(event.detail.value)}
       />
     </View>
@@ -43,7 +57,12 @@ export function GlassTextArea({
     <View className={styles.field}>
       {label ? <Text className={styles.label}>{label}</Text> : null}
       <Textarea
-        className={classNames(styles.control, styles.textarea, disabled ? styles.disabled : undefined)}
+        className={classNames(
+          styles.control,
+          styles.textarea,
+          'glass-control',
+          disabled ? styles.disabled : undefined,
+        )}
         value={value}
         placeholder={placeholder}
         disabled={disabled}
@@ -66,7 +85,7 @@ export function SegmentedControl<T extends string>({
   onChange,
 }: SegmentedControlProps<T>) {
   return (
-    <View className={styles.segmented} role="tablist">
+    <View className={classNames(styles.segmented, 'glass-control')} role="tablist">
       {options.map((option) => (
         <View
           key={option.value}
@@ -97,6 +116,7 @@ export function FilterChip({ label, selected, disabled, onClick }: FilterChipPro
     <View
       className={classNames(
         styles.chip,
+        'glass-control',
         selected ? styles.chipSelected : undefined,
         disabled ? styles.disabled : undefined,
       )}
@@ -106,6 +126,58 @@ export function FilterChip({ label, selected, disabled, onClick }: FilterChipPro
       onClick={disabled ? undefined : onClick}
     >
       <Text>{label}</Text>
+    </View>
+  );
+}
+
+export interface GlassDateFieldProps {
+  label?: string;
+  value?: string;
+  placeholder?: string;
+  error?: boolean;
+  start?: string;
+  end?: string;
+  onChange?: (value: string) => void;
+}
+
+export function GlassDateField({
+  label,
+  value,
+  placeholder = '点这里选择日期',
+  error = false,
+  start = '2016-01-01',
+  end,
+  onChange,
+}: GlassDateFieldProps) {
+  const pickerValue = value || todayIsoDate();
+  const display = value ? formatBirthdayLabel(value) : placeholder;
+
+  return (
+    <View className={styles.field}>
+      {label ? <Text className={styles.label}>{label}</Text> : null}
+      <Picker
+        mode="date"
+        value={pickerValue}
+        start={start}
+        end={end ?? todayIsoDate()}
+        onChange={(event) => onChange?.(event.detail.value)}
+      >
+        <View
+          className={classNames(
+            styles.dateControl,
+            'glass-control',
+            error ? styles.controlError : undefined,
+          )}
+          role="button"
+          aria-label={label ?? '选择日期'}
+          aria-invalid={error}
+        >
+          <Text className={value ? styles.dateValue : styles.datePlaceholder}>{display}</Text>
+          <View className={styles.dateChevron} aria-hidden>
+            <Glyph name="chevron" size="sm" />
+          </View>
+        </View>
+      </Picker>
     </View>
   );
 }

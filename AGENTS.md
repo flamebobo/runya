@@ -576,6 +576,8 @@ R6.2 / Warm Glass + Cute Accent
 温馨、不幼稚
 ```
 
+M0 已校准的液态 Warm Glass（更高 blur / saturate、半透明填充、标题浮雕）是后续所有里程碑的实现基线。详见 `docs/UI_IMPLEMENTATION_SPEC.md` §0.5。禁止 Auth / 新模块退回实心白卡片或高饱和实橙按钮。
+
 禁止把设计简化为：
 
 ```text

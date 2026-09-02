@@ -80,3 +80,59 @@
 - 抽屉 / 留下这一刻改为常驻 + 进出动效；返回热区补到 48px
 - 今天页：按时问候、Hero/记忆卡/时间线可点、时间线连接线、Section「全部」
 - 产品文案去掉「后续里程碑」开发口吻；Empty / Toast / 热区与 press 反馈一并打磨
+
+## M0 Design Polish — Liquid Glass / Display Type
+
+**日期：** 2026-09-02
+
+- 底栏改为 64px 液态 Warm Glass：更高 blur / saturate、高光描边、半透明填充，避免实心奶油条
+- 中间 `+` 改为玻璃高光圆钮；选中 Tab 使用小玻璃 pill
+- 页面/区块标题改为 800 字重 + 浅浮雕阴影；Section 增加嫩芽标记与暖杏短下划线
+- 背景增加不挡内容的慢速光斑漂浮与星点闪烁，尊重 Reduce Motion
+
+## M1 — Auth / Family / Baby / App Shell
+
+**日期：** 2026-09-02
+
+### Database
+
+- Migration: `db/migrations/0001_m1_infra.sql`
+- 新增 `idempotency_keys`；`users.topic_preferences_json`；`devices.current_family_id` / `current_baby_id`
+
+### API / Contract
+
+- Auth：`POST /auth/register|login|logout`、`GET /auth/me`、`GET /bootstrap`
+- Onboarding：`POST /onboarding/complete`（幂等）
+- Family / Baby：P0 CRUD + invite accept
+- Argon2id；Opaque Session（DB 仅存 token hash）；H5 Cookie + CSRF；小程序 Bearer
+
+### UI / States
+
+- `/pages/auth/login`、`/pages/auth/register`、`/pages/onboarding/index`（四步 Wizard）
+- `AppBootstrapGate` 驱动登录 / Onboarding / Today；Drawer 11 项 + 管理模式；BottomNav 五热区
+
+### Tests
+
+- Identity API integration（含 H5 cookie session）25 tests total pass
+- `pnpm typecheck` / `pnpm lint` / `pnpm test` / `pnpm build` 通过
+
+### Visual
+
+- 登录 / 注册使用 `AuthScreen`：Hero 品牌卡（插画 + 贴纸）+ Glass 表单卡，与今天页同一套液态材质
+- Onboarding 与今天页同构：Hero / SectionHeader / QuickTile / ChoiceCard；生日使用 `GlassDateField` 系统日期选择器
+- 视觉基线写入 `UI_IMPLEMENTATION_SPEC.md` §0.5 与 `.cursor/rules/runew-visual.mdc`
+
+### Tests
+
+- Identity API integration（含 H5 cookie session）+ boot auto-migrate + Zod 400
+- `pnpm typecheck` / `pnpm lint` / `pnpm test` / `pnpm build` 通过
+
+### Known Issues
+
+- `POST /auth/csrf` 独立端点未实现（登录/注册已下发 CSRF Cookie）
+- 375/390/430 截图需本地 dev 手动回归
+- Today 时间线仍为 M0 静态预览（真实记录属 M2）
+
+### Next
+
+- **M2：** Today / Daily Records / Timer

@@ -86,6 +86,30 @@ Figma 当前 Page 已核验：
 - 计时依赖前端 `setInterval` 维持业务真相；
 - 将 268 张 Frame 逐一变成 268 个路由。
 
+## 0.5 里程碑视觉基线（M0 已校准，后续 Mx 强制沿用）
+
+M0 已把 R6.2 Warm Glass 校准为「液态毛玻璃」实现。**后续所有里程碑页面必须沿用这套基线**，不得为 Auth / Onboarding / 新模块另起登录风或实心白卡片。
+
+已校准实现：
+
+| 层 | 实现 |
+|---|---|
+| 页底 | `#FBF7F0` + `PageAmbient` 低透明光斑 / 星点，尊重 Reduce Motion |
+| Control | `rgba(255,252,247,0.42)` + `blur(28px) saturate(1.7)` + 高光描边 |
+| Card / Hero | `0.38–0.40` 填充 + `blur(32–36px)`，禁止纯白实心卡 |
+| Floating | 底栏等：`blur(48px) saturate(2)`，半透明渐变，不是实心奶油条 |
+| 标题 | 800 字重 + `--text-emboss`；正文暖深棕 `#4A392F` |
+| 主按钮 | 暖杏玻璃 `rgba(247,224,199,0.92)`，禁止高饱和实橙底 |
+| Token | 只用 `--color-text-primary` 等现有 token，禁止自造 `--text-primary` |
+
+新页面检查清单：
+
+1. 是否包在 `PageShell` 里？
+2. 卡片是否用 `GlassSurface` / `glass-*`？
+3. 输入是否用 `GlassInput`？
+4. 主 CTA 是否用 `PrimaryActionButton`？
+5. 375 / 390 / 430 是否仍有 20px 页边且不横向溢出？
+
 ---
 
 # 1. 交付目标与代码组织
@@ -598,46 +622,44 @@ background: var(--color-bg-page);
 用于：
 
 - TopBar 圆按钮；
+- 输入框；
 - 小图标按钮；
 - 紧凑选择器。
 
+**M0 已校准（后续 Mx 以代码 `glass.scss` 为准，不再退回实心奶油）：**
+
 ```scss
-background: rgba(255, 252, 247, .94);
-border: 1px solid rgba(238, 226, 215, .86);
-backdrop-filter: blur(14px);
+background: rgba(255, 252, 247, 0.42);
+border: 1px solid rgba(255, 255, 255, 0.72);
+backdrop-filter: blur(28px) saturate(1.7);
 box-shadow:
-  0 5px 16px rgba(92, 69, 51, .10),
-  inset 0 1px 1px rgba(255, 255, 255, .42);
+  var(--shadow-control),
+  inset 0 1px 1px rgba(255, 255, 255, 0.78),
+  inset 0 -1px 1px rgba(125, 96, 64, 0.04);
 ```
 
-典型尺寸：40×40，R20。
+典型尺寸：输入 52 高 / 按钮 40×40，R18–R20。
 
 ### `glass-card`
 
 用于普通内容卡、列表行：
 
 ```scss
-background: rgba(255, 255, 255, .76);
-border: 1px solid rgba(255, 255, 255, .62);
-backdrop-filter: blur(12px);
-box-shadow:
-  0 5px 14px rgba(87, 64, 46, .07),
-  inset 0 1px 1px rgba(255, 255, 255, .24);
+background: rgba(255, 252, 247, 0.38);
+border: 1px solid rgba(255, 255, 255, 0.62);
+backdrop-filter: blur(32px) saturate(1.72);
 ```
 
 默认 R22。
 
 ### `glass-hero`
 
-用于宝宝卡、知识主推荐、家庭 Hero、管理分区 Hero：
+用于宝宝卡、登录/注册表单卡、知识主推荐、家庭 Hero：
 
 ```scss
-background: rgba(255, 252, 247, .74);
-border: 1px solid rgba(255, 255, 255, .58);
-backdrop-filter: blur(18px);
-box-shadow:
-  0 8px 24px rgba(125, 96, 64, .09),
-  inset 0 1px 1px rgba(255, 255, 255, .34);
+background: rgba(255, 252, 247, 0.4);
+border: 1px solid rgba(255, 255, 255, 0.66);
+backdrop-filter: blur(36px) saturate(1.75);
 ```
 
 默认 R24–28。
@@ -647,13 +669,12 @@ box-shadow:
 用于 Bottom Nav / 强悬浮面板：
 
 ```scss
-background: rgba(255, 255, 255, .90);
-border: 1px solid rgba(255, 255, 255, .90);
-backdrop-filter: blur(22px);
-box-shadow: 0 8px 22px rgba(97, 69, 46, .12);
+background: linear-gradient(180deg, rgba(255, 255, 255, 0.52), rgba(255, 252, 247, 0.16));
+border: 1px solid rgba(255, 255, 255, 0.66);
+backdrop-filter: blur(48px) saturate(2);
 ```
 
-Bottom Nav：R28。
+Bottom Nav：64px 高，R28。
 
 ### `glass-tinted`
 
@@ -1633,10 +1654,14 @@ Figma：
 要求：
 
 - 品牌识别优先于普通后台登录感；
-- CTA 使用产品化语言；
-- 输入错误为字段级错误；
-- Loading 不允许按钮重复提交；
+- 使用 `AuthScreen`：`PageShell` + 品牌区 + `GlassSurface` hero 表单卡；
+- CTA 使用产品化语言（「进入润芽」）；
+- 输入使用 `GlassInput` / `glass-control`，密码为 password 类型；
+- 输入错误为字段级错误，主按钮 Loading 不可重复提交；
+- 次要动作使用 `TextAction`，不要再堆一块实心次按钮；
 - 登录成功根据 family/baby 初始化状态跳转 Today 或 Onboarding。
+
+注册（00.02）同一套 `AuthScreen`，不要做成比登录更简陋的后台表单。
 
 ## 9.2 Onboarding
 
@@ -1656,6 +1681,13 @@ topics
 ```
 
 不建议四个独立小程序路由。
+
+视觉与「今天」页同一套结构，不要做成一张空旷大表单卡：
+
+- 欢迎：Hero 玻璃卡 + 插画贴纸 + 三枚 QuickTile 预告下一步；
+- 宝宝档案：实时 `BabyHeroCard` 预览 + `GlassInput` + **`GlassDateField`（系统日期选择器，禁止手输 YYYY-MM-DD）**；
+- 家庭身份：2×2 `ChoiceCard`（妈妈 / 爸爸 / 祖辈 / 其他家人），选中有描边，不要四段挤在一行的 SegmentedControl；
+- 关注主题：3×2 `QuickTile` 多选，语义色分色，不要统一发绿的 Chip。
 
 完成后：
 

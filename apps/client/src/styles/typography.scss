@@ -4,15 +4,15 @@
     'Microsoft YaHei', sans-serif;
 
   --font-status: 9px;
-  --font-nav-label: 9px;
+  --font-nav-label: 10px;
   --font-micro: 10px;
   --font-caption: 11px;
   --font-body-sm: 12px;
   --font-body: 13px;
   --font-body-lg: 14px;
   --font-card-title: 16px;
-  --font-section-title: 18px;
-  --font-page-title: 24px;
+  --font-section-title: 20px;
+  --font-page-title: 26px;
 }
 
 body,
@@ -23,15 +23,19 @@ page {
 
 .text-page-title {
   font-size: var(--font-page-title);
-  font-weight: 700;
-  line-height: 1.25;
+  font-weight: 800;
+  line-height: 1.2;
+  letter-spacing: 0.01em;
   text-wrap: balance;
+  text-shadow: var(--text-emboss);
 }
 
 .text-section-title {
   font-size: var(--font-section-title);
-  font-weight: 700;
-  line-height: 1.3;
+  font-weight: 800;
+  line-height: 1.25;
+  letter-spacing: 0.02em;
+  text-shadow: var(--text-emboss);
 }
 
 .text-card-title {

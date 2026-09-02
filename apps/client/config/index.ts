@@ -57,6 +57,12 @@ export default defineConfig(async (merge) => {
       },
       devServer: {
         port: Number(process.env.CLIENT_PORT) || 8086,
+        proxy: {
+          '/api': {
+            target: process.env.SERVER_URL ?? 'http://localhost:3000',
+            changeOrigin: true,
+          },
+        },
         client: {
           overlay: {
             errors: true,

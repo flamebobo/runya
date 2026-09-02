@@ -1,6 +1,9 @@
 export default {
   pages: [
     'pages/index/index',
+    'pages/auth/login/index',
+    'pages/auth/register/index',
+    'pages/onboarding/index',
     'pages/dev/design-system/index',
   ],
   window: {

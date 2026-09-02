@@ -11,6 +11,7 @@ export interface QuickTileProps {
   tone?: SemanticTone;
   onClick?: () => void;
   compact?: boolean;
+  selected?: boolean;
 }
 
 export function QuickTile({
@@ -19,15 +20,27 @@ export function QuickTile({
   tone = 'apricot',
   onClick,
   compact = false,
+  selected = false,
 }: QuickTileProps) {
   return (
     <GlassSurface
       level="card"
       radius="quick"
       interactive
-      className={classNames(styles.tile, compact ? styles.compact : undefined, styles[`tone-${tone}`])}
+      className={classNames(
+        styles.tile,
+        compact ? styles.compact : undefined,
+        styles[`tone-${tone}`],
+        selected ? styles.selected : undefined,
+      )}
     >
-      <View className={styles.hit} role="button" aria-label={label} onClick={onClick}>
+      <View
+        className={styles.hit}
+        role="button"
+        aria-label={label}
+        aria-pressed={selected}
+        onClick={onClick}
+      >
         <View className={classNames(styles.iconChip, styles[`chip-${tone}`])}>
           <View className={classNames(styles.glyph, styles[`glyph-${tone}`])}>
             <Glyph name={glyph} size="md" />

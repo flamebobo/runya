@@ -21,6 +21,7 @@ describe('database foundation', () => {
       expect(await getForeignKeysEnabled(databasePath)).toBe(true);
       expect(await tableExists(databasePath, 'users')).toBe(true);
       expect(await tableExists(databasePath, 'babies')).toBe(true);
+      expect(await tableExists(databasePath, 'idempotency_keys')).toBe(true);
     } finally {
       try {
         fs.rmSync(tempDir, { recursive: true, force: true });

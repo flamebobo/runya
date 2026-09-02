@@ -31,6 +31,7 @@ export default defineConfig({
       'apps/server/src/**/*.test.ts',
       'packages/**/*.test.ts',
       'db/**/*.test.ts',
+      'apps/client/src/**/*.test.ts',
       'apps/client/src/**/*.test.tsx',
     ],
   },

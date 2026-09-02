@@ -1,0 +1,24 @@
+---
+description: RUNEW 液态 Warm Glass 视觉基线。所有里程碑 UI 必须复用 M0 已校准的材质、字号与文案语气。
+alwaysApply: true
+---
+
+# RUNEW Visual Baseline（M0 已校准）
+
+后续 M1 / M2 / … 页面禁止另起一套登录风、后台风或实心白卡片。视觉事实源：Figma `11 R6.2 Mobile Complete` + `docs/UI_IMPLEMENTATION_SPEC.md` §0.5 / §3.3。
+
+## 必须
+
+- 页面放进 `PageShell`（自带奶油底 + `PageAmbient` 光斑）。
+- 卡片 / 输入 / 底栏 / 抽屉复用 `GlassSurface` 与全局 `glass-*`，不要手写纯白实心底。
+- 标题用 `text-page-title` / `text-section-title`（800 字重 + 浮雕），颜色只用 `--color-text-primary` / `--color-text-secondary`。
+- 主按钮用 `PrimaryActionButton`（暖杏玻璃，禁止高饱和实橙底）。
+- 输入用 `GlassInput`（`glass-control`），错误用 `--color-danger-text`，不要系统红。
+- 文案保持产品语气：温暖、克制、不幼稚；禁止「HTTP 500」「暂无数据」这类机械句。
+
+## 禁止
+
+- 新页面复制一套颜色 / 圆角 / blur。
+- `--text-primary`、`--semantic-danger` 等不存在的 token。
+- 把表单做成普通后台：无品牌、无玻璃卡、双实心大按钮堆叠。
+- 为了截图像 Figma 缩小真实热区（核心点击 ≥ 48px）。
