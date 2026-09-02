@@ -1,0 +1,42 @@
+.hitArea {
+  min-width: 48px;
+  min-height: 48px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.hitSm {
+  min-width: 44px;
+  min-height: 44px;
+}
+
+.button {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 0;
+}
+
+.button > * {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 0;
+}
+
+.buttonSm {
+  width: 36px;
+  height: 36px;
+}
+
+.menuIcon {
+  color: var(--color-text-primary);
+}
+
+.disabled {
+  opacity: 0.5;
+  pointer-events: none;
+}

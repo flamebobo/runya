@@ -1,0 +1,26 @@
+.badge {
+  min-width: 64px;
+  height: 36px;
+  padding-inline: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  overflow: hidden;
+}
+
+.icon {
+  color: var(--color-apricot-strong);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 0;
+}
+
+.amount {
+  color: var(--color-apricot-strong);
+  font-size: var(--font-body-sm);
+  font-weight: 700;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}

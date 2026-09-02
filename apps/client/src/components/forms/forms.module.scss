@@ -1,0 +1,72 @@
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+}
+
+.label {
+  font-size: var(--font-caption);
+  color: var(--color-text-secondary);
+}
+
+.control {
+  width: 100%;
+  min-height: 52px;
+  padding: 14px;
+  border-radius: var(--radius-quick);
+  background: rgba(255, 252, 247, 0.94);
+  border: 1px solid var(--color-border-warm);
+  color: var(--color-text-primary);
+  box-shadow: var(--shadow-control);
+}
+
+.textarea {
+  min-height: 120px;
+}
+
+.segmented {
+  display: flex;
+  gap: var(--space-8);
+  padding: 4px;
+  border-radius: var(--radius-quick);
+  background: rgba(255, 252, 247, 0.86);
+  border: 1px solid var(--color-border-warm);
+}
+
+.segment {
+  flex: 1;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-chip);
+  color: var(--color-text-secondary);
+}
+
+.segmentActive {
+  background: rgba(247, 224, 199, 0.55);
+  color: var(--color-apricot-strong);
+  font-weight: 600;
+}
+
+.chip {
+  min-height: 44px;
+  padding: 0 14px;
+  display: inline-flex;
+  align-items: center;
+  border-radius: var(--radius-chip);
+  background: rgba(255, 252, 247, 0.86);
+  border: 1px solid var(--color-border-warm);
+  color: var(--color-text-primary);
+}
+
+.chipSelected {
+  background: rgba(232, 241, 232, 0.92);
+  color: var(--color-sage-strong);
+  border-color: rgba(155, 196, 163, 0.35);
+  font-weight: 600;
+}
+
+.disabled {
+  opacity: 0.5;
+}

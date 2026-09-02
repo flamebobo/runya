@@ -1,0 +1,13 @@
+export default {
+  pages: [
+    'pages/index/index',
+    'pages/dev/design-system/index',
+  ],
+  window: {
+    backgroundTextStyle: 'light',
+    navigationBarBackgroundColor: '#FBF7F0',
+    navigationBarTitleText: '润芽 · RUNEW',
+    navigationBarTextStyle: 'black',
+    backgroundColor: '#FBF7F0',
+  },
+};

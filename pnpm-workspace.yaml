@@ -1,0 +1,6 @@
+packages:
+  - 'apps/*'
+  - 'packages/*'
+
+overrides:
+  webpack: 5.91.0

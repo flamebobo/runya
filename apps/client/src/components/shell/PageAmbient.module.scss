@@ -1,0 +1,37 @@
+.root {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 0;
+  clip-path: inset(0);
+}
+
+.blobTr,
+.blobBl {
+  position: absolute;
+  display: block;
+}
+
+.blobTr {
+  top: -90px;
+  right: -60px;
+  width: 280px;
+  height: 280px;
+  opacity: 0.72;
+}
+
+.blobBl {
+  top: 520px;
+  left: -80px;
+  width: 240px;
+  height: 240px;
+  opacity: 0.58;
+}
+
+@media (max-height: 780px) {
+  .blobBl {
+    top: auto;
+    bottom: -40px;
+  }
+}

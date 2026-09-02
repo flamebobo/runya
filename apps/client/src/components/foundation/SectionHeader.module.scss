@@ -1,0 +1,24 @@
+.root {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-12);
+  margin-bottom: var(--space-12);
+}
+
+.main {
+  flex: 1;
+}
+
+.title {
+  font-size: var(--font-section-title);
+  font-weight: 700;
+  color: var(--color-text-primary);
+}
+
+.caption {
+  display: block;
+  margin-top: var(--space-4);
+  font-size: var(--font-caption);
+  color: var(--color-text-secondary);
+}

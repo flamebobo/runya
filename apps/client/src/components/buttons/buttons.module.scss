@@ -1,0 +1,137 @@
+.primary,
+.secondary,
+.danger,
+.iconAction,
+.textAction {
+  border: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-8);
+  font: inherit;
+  transition:
+    transform var(--motion-fast) var(--motion-ease),
+    opacity var(--motion-fast) var(--motion-ease);
+}
+
+.primary:active:not(:disabled),
+.secondary:active:not(:disabled),
+.danger:active:not(:disabled),
+.iconAction:active:not(:disabled),
+.textAction:active:not(:disabled) {
+  transform: scale(0.985);
+  opacity: 0.96;
+}
+
+.primary {
+  min-height: 52px;
+  padding: 0 20px;
+  border-radius: var(--radius-hero);
+  font-size: var(--font-body-lg);
+  font-weight: 600;
+  box-shadow: 0 6px 16px rgba(97, 69, 46, 0.09);
+}
+
+.secondary {
+  min-height: 48px;
+  padding: 0 20px;
+  border-radius: var(--radius-hero);
+  background: rgba(255, 252, 247, 0.86);
+  border: 1px solid var(--color-border-warm);
+  color: var(--color-text-primary);
+}
+
+.danger {
+  min-height: 48px;
+  padding: 0 20px;
+  border-radius: var(--radius-hero);
+  background: var(--color-danger-bg);
+  color: var(--color-danger-text);
+}
+
+.iconAction {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-control);
+  background: rgba(255, 252, 247, 0.94);
+  border: 1px solid var(--color-border-warm);
+}
+
+.textAction {
+  min-height: 48px;
+  padding: 0 var(--space-8);
+  background: transparent;
+  color: var(--color-apricot-strong);
+  font-size: var(--font-body);
+}
+
+.fullWidth {
+  width: 100%;
+}
+
+.tone-apricot {
+  background: rgba(247, 224, 199, 0.92);
+  color: var(--color-apricot-strong);
+  border: 1px solid rgba(243, 167, 100, 0.28);
+}
+
+.tone-sage {
+  background: rgba(232, 241, 232, 0.92);
+  color: var(--color-sage-strong);
+  border: 1px solid rgba(155, 196, 163, 0.28);
+}
+
+.tone-lavender {
+  background: rgba(238, 232, 250, 0.92);
+  color: var(--color-lavender-strong);
+  border: 1px solid rgba(199, 185, 232, 0.28);
+}
+
+.tone-sky {
+  background: rgba(232, 243, 249, 0.92);
+  color: var(--color-sky-strong);
+  border: 1px solid rgba(169, 204, 232, 0.28);
+}
+
+.tone-blush {
+  background: rgba(248, 231, 231, 0.92);
+  color: var(--color-blush-strong);
+  border: 1px solid rgba(245, 194, 184, 0.28);
+}
+
+.disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.loading .label {
+  opacity: 0.8;
+}
+
+.spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid currentcolor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+.label {
+  line-height: 1;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation: none;
+    border-right-color: currentcolor;
+    opacity: 0.6;
+  }
+}

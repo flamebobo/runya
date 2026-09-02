@@ -1,0 +1,17 @@
+<svg preserveAspectRatio="none" overflow="visible" style="display: block;" width="42" height="42" viewBox="0 0 42 42" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="CuteNavHalo" filter="url(#filter0_d_0_31)">
+<circle cx="21" cy="19" r="15" fill="#F7E0C7" fill-opacity="0.78"/>
+<circle cx="21" cy="19" r="14.5" stroke="white" stroke-opacity="0.8"/>
+</g>
+<defs>
+<filter id="filter0_d_0_31" x="0" y="0" width="42" height="42" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+<feFlood flood-opacity="0" result="BackgroundImageFix"/>
+<feColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" result="hardAlpha"/>
+<feOffset dy="2"/>
+<feGaussianBlur stdDeviation="3"/>
+<feColorMatrix type="matrix" values="0 0 0 0 0.34 0 0 0 0 0.25 0 0 0 0 0.18 0 0 0 0.05 0"/>
+<feBlend mode="normal" in2="BackgroundImageFix" result="effect1_dropShadow_0_31"/>
+<feBlend mode="normal" in="SourceGraphic" in2="effect1_dropShadow_0_31" result="shape"/>
+</filter>
+</defs>
+</svg>

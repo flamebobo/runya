@@ -1,0 +1,81 @@
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-sheet);
+  background: var(--color-bg-page);
+  padding-top: max(var(--safe-top), 8px);
+  overflow-y: auto;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(12px);
+  transition:
+    opacity var(--motion-slow) var(--motion-ease),
+    transform var(--motion-slow) var(--motion-ease),
+    visibility var(--motion-slow) var(--motion-ease);
+}
+
+.overlayOpen {
+  pointer-events: auto;
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+
+.header {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 10px;
+  padding: 4px 20px 8px 12px;
+  min-height: 64px;
+}
+
+.backIcon {
+  color: var(--color-text-primary);
+  transform: rotate(180deg);
+}
+
+.titles {
+  min-width: 0;
+}
+
+.title {
+  display: block;
+  font-size: var(--font-page-title);
+  font-weight: 700;
+  line-height: 1.2;
+  text-wrap: balance;
+}
+
+.subtitle {
+  display: block;
+  margin-top: 2px;
+  font-size: var(--font-caption);
+  color: var(--color-text-secondary);
+}
+
+.grid {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  padding: 28px 20px 0;
+}
+
+.cell {
+  min-width: 0;
+}
+
+.hint {
+  position: relative;
+  z-index: 1;
+  display: block;
+  padding: 20px 20px 32px;
+  font-size: var(--font-caption);
+  color: var(--color-text-secondary);
+  line-height: 1.5;
+}

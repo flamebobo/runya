@@ -1,0 +1,93 @@
+.card {
+  position: relative;
+  width: 100%;
+  min-width: 0;
+  min-height: 96px;
+  margin-bottom: 22px;
+  overflow: hidden;
+}
+
+.hit {
+  min-height: 96px;
+  padding: 16px 14px;
+  display: grid;
+  grid-template-columns: 58px minmax(0, 1fr);
+  align-items: center;
+  column-gap: 14px;
+  row-gap: 8px;
+}
+
+.art {
+  position: absolute;
+  right: -6px;
+  top: -8px;
+  width: 118px;
+  height: 96px;
+  opacity: 0.16;
+  pointer-events: none;
+}
+
+.avatarWrap {
+  width: 58px;
+  height: 58px;
+  border-radius: 29px;
+  overflow: hidden;
+  z-index: 1;
+  grid-row: 1 / span 2;
+  box-shadow:
+    0 0 0 2px rgba(255, 255, 255, 0.82),
+    0 6px 14px rgba(125, 96, 64, 0.12);
+}
+
+.avatar {
+  width: 58px;
+  height: 58px;
+}
+
+.identity {
+  min-width: 0;
+  z-index: 1;
+}
+
+.name {
+  display: block;
+  font-size: var(--font-card-title);
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.age {
+  display: block;
+  margin-top: 6px;
+  font-size: var(--font-body-sm);
+  color: var(--color-text-secondary);
+}
+
+.stats {
+  grid-column: 2;
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  min-width: 0;
+}
+
+.height,
+.stat {
+  white-space: nowrap;
+}
+
+.height {
+  font-size: var(--font-caption);
+  font-weight: 600;
+  color: var(--color-sage-strong);
+  font-variant-numeric: tabular-nums;
+}
+
+.stat {
+  font-size: var(--font-caption);
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  font-variant-numeric: tabular-nums;
+}

@@ -1,0 +1,15 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-16);
+  padding-bottom: var(--space-32);
+}
+
+.block {
+  padding: var(--space-16);
+}
+
+.chips {
+  display: flex;
+  gap: var(--space-8);
+}

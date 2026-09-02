@@ -1,0 +1,52 @@
+.surface {
+  position: relative;
+  min-width: 0;
+  max-width: 100%;
+  transform: translateZ(0);
+}
+
+.radius-control {
+  border-radius: var(--radius-control);
+}
+
+.radius-chip {
+  border-radius: var(--radius-chip);
+}
+
+.radius-quick {
+  border-radius: var(--radius-quick);
+}
+
+.radius-card {
+  border-radius: var(--radius-card);
+}
+
+.radius-hero {
+  border-radius: var(--radius-hero);
+}
+
+.radius-heroLg {
+  border-radius: var(--radius-hero-lg);
+}
+
+.radius-floating {
+  border-radius: var(--radius-floating);
+}
+
+.interactive {
+  cursor: pointer;
+  transition:
+    transform var(--motion-fast) var(--motion-ease),
+    opacity var(--motion-fast) var(--motion-ease);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .interactive:hover {
+    transform: translateY(-1px);
+  }
+}
+
+.interactive:active {
+  transform: scale(0.985);
+  opacity: 0.96;
+}

@@ -1,0 +1,79 @@
+.dialogOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-dialog);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-sheet);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(74, 57, 47, 0.28);
+}
+
+.sheet {
+  position: relative;
+  width: 100%;
+  max-width: 430px;
+  padding: var(--space-20);
+  padding-bottom: calc(var(--space-20) + var(--safe-bottom));
+  border-radius: var(--radius-floating) var(--radius-floating) 0 0;
+  background: rgba(255, 252, 247, 0.94);
+  border: 1px solid var(--color-border-warm);
+  box-shadow: var(--shadow-floating);
+  backdrop-filter: blur(22px) saturate(1.28);
+  -webkit-backdrop-filter: blur(22px) saturate(1.28);
+}
+
+.title {
+  display: block;
+  font-size: var(--font-section-title);
+  font-weight: 700;
+  margin-bottom: var(--space-12);
+}
+
+.content {
+  width: 100%;
+}
+
+.dialog {
+  position: relative;
+  width: min(340px, calc(100% - 40px));
+  margin: auto;
+  padding: var(--space-20);
+  border-radius: var(--radius-hero);
+  background: rgba(255, 252, 247, 0.98);
+  border: 1px solid var(--color-border-warm);
+  box-shadow: var(--shadow-floating);
+}
+
+.dialogTitle {
+  display: block;
+  font-size: var(--font-section-title);
+  font-weight: 700;
+}
+
+.dialogMessage {
+  display: block;
+  margin-top: var(--space-8);
+  font-size: var(--font-body);
+  color: var(--color-text-secondary);
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-12);
+  margin-top: var(--space-20);
+}

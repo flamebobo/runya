@@ -1,0 +1,105 @@
+.wrapper {
+  position: fixed;
+  left: 18px;
+  right: 18px;
+  bottom: calc(14px + var(--safe-bottom));
+  z-index: var(--z-nav);
+  pointer-events: none;
+}
+
+.nav {
+  width: 100%;
+  height: 56px;
+  overflow: visible;
+  pointer-events: auto;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  align-items: stretch;
+  height: 56px;
+}
+
+.item {
+  min-height: 56px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  position: relative;
+  overflow: visible;
+}
+
+.addHitArea {
+  min-height: 56px;
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  position: relative;
+  z-index: 2;
+  overflow: visible;
+}
+
+.itemLabel {
+  font-size: var(--font-nav-label);
+  color: var(--color-text-secondary);
+  line-height: 1;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+}
+
+.itemActive .itemLabel {
+  color: var(--color-apricot-strong);
+  font-weight: 700;
+}
+
+.icon {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-secondary);
+  border-radius: 16px;
+}
+
+.itemActive .icon {
+  color: var(--color-apricot-strong);
+  background: rgba(247, 224, 199, 0.72);
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.7);
+}
+
+.addHitArea:active .addButton {
+  transform: scale(0.97);
+}
+
+.addButton {
+  width: 56px;
+  height: 56px;
+  margin-top: -18px;
+  border-radius: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0) 48%),
+    rgba(247, 224, 199, 0.96);
+  border: 1px solid rgba(243, 167, 100, 0.38);
+  box-shadow:
+    0 8px 20px rgba(232, 125, 56, 0.22),
+    0 0 0 4px rgba(247, 224, 199, 0.62),
+    inset 0 1px 1px rgba(255, 255, 255, 0.72);
+  transition: transform var(--motion-fast) var(--motion-ease);
+}
+
+.addPlus {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-apricot-strong);
+  line-height: 0;
+}
