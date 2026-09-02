@@ -12,7 +12,7 @@ export interface AddMomentOverlayProps {
   open: boolean;
   gemAmount?: number;
   onClose?: () => void;
-  onSelect?: (label: string) => void;
+  onSelect?: (actionId: string) => void;
 }
 
 const ACTIONS: Array<{ id: string; label: string; glyph: GlyphName; tone: SemanticTone }> = [
@@ -67,7 +67,7 @@ export function AddMomentOverlay({
               glyph={item.glyph}
               tone={item.tone}
               compact
-              onClick={() => onSelect?.(item.label)}
+      onClick={() => onSelect?.(item.id)}
             />
           </View>
         ))}

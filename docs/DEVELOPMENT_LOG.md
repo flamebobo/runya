@@ -136,3 +136,74 @@
 ### Next
 
 - **M2：** Today / Daily Records / Timer
+
+## M2 — Today / Daily Records / Timer
+
+**日期：** 2026-09-02
+
+### Database
+
+- Migration: `db/migrations/0002_m2_records.sql`
+- 新增 `feeding_records`、`feeding_segments`、`sleep_records`、`diaper_records`、`food_records`
+- 离线可编辑实体含 ULID、`family_id`、`baby_id`、`created_by` / `updated_by`、`version`、`deleted_at` / `deleted_by`、UTC epoch ms
+- 母乳左右切换历史在 `feeding_segments`，不塞 JSON
+- 部分唯一索引 `uq_sleep_running_per_baby`：每宝宝最多一条 RUNNING 睡眠
+
+### API / Contract
+
+- Timeline：`GET /babies/:babyId/records`（各表查询后按 `recorded_at DESC` 合并，cursor、kind、日期过滤、soft delete）
+- Bottle：`POST /babies/:babyId/feeding`、`GET/PATCH/DELETE /feeding/:id`
+- Breast：`POST .../feeding/breast/start`、`/feeding/:id/breast/switch|pause|resume|finish`
+- Sleep：`POST .../sleep/start`、`POST .../sleep` 补录、`POST /sleep/:id/finish`、`GET/PATCH/DELETE /sleep/:id`
+- Diaper / Food：baby 下 POST + `GET/PATCH/DELETE`
+- Create 强制 Idempotency-Key；Update 强制 If-Match / ETag；Delete 为 Soft Delete
+- Bootstrap `running.sleep` / `running.feeding` 改为真实进行中计时
+- 不在 M2 改宝石余额（Ledger 仍在 M9）
+
+### Timer
+
+- 业务真相为 `started_at` / `ended_at` / `feeding_segments`
+- `setInterval` 只刷新 UI；锁屏、切后台、回页后用当前 UTC 重算
+- 母乳时长 = segment 求和（暂停缺口不计）
+
+### UI / States
+
+- Today（`pages/index`）接真实时间线；`01.02/01.03/01.06/01.07` 为 Inline State（RunningBanner / FinishedNotice）
+- `01.04` 接下来事项为空态说明（健康提醒属 M6）
+- 日常记录 Tab：日期、筛选（14.01–14.04 同一列表）、摘要、时间线
+- 表单页：`/pages/records/compose`（奶瓶 / 母乳 / 睡眠 / 尿布 / 辅食）
+- 详情页：`/pages/records/detail`（编辑 + 删除确认 Dialog）
+- `+` 留下这一刻接到真实创建；喂奶先选奶瓶或母乳
+- 视觉沿用 M0/M1 液态 Warm Glass、公共组件，不重搭 Auth/Shell
+
+### Tests
+
+- Records API：Bottle CRUD、Sleep start/finish、双 RUNNING 睡眠拒绝、Breast L→R、Pause/Resume、duration=segment sum、Diaper/Food CRUD、Timeline 顺序、日期过滤、ETag conflict、幂等 Create、Soft Delete、跨家庭权限、23:00–07:00 仍一条
+- Timer unit：后台时间跳变后按时戳重算，不靠累加秒
+- Schema：新表存在 + RUNNING sleep 唯一索引
+- `pnpm typecheck` / `pnpm lint` / `pnpm test`（44 passed）/ `pnpm build` 通过
+- 本机 live server：H5 `GET /bootstrap` 与 `GET /babies/:id/records` 200；另用 WEAPP 会话真实写入 bottle 后 timeline 可见
+
+### Known Issues
+
+- 375/390/430 截图仍需本地 dev 目视（布局沿用 100% 宽 + 20px padding，未在本轮截图）
+- M2 记录仍走在线 CRUD；Local-first / Pending Queue 属 M3
+- `02.13` 重复记录 Dialog 属 M3 Duplicate
+- 成长 / 健康 / 回忆 / 宝石仍为后续里程碑入口
+- Hero 身高体重头围仍为 M0 预览（M4 Growth）
+
+## M2 Visual / Interaction Pass — Records Compose
+
+**日期：** 2026-09-02
+
+- 奶瓶改为 `AmountStepper`：默认 120ml，±30 刻度，快捷 90/120/150/180；详情页同步
+- 睡眠改为全宽 ChoiceCard（现在开始 / 补录一觉）+ 薰衣草玻璃舞台，去掉 FilterChip 当主交互
+- 辅食空提交先本地拦截，文案「先写一写今天吃了什么」；Zod / API 同步中文 message
+- 各记录页补 Onboarding 同级 hero（液态 tinted glass + 浮雕标题），去掉常驻「先返回」
+- 尿布 / 详情改 ChoiceCard；进行中 Banner 时钟加厚浮雕
+
+### Next
+
+- **M3：** Local-first Sync / Conflict / Duplicate
+
+

@@ -16,7 +16,55 @@ export function utcNowMs(): number {
 
 export interface CursorPayload {
   after?: string;
+  afterAt?: number;
   limit?: number;
+}
+
+export interface FeedingSegmentLike {
+  startedAt: number;
+  endedAt: number | null;
+}
+
+export function elapsedSecondsFromRange(
+  startedAt: number,
+  endedAt: number | null,
+  nowMs: number,
+): number {
+  const end = endedAt ?? nowMs;
+  return Math.max(0, Math.floor((end - startedAt) / 1000));
+}
+
+export function feedingElapsedSeconds(
+  segments: FeedingSegmentLike[],
+  nowMs: number,
+): number {
+  return segments.reduce(
+    (sum, segment) =>
+      sum + elapsedSecondsFromRange(segment.startedAt, segment.endedAt, nowMs),
+    0,
+  );
+}
+
+export function formatDurationHms(totalSeconds: number): string {
+  const seconds = Math.max(0, Math.floor(totalSeconds));
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const rest = seconds % 60;
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(rest).padStart(2, '0')}`;
+}
+
+export function formatDurationLabel(totalSeconds: number): string {
+  const seconds = Math.max(0, Math.floor(totalSeconds));
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  if (hours > 0) {
+    return minutes > 0 ? `${hours}小时${minutes}分` : `${hours}小时`;
+  }
+  if (minutes > 0) {
+    const rest = seconds % 60;
+    return rest > 0 ? `${minutes}分${rest}秒` : `${minutes}分钟`;
+  }
+  return `${seconds}秒`;
 }
 
 export function encodeCursor(payload: CursorPayload): string {

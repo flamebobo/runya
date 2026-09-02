@@ -17,8 +17,15 @@ vi.mock('@tarojs/taro', () => ({
       statusBarHeight: 44,
       safeArea: { top: 44, bottom: 810, left: 0, right: 390 },
     })),
+    navigateTo: vi.fn(),
+    navigateBack: vi.fn(),
+    reLaunch: vi.fn(),
+    onAppShow: vi.fn(),
+    offAppShow: vi.fn(),
+    useRouter: () => ({ params: {} }),
   },
   useLaunch: (callback: () => void) => callback(),
+  useRouter: () => ({ params: {} }),
 }));
 
 vi.mock('@tarojs/components', () => ({

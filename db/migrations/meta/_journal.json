@@ -15,6 +15,13 @@
       "when": 1788252277000,
       "tag": "0001_m1_infra",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1788252278000,
+      "tag": "0002_m2_records",
+      "breakpoints": true
     }
   ]
 }

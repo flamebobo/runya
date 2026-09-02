@@ -20,6 +20,7 @@ import {
 } from '../../lib/auth-constants.js';
 import { withIdempotency } from '../../lib/idempotency.js';
 import { requireAuth } from '../../plugins/auth.js';
+import { getRunningForBaby } from '../records/service.js';
 import {
   acceptFamilyInvite,
   buildBootstrap,
@@ -169,6 +170,9 @@ export async function identityRoutes(app: FastifyInstance) {
       request.auth.userId!,
       request.auth.deviceId,
     );
+    if (bootstrap.currentBaby) {
+      bootstrap.running = await getRunningForBaby(app.db, bootstrap.currentBaby.id);
+    }
     return createSuccessEnvelope(bootstrap, request.requestId);
   });
 

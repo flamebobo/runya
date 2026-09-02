@@ -1,9 +1,7 @@
 import { Image, Text, View } from '@tarojs/components';
+import Taro from '@tarojs/taro';
+import { useState } from 'react';
 import {
-  dotApricot,
-  dotBlush,
-  dotLavender,
-  dotSage,
   stickerSmile,
   stickerStar,
 } from '@/assets/figma';
@@ -11,6 +9,7 @@ import {
   AppDrawer,
   AppTopBar,
   BottomNav,
+  BottomSheet,
   DEFAULT_DRAWER_ITEMS,
   EmptyState,
   GlassSurface,
@@ -20,18 +19,30 @@ import {
 import { AddMomentOverlay } from '@/components/overlay/AddMomentOverlay';
 import { AppBootstrapGate } from '@/components/shell/AppBootstrapGate';
 import { BabyHeroCard } from '@/components/shell/BabyHeroCard';
+import { ChoiceCard } from '@/components/shell/ChoiceCard';
 import { QuickTile } from '@/components/shell/QuickTile';
+import {
+  FeedingRunningBanner,
+  FinishedNotice,
+  SleepRunningBanner,
+} from '@/components/records/RunningBanner';
+import { RecordsHome } from '@/components/records/RecordsHome';
+import { TimelineList } from '@/components/records/TimelineList';
+import { ErrorState, Skeleton } from '@/components/feedback';
+import { ApiError } from '@/api/client';
+import {
+  finishBreast,
+  finishSleep,
+  pauseBreast,
+  resumeBreast,
+  switchBreast,
+} from '@/api/records';
 import { useBootstrapQuery } from '@/hooks/useBootstrap';
+import { useInvalidateCare, useTimelineQuery } from '@/hooks/useRecords';
 import { useUiOverlayStore } from '@/stores/runtime';
-import { formatBabyAgeLabel } from '@/utils/babyAge';
+import { formatBabyAgeLabel, todayIsoDate } from '@/utils/babyAge';
+import { localDayRange } from '@/utils/recordTime';
 import styles from './index.module.scss';
-
-const TIMELINE = [
-  { time: '07:30', title: '喂奶 · 150ml', dot: dotApricot },
-  { time: '10:12', title: '尿布 · 湿', dot: dotSage },
-  { time: '12:16', title: '睡着了', dot: dotLavender },
-  { time: '15:10', title: '辅食 · 香蕉泥', dot: dotBlush },
-] as const;
 
 const TAB_COPY: Record<
   'records' | 'memories' | 'family',
@@ -83,6 +94,13 @@ function TodayShell() {
   const bootstrap = useBootstrapQuery(false);
   const baby = bootstrap.data?.currentBaby;
   const gemAmount = bootstrap.data?.gemBalance ?? 0;
+  const babyId = baby?.id ?? null;
+  const invalidate = useInvalidateCare(babyId);
+  const todayRange = localDayRange(todayIsoDate());
+  const timeline = useTimelineQuery(babyId, { ...todayRange, kind: 'all' });
+  const running = timeline.data?.running ?? bootstrap.data?.running;
+  const [finished, setFinished] = useState<{ title: string; durationSeconds: number } | null>(null);
+  const [feedingChoiceOpen, setFeedingChoiceOpen] = useState(false);
   const {
     drawerOpen,
     bottomNavActive,
@@ -99,6 +117,50 @@ function TodayShell() {
   const comingSoon = (label: string) => {
     showToast(`${label}正在布置，先把今天收好`);
   };
+
+  function openCompose(type: string) {
+    setSheetOpen(false);
+    setFeedingChoiceOpen(false);
+    void Taro.navigateTo({ url: `/pages/records/compose/index?type=${type}` });
+  }
+
+  async function runCare(action: () => Promise<{ durationSeconds?: number | null }>, notice?: string) {
+    try {
+      const result = await action();
+      invalidate();
+      if (notice && result.durationSeconds != null) {
+        setFinished({ title: notice, durationSeconds: result.durationSeconds });
+      }
+    } catch (error) {
+      showToast(error instanceof ApiError ? error.message : '还没记下，请再试一次');
+    }
+  }
+
+  function onSelectMoment(actionId: string) {
+    if (actionId === 'feeding') {
+      setSheetOpen(false);
+      setFeedingChoiceOpen(true);
+      return;
+    }
+    if (actionId === 'sleep') {
+      openCompose('sleep');
+      return;
+    }
+    if (actionId === 'diaper') {
+      openCompose('diaper');
+      return;
+    }
+    if (actionId === 'food') {
+      openCompose('food');
+      return;
+    }
+    setSheetOpen(false);
+    comingSoon(
+      { growth: '成长', photo: '照片', audio: '声音', quote: '宝宝语录', mood: '心情', diary: '日记' }[
+        actionId
+      ] ?? '这一刻',
+    );
+  }
 
   return (
     <PageShell bottomNav={!sheetOpen}>
@@ -119,6 +181,28 @@ function TodayShell() {
               headLabel="头围44.8cm"
               onClick={() => comingSoon('宝宝档案')}
             />
+            {running?.sleep ? (
+              <SleepRunningBanner
+                sleep={running.sleep}
+                onFinish={() =>
+                  void runCare(() => finishSleep(running.sleep!.id), '这一觉结束了')
+                }
+              />
+            ) : null}
+            {running?.feeding ? (
+              <FeedingRunningBanner
+                feeding={running.feeding}
+                onPause={() => void runCare(() => pauseBreast(running.feeding!.id))}
+                onResume={() => void runCare(() => resumeBreast(running.feeding!.id))}
+                onSwitch={() => void runCare(() => switchBreast(running.feeding!.id))}
+                onFinish={() =>
+                  void runCare(() => finishBreast(running.feeding!.id), '喂奶结束了')
+                }
+              />
+            ) : null}
+            {finished ? (
+              <FinishedNotice title={finished.title} durationSeconds={finished.durationSeconds} />
+            ) : null}
             <SectionHeader title="快捷入口" />
             <View className={styles.quickRow}>
               <QuickTile
@@ -185,26 +269,68 @@ function TodayShell() {
                 </View>
               </GlassSurface>
             </View>
+            <SectionHeader title="接下来事项" caption="健康提醒会在之后轻轻出现" />
+            <GlassSurface level="tinted" tone="sage" radius="card">
+              <View className={styles.memoryHit}>
+                <Text className={styles.memoryCaption}>今天没有需要提前准备的事，先好好过这一天。</Text>
+              </View>
+            </GlassSurface>
             <SectionHeader
               title="今日时间线"
               actionLabel="全部"
               onAction={() => setBottomNavActive('records')}
             />
-            <View className={styles.timeline}>
-              {TIMELINE.map((item) => (
-                <View
-                  key={item.time}
-                  className={styles.timelineRow}
-                  role="button"
-                  aria-label={`${item.time} ${item.title}`}
-                  onClick={() => comingSoon(item.title)}
-                >
-                  <Text className={styles.time}>{item.time}</Text>
-                  <Image className={styles.dot} src={item.dot} mode="aspectFit" />
-                  <Text className={styles.event}>{item.title}</Text>
-                </View>
-              ))}
-            </View>
+            {timeline.isLoading ? <Skeleton lines={4} /> : null}
+            {timeline.isError ? <ErrorState onRetry={() => void timeline.refetch()} /> : null}
+            {timeline.data && timeline.data.items.length === 0 ? (
+              <EmptyState
+                title="今天还很安静"
+                description="点中间的 +，把喂奶、睡眠或尿布轻轻留下。"
+              />
+            ) : null}
+            {timeline.data && timeline.data.items.length > 0 ? (
+              <TimelineList
+                items={timeline.data.items}
+                onSelect={(item) =>
+                  void Taro.navigateTo({
+                    url: `/pages/records/detail/index?kind=${item.kind}&id=${item.id}`,
+                  })
+                }
+              />
+            ) : null}
+          </View>
+        </>
+      ) : bottomNavActive === 'records' && babyId ? (
+        <>
+          <AppTopBar
+            title={TAB_COPY.records.title}
+            subtitle={TAB_COPY.records.subtitle}
+            gemAmount={gemAmount}
+            onMenuClick={() => setDrawerOpen(true)}
+          />
+          <View className="page-content">
+            <RecordsHome
+              babyId={babyId}
+              onFinishSleep={() =>
+                running?.sleep
+                  ? void runCare(() => finishSleep(running.sleep!.id), '这一觉结束了')
+                  : undefined
+              }
+              onPauseFeeding={() =>
+                running?.feeding ? void runCare(() => pauseBreast(running.feeding!.id)) : undefined
+              }
+              onResumeFeeding={() =>
+                running?.feeding ? void runCare(() => resumeBreast(running.feeding!.id)) : undefined
+              }
+              onSwitchFeeding={() =>
+                running?.feeding ? void runCare(() => switchBreast(running.feeding!.id)) : undefined
+              }
+              onFinishFeeding={() =>
+                running?.feeding
+                  ? void runCare(() => finishBreast(running.feeding!.id), '喂奶结束了')
+                  : undefined
+              }
+            />
           </View>
         </>
       ) : (
@@ -261,8 +387,30 @@ function TodayShell() {
         open={sheetOpen}
         gemAmount={gemAmount}
         onClose={() => setSheetOpen(false)}
-        onSelect={(label) => comingSoon(label)}
+        onSelect={onSelectMoment}
       />
+      <BottomSheet
+        open={feedingChoiceOpen}
+        title="怎么记这次喂奶"
+        onClose={() => setFeedingChoiceOpen(false)}
+      >
+        <View className={styles.memoryRow}>
+          <ChoiceCard
+            title="奶瓶"
+            caption="记下毫升数"
+            glyph="bottle"
+            tone="apricot"
+            onClick={() => openCompose('bottle')}
+          />
+          <ChoiceCard
+            title="母乳"
+            caption="开始计时"
+            glyph="heart"
+            tone="blush"
+            onClick={() => openCompose('breast')}
+          />
+        </View>
+      </BottomSheet>
     </PageShell>
   );
 }

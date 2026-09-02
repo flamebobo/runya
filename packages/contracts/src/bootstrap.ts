@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { babyPublicSchema } from './baby.js';
 import { familyMemberPublicSchema, familyPublicSchema } from './family.js';
 import { userPublicSchema } from './auth.js';
+import { feedingPublicSchema, sleepPublicSchema } from './records.js';
 
 export const bootstrapResponseSchema = z.object({
   status: z.enum(['FIRST_RUN', 'MISSING_FAMILY', 'MISSING_BABY', 'READY']),
@@ -14,8 +15,8 @@ export const bootstrapResponseSchema = z.object({
   gemBalance: z.number().int(),
   unreadNotifications: z.number().int(),
   running: z.object({
-    sleep: z.null(),
-    feeding: z.null(),
+    sleep: sleepPublicSchema.nullable(),
+    feeding: feedingPublicSchema.nullable(),
   }),
   sync: z.object({
     cursor: z.number().int(),

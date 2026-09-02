@@ -19,6 +19,11 @@ const REQUIRED_TABLES = [
   'family_member_permissions',
   'family_invites',
   'babies',
+  'feeding_records',
+  'feeding_segments',
+  'sleep_records',
+  'diaper_records',
+  'food_records',
 ] as const;
 
 async function main() {

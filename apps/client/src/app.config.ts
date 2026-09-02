@@ -4,6 +4,8 @@ export default {
     'pages/auth/login/index',
     'pages/auth/register/index',
     'pages/onboarding/index',
+    'pages/records/compose/index',
+    'pages/records/detail/index',
     'pages/dev/design-system/index',
   ],
   window: {

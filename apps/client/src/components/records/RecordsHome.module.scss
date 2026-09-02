@@ -1,0 +1,47 @@
+.home {
+  width: 100%;
+  min-width: 0;
+  padding-bottom: 8px;
+}
+
+.dateRow {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.dateField {
+  flex: 1;
+  min-width: 0;
+}
+
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 18px;
+}
+
+.stat {
+  padding: 12px 8px;
+  text-align: center;
+}
+
+.statValue {
+  display: block;
+}
+
+.statLabel {
+  display: block;
+  margin-top: 4px;
+  font-size: var(--font-caption);
+  color: var(--color-text-secondary);
+}

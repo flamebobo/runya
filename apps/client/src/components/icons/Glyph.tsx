@@ -26,6 +26,7 @@ export type GlyphName =
   | 'smile'
   | 'diary'
   | 'dash'
+  | 'minus'
   | 'bell'
   | 'mic'
   | 'bowl'
@@ -182,6 +183,8 @@ function renderPaths(name: GlyphName): ReactNode {
       ];
     case 'dash':
       return [p('M12 19.2a7.2 7.2 0 1 0 0-14.4 7.2 7.2 0 0 0 0 14.4z', { strokeDasharray: '2.4 2.6' })];
+    case 'minus':
+      return [p('M6.2 12h11.6')];
     case 'bell':
       return [
         p('M8.2 17h7.6'),

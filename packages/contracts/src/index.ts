@@ -75,3 +75,4 @@ export * from './auth.js';
 export * from './family.js';
 export * from './baby.js';
 export * from './bootstrap.js';
+export * from './records.js';

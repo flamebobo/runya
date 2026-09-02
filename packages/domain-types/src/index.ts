@@ -81,6 +81,54 @@ export const BootstrapStatus = {
 export type BootstrapStatus =
   (typeof BootstrapStatus)[keyof typeof BootstrapStatus];
 
+export const FeedingType = {
+  BOTTLE: 'BOTTLE',
+  BREAST: 'BREAST',
+} as const;
+export type FeedingType = (typeof FeedingType)[keyof typeof FeedingType];
+
+export const MilkType = {
+  FORMULA: 'FORMULA',
+  BREAST_MILK: 'BREAST_MILK',
+  MIXED: 'MIXED',
+} as const;
+export type MilkType = (typeof MilkType)[keyof typeof MilkType];
+
+export const FeedingStatus = {
+  COMPLETED: 'COMPLETED',
+  RUNNING: 'RUNNING',
+  PAUSED: 'PAUSED',
+} as const;
+export type FeedingStatus = (typeof FeedingStatus)[keyof typeof FeedingStatus];
+
+export const BreastSide = {
+  LEFT: 'LEFT',
+  RIGHT: 'RIGHT',
+} as const;
+export type BreastSide = (typeof BreastSide)[keyof typeof BreastSide];
+
+export const SleepStatus = {
+  RUNNING: 'RUNNING',
+  COMPLETED: 'COMPLETED',
+} as const;
+export type SleepStatus = (typeof SleepStatus)[keyof typeof SleepStatus];
+
+export const DiaperType = {
+  WET: 'WET',
+  DIRTY: 'DIRTY',
+  BOTH: 'BOTH',
+  DRY: 'DRY',
+} as const;
+export type DiaperType = (typeof DiaperType)[keyof typeof DiaperType];
+
+export const RecordKind = {
+  FEEDING: 'FEEDING',
+  SLEEP: 'SLEEP',
+  DIAPER: 'DIAPER',
+  FOOD: 'FOOD',
+} as const;
+export type RecordKind = (typeof RecordKind)[keyof typeof RecordKind];
+
 export type ApiErrorCode =
   | 'VALIDATION_ERROR'
   | 'AUTHENTICATION_REQUIRED'

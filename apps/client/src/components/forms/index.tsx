@@ -4,6 +4,9 @@ import { Glyph } from '@/components/icons/Glyph';
 import { formatBirthdayLabel, todayIsoDate } from '@/utils/babyAge';
 import styles from './forms.module.scss';
 
+export { AmountStepper } from './AmountStepper';
+export type { AmountStepperProps } from './AmountStepper';
+
 export interface GlassInputProps {
   label?: string;
   value?: string;
@@ -11,6 +14,7 @@ export interface GlassInputProps {
   disabled?: boolean;
   password?: boolean;
   error?: boolean;
+  type?: 'text' | 'number' | 'digit';
   onInput?: (value: string) => void;
 }
 
@@ -21,6 +25,7 @@ export function GlassInput({
   disabled,
   password = false,
   error = false,
+  type = 'text',
   onInput,
 }: GlassInputProps) {
   return (
@@ -35,6 +40,7 @@ export function GlassInput({
         )}
         value={value}
         password={password}
+        type={type}
         placeholder={placeholder}
         placeholderStyle="color: #8D7D70"
         disabled={disabled}
@@ -172,6 +178,37 @@ export function GlassDateField({
           aria-label={label ?? '选择日期'}
           aria-invalid={error}
         >
+          <Text className={value ? styles.dateValue : styles.datePlaceholder}>{display}</Text>
+          <View className={styles.dateChevron} aria-hidden>
+            <Glyph name="chevron" size="sm" />
+          </View>
+        </View>
+      </Picker>
+    </View>
+  );
+}
+
+export interface GlassTimeFieldProps {
+  label?: string;
+  value?: string;
+  placeholder?: string;
+  onChange?: (value: string) => void;
+}
+
+export function GlassTimeField({
+  label,
+  value,
+  placeholder = '点这里选择时间',
+  onChange,
+}: GlassTimeFieldProps) {
+  const pickerValue = value || '12:00';
+  const display = value ?? placeholder;
+
+  return (
+    <View className={styles.field}>
+      {label ? <Text className={styles.label}>{label}</Text> : null}
+      <Picker mode="time" value={pickerValue} onChange={(event) => onChange?.(event.detail.value)}>
+        <View className={classNames(styles.dateControl, 'glass-control')} role="button" aria-label={label ?? '选择时间'}>
           <Text className={value ? styles.dateValue : styles.datePlaceholder}>{display}</Text>
           <View className={styles.dateChevron} aria-hidden>
             <Glyph name="chevron" size="sm" />

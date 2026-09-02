@@ -109,3 +109,78 @@
   align-items: center;
   justify-content: center;
 }
+
+.stepper {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+}
+
+.stepperRow {
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr) 56px;
+  align-items: center;
+  gap: 12px;
+}
+
+.stepHit {
+  width: 56px;
+  height: 56px;
+  min-width: 56px;
+  min-height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.stepHitDisabled {
+  opacity: 0.38;
+  pointer-events: none;
+}
+
+.stepBtn {
+  width: 56px;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-primary);
+}
+
+.valueCard {
+  min-height: 88px;
+  padding: 14px 8px;
+}
+
+.valueHit {
+  min-height: 60px;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.valueNumber {
+  font-size: 40px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  font-variant-numeric: tabular-nums;
+  text-shadow: var(--text-emboss);
+  color: var(--color-text-primary);
+}
+
+.valueUnit {
+  margin-top: 6px;
+  font-size: var(--font-caption);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--color-text-secondary);
+}
+
+.presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
