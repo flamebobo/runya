@@ -145,10 +145,14 @@
   gap: 12px;
 }
 
-.presets {
-  display: flex;
-  flex-wrap: wrap;
+.presetsGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   gap: 8px;
+}
+
+.presetsGrid > * {
+  justify-content: center;
 }
 
 .stage {
@@ -180,4 +184,16 @@
   color: var(--color-danger-text);
   font-size: var(--font-body);
   line-height: 1.45;
+}
+
+.offlineSaved {
+  margin-top: -2px;
+  padding: 10px 16px;
+  border-radius: var(--radius-control);
+  background: rgba(232, 241, 232, 0.72);
+  border: 1px solid rgba(155, 196, 163, 0.28);
+  color: var(--color-sage-strong);
+  font-size: var(--font-body);
+  line-height: 1.45;
+  text-align: center;
 }

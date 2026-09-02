@@ -24,6 +24,8 @@ const REQUIRED_TABLES = [
   'sleep_records',
   'diaper_records',
   'food_records',
+  'sync_operations',
+  'duplicate_candidates',
 ] as const;
 
 async function main() {

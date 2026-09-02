@@ -26,8 +26,6 @@ import { AppBootstrapGate } from '@/components/shell/AppBootstrapGate';
 import { ApiError } from '@/api/client';
 import {
   createBottle,
-  createDiaper,
-  createFood,
   createSleep,
   finishBreast,
   finishSleep,
@@ -39,7 +37,9 @@ import {
 } from '@/api/records';
 import { useBootstrapQuery } from '@/hooks/useBootstrap';
 import { useInvalidateCare, useTimelineQuery } from '@/hooks/useRecords';
-import { useFamilyRuntimeStore } from '@/stores/runtime';
+import { useFamilyRuntimeStore, useSyncRuntimeStore } from '@/stores/runtime';
+import { createRecordLocally } from '@/local/repository';
+import { platformAdapters } from '@/adapters/platform';
 import { BOTTLE_DEFAULT_ML } from '@/utils/amountStep';
 import { friendlyRecordError } from '@/utils/friendlyRecordError';
 import { combineLocalDateTime, dateFromMs, timeFromMs } from '@/utils/recordTime';
@@ -140,6 +140,7 @@ function ComposeBody() {
   const running = runningQuery.data?.running ?? bootstrap.data?.running;
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
+  const [offlineSaved, setOfflineSaved] = useState(false);
   const now = useMemo(() => Date.now(), []);
   const [date, setDate] = useState(dateFromMs(now));
   const [time, setTime] = useState(timeFromMs(now));
@@ -163,8 +164,13 @@ function ComposeBody() {
     setLoading(true);
     setMessage('');
     try {
+      const wasOffline = !(await platformAdapters.network.isOnline());
       await action();
       invalidate();
+      if (wasOffline) {
+        useSyncRuntimeStore.getState().setPhase('offline');
+        setOfflineSaved(true);
+      }
       if (!stay) goBack();
     } catch (error) {
       setMessage(
@@ -404,13 +410,16 @@ function ComposeBody() {
               tone="sage"
               state={saving}
               onClick={() =>
-                run(() =>
-                  createDiaper(babyId!, {
+                run(async () => {
+                  // Local-first：先落本地 + pending，恢复网络后自动同步（M3 核心）。
+                  await createRecordLocally('DIAPER_RECORD', {
+                    babyId: babyId!,
                     diaperType,
                     recordedAt: combineLocalDateTime(date, time),
+                    timezoneName: 'Asia/Shanghai',
                     note: note || null,
-                  }),
-                )
+                  });
+                })
               }
             />
           </View>
@@ -425,6 +434,7 @@ function ComposeBody() {
               caption="先写下名字，分量可以慢慢补"
             />
             <GlassSurface level="card" radius="card" className={styles.panel}>
+              <Text className={styles.panelTitle}>吃了什么</Text>
               <GlassInput
                 label="食物"
                 value={foodName}
@@ -437,7 +447,7 @@ function ComposeBody() {
               />
               <View className={styles.section}>
                 <Text className={styles.sectionLabel}>大约分量</Text>
-                <View className={styles.presets}>
+                <View className={styles.presetsGrid}>
                   {FOOD_AMOUNTS.map((item) => (
                     <FilterChip
                       key={item}
@@ -448,6 +458,9 @@ function ComposeBody() {
                   ))}
                 </View>
               </View>
+            </GlassSurface>
+            <GlassSurface level="card" radius="card" className={styles.panel}>
+              <Text className={styles.panelTitle}>什么时候吃的</Text>
               <DateTimeFields date={date} time={time} onDate={setDate} onTime={setTime} />
               <GlassTextArea label="备注" value={note} placeholder="可以不写" onInput={setNote} />
             </GlassSurface>
@@ -461,14 +474,22 @@ function ComposeBody() {
                   setMessage('先写一写今天吃了什么');
                   return;
                 }
-                void run(() =>
-                  createFood(babyId!, {
+                void run(async () => {
+                  if (!foodName.trim()) {
+                    setFoodError(true);
+                    setMessage('先写一写今天吃了什么');
+                    return;
+                  }
+                  // Local-first：辅食与尿布同路径，先本地后同步。
+                  await createRecordLocally('FOOD_RECORD', {
+                    babyId: babyId!,
                     foodName: foodName.trim(),
                     amountText: amountText || null,
                     recordedAt: combineLocalDateTime(date, time),
+                    timezoneName: 'Asia/Shanghai',
                     note: note || null,
-                  }),
-                );
+                  });
+                });
               }}
             />
           </View>
@@ -477,6 +498,11 @@ function ComposeBody() {
         {message ? (
           <Text className={styles.error} aria-live="polite">
             {message}
+          </Text>
+        ) : null}
+        {offlineSaved && !message ? (
+          <Text className={styles.offlineSaved} aria-live="polite">
+            已保存在本机，联网后会自动同步 🌱
           </Text>
         ) : null}
       </View>

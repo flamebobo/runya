@@ -5,6 +5,7 @@ import { platformAdapters } from '@/adapters/platform';
 import { useThemeStore } from '@/stores/runtime';
 import { ErrorBoundary } from './ErrorBoundary';
 import { OverlayRoot } from './OverlayRoot';
+import { SyncProvider } from './SyncProvider';
 import { ThemeProvider } from './ThemeProvider';
 
 const queryClient = new QueryClient({
@@ -28,7 +29,7 @@ export function AppProvider({ children }: PropsWithChildren) {
     };
     media.addEventListener('change', handler);
     return () => media.removeEventListener('change', handler);
-  }, []);
+  }, [reduceMotion]);
 
   useEffect(() => {
     document.documentElement.classList.toggle('reduce-motion', reduceMotion);
@@ -39,7 +40,9 @@ export function AppProvider({ children }: PropsWithChildren) {
   return (
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
-        <ThemeProvider adapters={adapters}>{children}</ThemeProvider>
+        <ThemeProvider adapters={adapters}>
+          <SyncProvider>{children}</SyncProvider>
+        </ThemeProvider>
         <OverlayRoot />
       </QueryClientProvider>
     </ErrorBoundary>

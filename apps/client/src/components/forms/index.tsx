@@ -42,7 +42,7 @@ export function GlassInput({
         password={password}
         type={type}
         placeholder={placeholder}
-        placeholderStyle="color: #8D7D70"
+        placeholderStyle="color: var(--color-text-tertiary)"
         disabled={disabled}
         aria-label={label ?? placeholder}
         aria-invalid={error}
@@ -71,6 +71,7 @@ export function GlassTextArea({
         )}
         value={value}
         placeholder={placeholder}
+        placeholderStyle="color: var(--color-text-tertiary)"
         disabled={disabled}
         aria-label={label ?? placeholder}
         onInput={(event) => onInput?.(event.detail.value)}

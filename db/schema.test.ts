@@ -27,6 +27,8 @@ describe('database foundation', () => {
       expect(await tableExists(databasePath, 'sleep_records')).toBe(true);
       expect(await tableExists(databasePath, 'diaper_records')).toBe(true);
       expect(await tableExists(databasePath, 'food_records')).toBe(true);
+      expect(await tableExists(databasePath, 'sync_operations')).toBe(true);
+      expect(await tableExists(databasePath, 'duplicate_candidates')).toBe(true);
 
       const client = createSqlClient(databasePath);
       await client.execute('PRAGMA foreign_keys = ON');

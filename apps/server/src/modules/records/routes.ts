@@ -5,6 +5,7 @@ import {
   createFoodBodySchema,
   createSleepBodySchema,
   finishSleepBodySchema,
+  recordStatsQuerySchema,
   startBreastBodySchema,
   startSleepBodySchema,
   switchBreastBodySchema,
@@ -32,6 +33,7 @@ import {
   getDiaper,
   getFeeding,
   getFood,
+  getRecordStats,
   getSleep,
   listTimeline,
   pauseBreast,
@@ -60,6 +62,13 @@ export async function recordsRoutes(app: FastifyInstance) {
     const query = timelineQuerySchema.parse(request.query);
     const timeline = await listTimeline(app.db, request.auth.userId!, babyId, query);
     return createSuccessEnvelope(timeline, request.requestId);
+  });
+
+  app.get('/babies/:babyId/records/stats', { preHandler: requireAuth }, async (request) => {
+    const { babyId } = request.params as { babyId: string };
+    const query = recordStatsQuerySchema.parse(request.query);
+    const stats = await getRecordStats(app.db, request.auth.userId!, babyId, query);
+    return createSuccessEnvelope(stats, request.requestId);
   });
 
   app.post('/babies/:babyId/feeding', { preHandler: requireAuth }, async (request, reply) => {

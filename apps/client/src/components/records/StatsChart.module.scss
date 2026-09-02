@@ -1,0 +1,164 @@
+.inner {
+  width: 100%;
+  min-width: 0;
+  padding: 18px 16px 14px;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.title {
+  font-size: var(--font-card-title);
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: var(--color-text-primary);
+  text-shadow: var(--text-emboss);
+}
+
+.metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.readout {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 12px;
+  min-height: 26px;
+}
+
+.readoutValue {
+  font-size: var(--font-section-title);
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  text-shadow: var(--text-emboss);
+  font-variant-numeric: tabular-nums;
+}
+
+.readoutCaption {
+  font-size: var(--font-caption);
+  color: var(--color-text-secondary);
+}
+
+.toneFeeding {
+  color: var(--color-apricot-strong);
+}
+
+.toneSleep {
+  color: var(--color-lavender-strong);
+}
+
+.toneDiaper {
+  color: var(--color-sage-strong);
+}
+
+.toneFood {
+  color: var(--color-blush-strong);
+}
+
+.chart {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 132px;
+}
+
+.column {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+}
+
+.track {
+  flex: 1;
+  width: 100%;
+  min-width: 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  border-radius: 8px;
+}
+
+.bar {
+  width: 100%;
+  max-width: 18px;
+  min-height: 3px;
+  border-radius: 7px;
+  // 柱高变化时平滑过渡：切换维度/指标时柱子流动到新高度
+  transition: height var(--motion-slow) var(--motion-ease);
+  // 错峰升起：JSX 上传 --i（柱子序号）
+  animation: bar-rise 480ms var(--motion-ease) backwards;
+  animation-delay: calc(var(--i, 0) * 18ms);
+}
+
+@keyframes bar-rise {
+  from {
+    transform: scaleY(0.05);
+    opacity: 0.35;
+  }
+  to {
+    transform: scaleY(1);
+    opacity: 1;
+  }
+}
+
+.barFeeding {
+  background: linear-gradient(180deg, rgba(243, 160, 91, 0.92), rgba(232, 125, 56, 0.55));
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.55);
+}
+
+.barSleep {
+  background: linear-gradient(180deg, rgba(199, 185, 232, 0.92), rgba(140, 115, 199, 0.5));
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.55);
+}
+
+.barDiaper {
+  background: linear-gradient(180deg, rgba(155, 196, 163, 0.92), rgba(92, 148, 102, 0.5));
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.55);
+}
+
+.barFood {
+  background: linear-gradient(180deg, rgba(245, 194, 184, 0.95), rgba(223, 130, 125, 0.5));
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.55);
+}
+
+.columnActive .track {
+  background: rgba(255, 252, 247, 0.55);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.6);
+}
+
+.tick {
+  height: 14px;
+  font-size: var(--font-micro);
+  line-height: 1;
+  color: var(--color-text-secondary);
+  font-variant-numeric: tabular-nums;
+  transition: opacity var(--motion-base) var(--motion-ease);
+}
+
+.tickHidden {
+  opacity: 0.45;
+}
+
+.quiet {
+  padding: 22px 8px 18px;
+  text-align: center;
+}
+
+.quietText {
+  font-size: var(--font-body);
+  color: var(--color-text-secondary);
+}

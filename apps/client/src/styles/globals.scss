@@ -29,6 +29,12 @@ textarea {
   font: inherit;
 }
 
+input::placeholder,
+textarea::placeholder {
+  color: var(--color-text-tertiary);
+  opacity: 1;
+}
+
 .sr-only {
   position: absolute;
   width: 1px;

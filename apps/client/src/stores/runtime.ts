@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { BottomNavKey } from '@runew/domain-types';
+import type { SyncConflictInfo } from '@runew/contracts';
 
 interface AuthRuntimeState {
   userId: string | null;
@@ -48,6 +49,11 @@ export const useFamilyRuntimeStore = create<FamilyRuntimeState>((set) => ({
   setBabyId: (babyId) => set({ babyId }),
 }));
 
+// 非 React 层（local repository / syncEngine）读取当前家庭上下文用。
+export function getFamilyRuntimeStore() {
+  return useFamilyRuntimeStore.getState();
+}
+
 let toastTimer: ReturnType<typeof setTimeout> | undefined;
 
 export const useUiOverlayStore = create<UiOverlayState>((set) => ({
@@ -78,4 +84,49 @@ export const useThemeStore = create<ThemeState>((set) => ({
   reduceMotion: false,
   setTheme: (theme) => set({ theme }),
   setReduceMotion: (reduceMotion) => set({ reduceMotion }),
+}));
+
+// 同步状态只放「UI 需要的展示态」；实体数据在本地库，列表数据在 TanStack Query。
+export type SyncPhase = 'idle' | 'syncing' | 'offline' | 'error';
+
+export interface SyncRuntimeState {
+  phase: SyncPhase;
+  pendingCount: number;
+  lastSyncedAt: number | null;
+  conflicts: SyncConflictInfo[];
+  duplicateCount: number;
+  deletionNotice: { operationId: string; entityType: string; entityId: string } | null;
+  setPhase: (phase: SyncPhase) => void;
+  setPendingCount: (count: number) => void;
+  setLastSyncedAt: (at: number | null) => void;
+  pushConflict: (conflict: SyncConflictInfo) => void;
+  resolveConflict: (operationId: string) => void;
+  setDuplicateCount: (count: number) => void;
+  setDeletionNotice: (
+    notice: { operationId: string; entityType: string; entityId: string } | null,
+  ) => void;
+}
+
+export const useSyncRuntimeStore = create<SyncRuntimeState>((set) => ({
+  phase: 'idle',
+  pendingCount: 0,
+  lastSyncedAt: null,
+  conflicts: [],
+  duplicateCount: 0,
+  deletionNotice: null,
+  setPhase: (phase) => set({ phase }),
+  setPendingCount: (pendingCount) => set({ pendingCount }),
+  setLastSyncedAt: (lastSyncedAt) => set({ lastSyncedAt }),
+  pushConflict: (conflict) =>
+    set((state) =>
+      state.conflicts.some((existing) => existing.operationId === conflict.operationId)
+        ? state
+        : { conflicts: [...state.conflicts, conflict] },
+    ),
+  resolveConflict: (operationId) =>
+    set((state) => ({
+      conflicts: state.conflicts.filter((existing) => existing.operationId !== operationId),
+    })),
+  setDuplicateCount: (duplicateCount) => set({ duplicateCount }),
+  setDeletionNotice: (deletionNotice) => set({ deletionNotice }),
 }));

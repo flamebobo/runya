@@ -3,19 +3,19 @@ import Taro from '@tarojs/taro';
 import { useState } from 'react';
 import type { TimelineItem } from '@runew/contracts';
 import { formatDurationLabel } from '@runew/shared-utils';
-import { FilterChip, GlassDateField } from '@/components/forms';
+import { FilterChip } from '@/components/forms';
 import { EmptyState, ErrorState, Skeleton } from '@/components/feedback';
 import { GlassSurface } from '@/components/foundation/GlassSurface';
 import { SectionHeader } from '@/components/foundation/SectionHeader';
-import { TextAction } from '@/components/buttons';
 import {
   FeedingRunningBanner,
   SleepRunningBanner,
 } from '@/components/records/RunningBanner';
+import { StatsChart } from '@/components/records/StatsChart';
 import { TimelineList } from '@/components/records/TimelineList';
 import { useTimelineQuery } from '@/hooks/useRecords';
 import { todayIsoDate } from '@/utils/babyAge';
-import { localDayRange, shiftIsoDate } from '@/utils/recordTime';
+import { localDayRange } from '@/utils/recordTime';
 import styles from './RecordsHome.module.scss';
 
 const FILTERS = [
@@ -41,9 +41,8 @@ export function RecordsHome({
   onSwitchFeeding?: () => void;
   onFinishFeeding?: () => void;
 }) {
-  const [date, setDate] = useState(todayIsoDate);
   const [kind, setKind] = useState<(typeof FILTERS)[number]['value']>('all');
-  const range = localDayRange(date);
+  const range = localDayRange(todayIsoDate());
   const timeline = useTimelineQuery(babyId, { ...range, kind });
 
   function openDetail(item: TimelineItem) {
@@ -57,13 +56,7 @@ export function RecordsHome({
 
   return (
     <View className={styles.home}>
-      <View className={styles.dateRow}>
-        <TextAction label="前一天" onClick={() => setDate((value) => shiftIsoDate(value, -1))} />
-        <View className={styles.dateField}>
-          <GlassDateField label="日期" value={date} onChange={setDate} />
-        </View>
-        <TextAction label="今天" onClick={() => setDate(todayIsoDate())} />
-      </View>
+      <StatsChart babyId={babyId} />
       <View className={styles.filters}>
         {FILTERS.map((filter) => (
           <FilterChip

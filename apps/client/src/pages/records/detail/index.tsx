@@ -22,21 +22,18 @@ import { ChoiceCard } from '@/components/shell/ChoiceCard';
 import { AppBootstrapGate } from '@/components/shell/AppBootstrapGate';
 import { ApiError } from '@/api/client';
 import {
-  deleteDiaper,
   deleteFeeding,
-  deleteFood,
   deleteSleep,
   getDiaper,
   getFeeding,
   getFood,
   getSleep,
-  updateDiaper,
   updateFeeding,
-  updateFood,
   updateSleep,
 } from '@/api/records';
 import { useInvalidateCare } from '@/hooks/useRecords';
 import { useFamilyRuntimeStore } from '@/stores/runtime';
+import { deleteRecordLocally, updateRecordLocally } from '@/local/repository';
 import { BOTTLE_DEFAULT_ML } from '@/utils/amountStep';
 import { friendlyRecordError } from '@/utils/friendlyRecordError';
 import { combineLocalDateTime, dateFromMs, formatClock, timeFromMs } from '@/utils/recordTime';
@@ -137,6 +134,61 @@ function DetailBody() {
           setTime(timeFromMs(data.recordedAt));
         }
       } catch (loadError) {
+        // 离线兜底：服务端取不到时读本地实体，记录仍然可见可编辑。
+        const localKind = kind === 'DIAPER' ? 'DIAPER_RECORD' : kind === 'FOOD' ? 'FOOD_RECORD' : null;
+        const local = localKind ? await import('@/local/entityStore').then((mod) => mod.getEntity(localKind, id)) : null;
+        if (cancelled) return;
+        if (local && !local.deleted) {
+          const payload = local.payload as Record<string, unknown>;
+          const recordedAt = (payload.recordedAt as number) ?? Date.now();
+          if (kind === 'DIAPER') {
+            setDiaper({
+              id,
+              familyId: '',
+              babyId: (payload.babyId as string) ?? '',
+              diaperType: (payload.diaperType as DiaperPublic['diaperType']) ?? 'WET',
+              stoolColor: null,
+              stoolTexture: null,
+              recordedAt,
+              timezoneName: (payload.timezoneName as string) ?? 'Asia/Shanghai',
+              note: (payload.note as string | null) ?? null,
+              createdBy: '',
+              createdAt: recordedAt,
+              updatedBy: '',
+              updatedAt: recordedAt,
+              version: local.version,
+            });
+          } else if (kind === 'FOOD') {
+            setFood({
+              id,
+              familyId: '',
+              babyId: (payload.babyId as string) ?? '',
+              foodName: (payload.foodName as string) ?? '',
+              amountText: (payload.amountText as string | null) ?? null,
+              reaction: null,
+              preference: null,
+              recordedAt,
+              timezoneName: (payload.timezoneName as string) ?? 'Asia/Shanghai',
+              note: (payload.note as string | null) ?? null,
+              createdBy: '',
+              createdAt: recordedAt,
+              updatedBy: '',
+              updatedAt: recordedAt,
+              version: local.version,
+            });
+          } else {
+            setError(friendlyRecordError('暂时打不开这条记录，联网后再试试'));
+            return;
+          }
+          setNote((payload.note as string | null) ?? '');
+          setDate(dateFromMs(recordedAt));
+          setTime(timeFromMs(recordedAt));
+          if (kind === 'FOOD') setFoodName((payload.foodName as string) ?? '');
+          if (kind === 'FOOD') setAmountText((payload.amountText as string | null) ?? '');
+          if (kind === 'DIAPER') setDiaperType((payload.diaperType as DiaperPublic['diaperType']) ?? 'WET');
+          setLoading(false);
+          return;
+        }
         setError(
           friendlyRecordError(loadError instanceof ApiError ? loadError.message : '暂时打不开这条记录'),
         );
@@ -191,21 +243,24 @@ function DetailBody() {
         );
         setSleep(updated);
       } else if (kind === 'DIAPER' && diaper) {
-        const updated = await updateDiaper(
-          diaper.id,
-          { diaperType, recordedAt, note: note || null },
-          diaper.version,
-        );
-        setDiaper(updated);
+        // Local-first：尿布/辅食先写本地 pending，联网后 push + 三方合并。
+        await updateRecordLocally('DIAPER_RECORD', diaper.id, {
+          diaperType,
+          recordedAt,
+          note: note || null,
+        });
       } else if (kind === 'FOOD' && food) {
-        const updated = await updateFood(
-          food.id,
-          { foodName: foodName.trim(), amountText: amountText || null, recordedAt, note: note || null },
-          food.version,
-        );
-        setFood(updated);
+        await updateRecordLocally('FOOD_RECORD', food.id, {
+          foodName: foodName.trim(),
+          amountText: amountText || null,
+          recordedAt,
+          note: note || null,
+        });
       }
       invalidate();
+      if (kind === 'DIAPER' || kind === 'FOOD') {
+        void Taro.navigateBack();
+      }
     } catch (saveError) {
       setError(
         friendlyRecordError(saveError instanceof ApiError ? saveError.message : '还没保存成功，请再试一次'),
@@ -220,8 +275,8 @@ function DetailBody() {
     try {
       if (kind === 'FEEDING') await deleteFeeding(id);
       if (kind === 'SLEEP') await deleteSleep(id);
-      if (kind === 'DIAPER') await deleteDiaper(id);
-      if (kind === 'FOOD') await deleteFood(id);
+      if (kind === 'DIAPER') await deleteRecordLocally('DIAPER_RECORD', id);
+      if (kind === 'FOOD') await deleteRecordLocally('FOOD_RECORD', id);
       invalidate();
       setConfirmOpen(false);
       void Taro.navigateBack();

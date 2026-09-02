@@ -15,6 +15,7 @@ import { attachAuthContext } from './plugins/auth.js';
 import { healthRoutes } from './modules/health/routes.js';
 import { identityRoutes } from './modules/identity/routes.js';
 import { recordsRoutes } from './modules/records/routes.js';
+import { syncRoutes } from './modules/sync/routes.js';
 import Fastify from 'fastify';
 
 export async function buildApp() {
@@ -85,6 +86,7 @@ export async function buildApp() {
   await app.register(healthRoutes, { prefix: '/api/v1' });
   await app.register(identityRoutes, { prefix: '/api/v1' });
   await app.register(recordsRoutes, { prefix: '/api/v1' });
+  await app.register(syncRoutes, { prefix: '/api/v1' });
 
   return app;
 }

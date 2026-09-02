@@ -148,4 +148,42 @@ export type ApiErrorCode =
   | 'GONE'
   | 'RATE_LIMITED'
   | 'RETRYABLE_ERROR'
-  | 'INTERNAL_ERROR';
+  | 'INTERNAL_ERROR'
+  | 'ENTITY_VERSION_CONFLICT'
+  | 'ENTITY_ID_REUSED'
+  | 'ENTITY_DELETED'
+  | 'SYNC_DEPENDENCY_CYCLE'
+  | 'SYNC_CURSOR_EXPIRED'
+  | 'FULL_RESYNC_REQUIRED'
+  | 'MERGE_REQUIRES_FIELD_SELECTION'
+  | 'CLIENT_CLOCK_SUSPECT'
+  | 'UNSUPPORTED_ENTITY_TYPE';
+
+export const SyncOp = {
+  CREATE: 'CREATE',
+  UPDATE: 'UPDATE',
+  DELETE: 'DELETE',
+  RESTORE: 'RESTORE',
+} as const;
+export type SyncOp = (typeof SyncOp)[keyof typeof SyncOp];
+
+export const SyncPushStatus = {
+  APPLIED: 'APPLIED',
+  DUPLICATE_QUEUED: 'DUPLICATE_QUEUED',
+  CONFLICT: 'CONFLICT',
+  ENTITY_DELETED: 'ENTITY_DELETED',
+} as const;
+export type SyncPushStatus = (typeof SyncPushStatus)[keyof typeof SyncPushStatus];
+
+export const DuplicateStatus = {
+  PENDING: 'PENDING',
+  MERGED: 'MERGED',
+  KEEP_BOTH: 'KEEP_BOTH',
+} as const;
+export type DuplicateStatus = (typeof DuplicateStatus)[keyof typeof DuplicateStatus];
+
+export const EntityType = {
+  DIAPER_RECORD: 'DIAPER_RECORD',
+  FOOD_RECORD: 'FOOD_RECORD',
+} as const;
+export type EntityType = (typeof EntityType)[keyof typeof EntityType];

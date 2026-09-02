@@ -7,6 +7,8 @@ import type {
   FeedingPublic,
   FinishSleepBody,
   FoodPublic,
+  RecordStatsQuery,
+  RecordStatsResponse,
   SleepPublic,
   TimelineQuery,
   TimelineResponse,
@@ -36,6 +38,16 @@ export function fetchTimeline(babyId: string, query: Partial<TimelineQuery> = {}
       kind: query.kind,
       cursor: query.cursor,
       limit: query.limit,
+    })}`,
+  );
+}
+
+export function fetchRecordStats(babyId: string, query: RecordStatsQuery) {
+  return apiRequest<RecordStatsResponse>(
+    `/babies/${babyId}/records/stats${queryString({
+      range: query.range,
+      date: query.date,
+      timezoneName: query.timezoneName,
     })}`,
   );
 }

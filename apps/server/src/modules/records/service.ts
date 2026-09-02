@@ -14,6 +14,8 @@ import type {
   FeedingPublic,
   FeedingSegmentPublic,
   FinishSleepBody,
+  RecordStatsQuery,
+  RecordStatsResponse,
   SleepPublic,
   StartBreastBody,
   StartSleepBody,
@@ -46,6 +48,7 @@ import {
 import { and, asc, desc, eq, gte, isNull, lt, lte, or } from 'drizzle-orm';
 import type { LibSQLDatabase } from 'drizzle-orm/libsql';
 import { AppError } from '../../lib/errors.js';
+import { appendSyncLog } from '../sync/log.js';
 import { requireBabyInFamily } from '../identity/service.js';
 
 type Database = LibSQLDatabase<typeof schema>;
@@ -787,6 +790,21 @@ export async function createDiaper(
     updatedAt: now,
   });
   const rows = await db.select().from(diaperRecords).where(eq(diaperRecords.id, id)).limit(1);
+  // 在线创建也进同步日志：离线端 pull 时能看到同一条真相。
+  await appendSyncLog(
+    db,
+    {
+      operationId: createUlid(),
+      familyId: baby.familyId,
+      actorUserId: userId,
+      deviceId: null,
+      entityType: 'DIAPER_RECORD',
+      entityId: id,
+      op: 'CREATE',
+      entityVersion: 1,
+    },
+    now,
+  );
   return mapDiaper(rows[0]!);
 }
 
@@ -825,6 +843,21 @@ export async function updateDiaper(
       version: current.version + 1,
     })
     .where(eq(diaperRecords.id, diaperId));
+  await appendSyncLog(
+    db,
+    {
+      operationId: createUlid(),
+      familyId: current.familyId,
+      actorUserId: userId,
+      deviceId: null,
+      entityType: 'DIAPER_RECORD',
+      entityId: diaperId,
+      op: 'UPDATE',
+      entityVersion: current.version + 1,
+      changedFields: Object.keys(body).filter((key) => body[key as keyof UpdateDiaperBody] !== undefined),
+    },
+    now,
+  );
   return getDiaper(db, userId, diaperId);
 }
 
@@ -841,6 +874,20 @@ export async function deleteDiaper(db: Database, userId: string, diaperId: strin
       version: current.version + 1,
     })
     .where(eq(diaperRecords.id, diaperId));
+  await appendSyncLog(
+    db,
+    {
+      operationId: createUlid(),
+      familyId: current.familyId,
+      actorUserId: userId,
+      deviceId: null,
+      entityType: 'DIAPER_RECORD',
+      entityId: diaperId,
+      op: 'DELETE',
+      entityVersion: current.version + 1,
+    },
+    now,
+  );
   return { ok: true as const };
 }
 
@@ -870,6 +917,20 @@ export async function createFood(
     updatedAt: now,
   });
   const rows = await db.select().from(foodRecords).where(eq(foodRecords.id, id)).limit(1);
+  await appendSyncLog(
+    db,
+    {
+      operationId: createUlid(),
+      familyId: baby.familyId,
+      actorUserId: userId,
+      deviceId: null,
+      entityType: 'FOOD_RECORD',
+      entityId: id,
+      op: 'CREATE',
+      entityVersion: 1,
+    },
+    now,
+  );
   return mapFood(rows[0]!);
 }
 
@@ -909,6 +970,21 @@ export async function updateFood(
       version: current.version + 1,
     })
     .where(eq(foodRecords.id, foodId));
+  await appendSyncLog(
+    db,
+    {
+      operationId: createUlid(),
+      familyId: current.familyId,
+      actorUserId: userId,
+      deviceId: null,
+      entityType: 'FOOD_RECORD',
+      entityId: foodId,
+      op: 'UPDATE',
+      entityVersion: current.version + 1,
+      changedFields: Object.keys(body).filter((key) => body[key as keyof UpdateFoodBody] !== undefined),
+    },
+    now,
+  );
   return getFood(db, userId, foodId);
 }
 
@@ -925,11 +1001,24 @@ export async function deleteFood(db: Database, userId: string, foodId: string) {
       version: current.version + 1,
     })
     .where(eq(foodRecords.id, foodId));
+  await appendSyncLog(
+    db,
+    {
+      operationId: createUlid(),
+      familyId: current.familyId,
+      actorUserId: userId,
+      deviceId: null,
+      entityType: 'FOOD_RECORD',
+      entityId: foodId,
+      op: 'DELETE',
+      entityVersion: current.version + 1,
+    },
+    now,
+  );
   return { ok: true as const };
 }
 
-function feedingTitle(row: typeof feedingRecords.$inferSelect) {
-  if (row.feedingType === FeedingType.BOTTLE) {
+function feedingTitle(row: typeof feedingRecords.$inferSelect) {  if (row.feedingType === FeedingType.BOTTLE) {
     const amount = row.amountMl != null ? `${Math.round(row.amountMl)}ml` : '';
     return amount ? `喂奶 · ${amount}` : '喂奶 · 奶瓶';
   }
@@ -1160,5 +1249,176 @@ export async function listTimeline(
       foodCount: items.filter((item) => item.kind === RecordKind.FOOD).length,
     },
     running: await getRunningForBaby(db, babyId),
+  };
+}
+
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+// 睡眠最多拆到 7 天窗口，异常超长记录不会拖死聚合
+const MAX_SLEEP_SPLIT_MS = 7 * MS_PER_DAY;
+
+const WEEKDAY_LABELS = ['日', '一', '二', '三', '四', '五', '六'];
+
+function localIsoToday(utcOffsetMinutes: number) {
+  const localNow = new Date(Date.now() + utcOffsetMinutes * 60_000);
+  const month = String(localNow.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(localNow.getUTCDate()).padStart(2, '0');
+  return `${localNow.getUTCFullYear()}-${month}-${day}`;
+}
+
+interface StatsWindow {
+  label: string;
+  start: number;
+  end: number;
+}
+
+function weekdayLabel(startMs: number, utcOffsetMinutes: number) {
+  // 取本地正午时刻的 UTC 星期，避免边界
+  return WEEKDAY_LABELS[new Date(startMs + (utcOffsetMinutes + 720) * 60_000).getUTCDay()] ?? '';
+}
+
+function buildWindows(
+  range: RecordStatsQuery['range'],
+  anchorStartMs: number,
+  utcOffsetMinutes: number,
+): StatsWindow[] {
+  if (range === 'day') {
+    return Array.from({ length: 24 }, (_, hour) => ({
+      label: `${hour}`,
+      start: anchorStartMs + hour * 3_600_000,
+      end: anchorStartMs + (hour + 1) * 3_600_000,
+    }));
+  }
+  if (range === 'week') {
+    return Array.from({ length: 7 }, (_, index) => {
+      const start = anchorStartMs + index * MS_PER_DAY;
+      return {
+        label: weekdayLabel(start, utcOffsetMinutes),
+        start,
+        end: start + MS_PER_DAY,
+      };
+    });
+  }
+  const anchorLocalMidnight = anchorStartMs + utcOffsetMinutes * 60_000;
+  const anchorLocalDay = Math.floor(anchorLocalMidnight / MS_PER_DAY);
+  const anchorLocalDate = new Date((anchorLocalDay + 0.5) * MS_PER_DAY);
+  const daysInMonth = new Date(
+    Date.UTC(anchorLocalDate.getUTCFullYear(), anchorLocalDate.getUTCMonth() + 1, 0),
+  ).getUTCDate();
+  return Array.from({ length: daysInMonth }, (_, index) => {
+    const start = anchorStartMs + index * MS_PER_DAY;
+    return { label: `${index + 1}`, start, end: start + MS_PER_DAY };
+  });
+}
+
+function overlapSeconds(start: number, end: number, window: StatsWindow) {
+  const from = Math.max(start, window.start);
+  const to = Math.min(end, window.end);
+  return to > from ? Math.floor((to - from) / 1000) : 0;
+}
+
+export async function getRecordStats(
+  db: Database,
+  userId: string,
+  babyId: string,
+  query: RecordStatsQuery,
+): Promise<RecordStatsResponse> {
+  await requireBabyInFamily(db, userId, babyId);
+
+  // 展示时区 = 客户端本地时区（缺省回落服务器时区）
+  const utcOffsetMinutes = query.utcOffsetMinutes ?? -new Date().getTimezoneOffset();
+  const anchorIso = query.date ?? localIsoToday(utcOffsetMinutes);
+  const [year, month, day] = anchorIso.split('-').map(Number) as [number, number, number];
+  // anchor 本地零点的 UTC 时刻 = Date.UTC(日期) - 偏移
+  const anchorStartMs = Date.UTC(year, month - 1, day) - utcOffsetMinutes * 60_000;
+  const windows = buildWindows(query.range, anchorStartMs, utcOffsetMinutes);
+  const rangeStart = windows[0]!.start;
+  const rangeEnd = windows[windows.length - 1]!.end;
+
+  function countsByWindows(rows: Array<{ recordedAt: number }>) {
+    const counts = windows.map(() => 0);
+    for (const row of rows) {
+      const index = windows.findIndex(
+        (window) => row.recordedAt >= window.start && row.recordedAt < window.end,
+      );
+      if (index >= 0) counts[index]! += 1;
+    }
+    return counts;
+  }
+
+  const feedingCounts = countsByWindows(
+    await db
+      .select({ recordedAt: feedingRecords.recordedAt })
+      .from(feedingRecords)
+      .where(
+        and(
+          eq(feedingRecords.babyId, babyId),
+          isNull(feedingRecords.deletedAt),
+          eq(feedingRecords.status, FeedingStatus.COMPLETED),
+          gte(feedingRecords.recordedAt, rangeStart),
+          lt(feedingRecords.recordedAt, rangeEnd),
+        ),
+      ),
+  );
+
+  const diaperCounts = countsByWindows(
+    await db
+      .select({ recordedAt: diaperRecords.recordedAt })
+      .from(diaperRecords)
+      .where(
+        and(
+          eq(diaperRecords.babyId, babyId),
+          isNull(diaperRecords.deletedAt),
+          gte(diaperRecords.recordedAt, rangeStart),
+          lt(diaperRecords.recordedAt, rangeEnd),
+        ),
+      ),
+  );
+
+  const foodCounts = countsByWindows(
+    await db
+      .select({ recordedAt: foodRecords.recordedAt })
+      .from(foodRecords)
+      .where(
+        and(
+          eq(foodRecords.babyId, babyId),
+          isNull(foodRecords.deletedAt),
+          gte(foodRecords.recordedAt, rangeStart),
+          lt(foodRecords.recordedAt, rangeEnd),
+        ),
+      ),
+  );
+
+  const sleepTotals = windows.map(() => 0);
+  const sleepRows = await db
+    .select({ startedAt: sleepRecords.startedAt, endedAt: sleepRecords.endedAt })
+    .from(sleepRecords)
+    .where(
+      and(
+        eq(sleepRecords.babyId, babyId),
+        isNull(sleepRecords.deletedAt),
+        eq(sleepRecords.status, SleepStatus.COMPLETED),
+        lt(sleepRecords.startedAt, rangeEnd),
+        gte(sleepRecords.endedAt, rangeStart),
+      ),
+    );
+  for (const row of sleepRows) {
+    if (row.endedAt == null) continue;
+    const clippedStart = Math.max(row.startedAt, rangeStart - MAX_SLEEP_SPLIT_MS);
+    const clippedEnd = Math.min(row.endedAt, rangeEnd);
+    for (let index = 0; index < windows.length; index += 1) {
+      const seconds = overlapSeconds(clippedStart, clippedEnd, windows[index]!);
+      if (seconds > 0) sleepTotals[index]! += seconds;
+    }
+  }
+
+  return {
+    range: query.range,
+    buckets: windows.map((window, index) => ({
+      label: window.label,
+      feedingCount: feedingCounts[index]!,
+      sleepSeconds: sleepTotals[index]!,
+      diaperCount: diaperCounts[index]!,
+      foodCount: foodCounts[index]!,
+    })),
   };
 }

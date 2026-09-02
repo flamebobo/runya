@@ -407,4 +407,114 @@ describe('records api', () => {
     expect(food.statusCode).toBe(400);
     expect(food.json().error.message).toBe('先写一写今天吃了什么');
   });
+
+  it('aggregates record stats per day bucket with cross-midnight sleep split', async () => {
+    const { babyId, headers } = await readyUser();
+    // 本地时区（Asia/Shanghai, UTC+8）下 9 月 1 日的锚点
+    const anchorIso = '2026-09-01';
+    const localDayStartMs = new Date(2026, 8, 1).getTime();
+
+    // 喂奶 x2（09:00 / 21:00 本地）+ 尿布 x1（09:00 本地）
+    await app.inject({
+      method: 'POST',
+      url: `/api/v1/babies/${babyId}/feeding`,
+      headers: { ...headers, 'idempotency-key': createUlid() },
+      payload: { amountMl: 120, recordedAt: localDayStartMs + 9 * 3_600_000 },
+    });
+    await app.inject({
+      method: 'POST',
+      url: `/api/v1/babies/${babyId}/feeding`,
+      headers: { ...headers, 'idempotency-key': createUlid() },
+      payload: { amountMl: 90, recordedAt: localDayStartMs + 21 * 3_600_000 },
+    });
+    await app.inject({
+      method: 'POST',
+      url: `/api/v1/babies/${babyId}/diapers`,
+      headers: { ...headers, 'idempotency-key': createUlid() },
+      payload: { diaperType: 'WET', recordedAt: localDayStartMs + 9 * 3_600_000 },
+    });
+
+    // 跨午夜睡眠：23:00 入睡 → 次日 07:00 醒（本地），8 小时应拆成 1h + 7h
+    await app.inject({
+      method: 'POST',
+      url: `/api/v1/babies/${babyId}/sleep`,
+      headers: { ...headers, 'idempotency-key': createUlid() },
+      payload: {
+        startedAt: localDayStartMs + 23 * 3_600_000,
+        endedAt: localDayStartMs + 31 * 3_600_000,
+      },
+    });
+
+    const day = await app.inject({
+      method: 'GET',
+      url: `/api/v1/babies/${babyId}/records/stats?range=day&date=${anchorIso}`,
+      headers,
+    });
+    expect(day.statusCode).toBe(200);
+    const dayBuckets = day.json().data.buckets as Array<{
+      label: string;
+      feedingCount: number;
+      diaperCount: number;
+      sleepSeconds: number;
+    }>;
+    expect(dayBuckets).toHaveLength(24);
+    expect(dayBuckets[9]!.feedingCount).toBe(1);
+    expect(dayBuckets[9]!.diaperCount).toBe(1);
+    expect(dayBuckets[21]!.feedingCount).toBe(1);
+    expect(dayBuckets[23]!.sleepSeconds).toBe(3600);
+    expect(dayBuckets[0]!.sleepSeconds).toBe(0);
+
+    // 跨午夜的后 7 小时按本地日拆分，落在 9 月 2 日的 0-6 点桶
+    const nextDay = await app.inject({
+      method: 'GET',
+      url: `/api/v1/babies/${babyId}/records/stats?range=day&date=2026-09-02`,
+      headers,
+    });
+    const nextDayBuckets = nextDay.json().data.buckets as Array<{ sleepSeconds: number }>;
+    expect(nextDayBuckets[0]!.sleepSeconds).toBe(3600);
+    expect(nextDayBuckets[6]!.sleepSeconds).toBe(3600);
+    expect(nextDayBuckets[7]!.sleepSeconds).toBe(0);
+
+    // 周维度：7 个桶，标签是周一到周日的「一…日」
+    const week = await app.inject({
+      method: 'GET',
+      url: `/api/v1/babies/${babyId}/records/stats?range=week&date=${anchorIso}`,
+      headers,
+    });
+    expect(week.statusCode).toBe(200);
+    const weekData = week.json().data as { range: string; buckets: Array<{ label: string }> };
+    expect(weekData.range).toBe('week');
+    expect(weekData.buckets).toHaveLength(7);
+    expect(weekData.buckets[0]!.label).toBe('二'); // 2026-09-01 是周二
+    expect(
+      (weekData.buckets as Array<{ label: string; feedingCount: number; sleepSeconds: number }>)[0]!
+        .feedingCount,
+    ).toBe(2);
+    expect(
+      (weekData.buckets as Array<{ label: string; feedingCount: number; sleepSeconds: number }>)[1]!
+        .sleepSeconds,
+    ).toBe(7 * 3600);
+
+    // 月维度：9 月有 30 个桶
+    const month = await app.inject({
+      method: 'GET',
+      url: `/api/v1/babies/${babyId}/records/stats?range=month&date=${anchorIso}`,
+      headers,
+    });
+    expect(month.statusCode).toBe(200);
+    const monthBuckets = month.json().data.buckets as Array<{ feedingCount: number }>;
+    expect(monthBuckets).toHaveLength(30);
+    expect(monthBuckets[0]!.feedingCount).toBe(2);
+  });
+
+  it('rejects stats for cross-family baby', async () => {
+    const userA = await readyUser();
+    const userB = await readyUser();
+    const denied = await app.inject({
+      method: 'GET',
+      url: `/api/v1/babies/${userA.babyId}/records/stats?range=day`,
+      headers: userB.headers,
+    });
+    expect(denied.statusCode).toBe(403);
+  });
 });

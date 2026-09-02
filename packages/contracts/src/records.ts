@@ -118,6 +118,8 @@ export const timelineItemSchema = z.object({
   version: z.number().int(),
   feedingType: feedingTypeSchema.optional(),
   diaperType: diaperTypeSchema.optional(),
+  // M3：本机 pending 的记录在 UI 上有小标记；服务端不返回该字段。
+  syncState: z.enum(['pending', 'syncing', 'synced']).optional(),
 });
 
 export const timelineSummarySchema = z.object({
@@ -140,6 +142,32 @@ export const timelineQuerySchema = z.object({
   kind: timelineKindFilterSchema.default('all'),
   cursor: z.string().optional(),
   limit: z.coerce.number().int().min(1).max(100).default(50),
+});
+
+export const statsRangeSchema = z.enum(['day', 'week', 'month']);
+
+export const statsBucketSchema = z.object({
+  label: z.string(),
+  feedingCount: z.number().int(),
+  sleepSeconds: z.number().int(),
+  diaperCount: z.number().int(),
+  foodCount: z.number().int(),
+});
+
+export const recordStatsQuerySchema = z.object({
+  range: statsRangeSchema.default('day'),
+  date: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, '日期格式是 YYYY-MM-DD')
+    .optional(),
+  timezoneName: z.string().trim().min(1).optional(),
+  // 客户端本地时区相对 UTC 的偏移（分钟，东八区为 480），分桶按用户本地日进行
+  utcOffsetMinutes: z.coerce.number().int().min(-840).max(840).optional(),
+});
+
+export const recordStatsResponseSchema = z.object({
+  range: statsRangeSchema,
+  buckets: z.array(statsBucketSchema),
 });
 
 export const createBottleBodySchema = z.object({
@@ -235,6 +263,10 @@ export type RunningTimers = z.infer<typeof runningTimersSchema>;
 export type TimelineItem = z.infer<typeof timelineItemSchema>;
 export type TimelineResponse = z.infer<typeof timelineResponseSchema>;
 export type TimelineQuery = z.infer<typeof timelineQuerySchema>;
+export type StatsRange = z.infer<typeof statsRangeSchema>;
+export type StatsBucket = z.infer<typeof statsBucketSchema>;
+export type RecordStatsQuery = z.infer<typeof recordStatsQuerySchema>;
+export type RecordStatsResponse = z.infer<typeof recordStatsResponseSchema>;
 export type CreateBottleBody = z.infer<typeof createBottleBodySchema>;
 export type UpdateFeedingBody = z.infer<typeof updateFeedingBodySchema>;
 export type StartBreastBody = z.infer<typeof startBreastBodySchema>;

@@ -16,3 +16,4 @@ export * from './buttons';
 export * from './forms';
 export * from './overlay';
 export * from './feedback';
+export * from './sync';
