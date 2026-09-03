@@ -117,10 +117,15 @@ export function StatsChart({
   onScopeChange: (scope: RecordScope) => void;
 }) {
   const [range, setRange] = useState<StatsRange>('day');
-  const stats = useRecordStatsQuery(babyId, {
-    range,
-    utcOffsetMinutes: -new Date().getTimezoneOffset(),
-  });
+  const stats = useRecordStatsQuery(
+    babyId,
+    {
+      range,
+      utcOffsetMinutes: -new Date().getTimezoneOffset(),
+    },
+    // 切换维度时保留上一份数据：图表平滑过渡，不闪骨架屏
+    { placeholderData: (previous) => previous },
+  );
 
   return (
     <GlassSurface level="card" radius="card" className={styles.card}>
@@ -279,7 +284,8 @@ export function StatsChartView({
                   const height = Math.round((metric.value(bucket) / max) * 100);
                   return (
                     <View
-                      key={`${range}-${index}`}
+                      // key 不含 range：切换维度时复用节点，柱高走 CSS transition 而不是重播入场动画
+                      key={index}
                       className={classNames(
                         styles.column,
                         active === index && styles.columnActive,

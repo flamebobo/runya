@@ -140,9 +140,9 @@
 
 .rangeSwitch [role='tab'] {
   min-height: 48px;
-  font-size: var(--font-body-lg);
-  font-weight: 700;
-  letter-spacing: 0.08em;
+  font-size: var(--font-body);
+  font-weight: 600;
+  letter-spacing: 0.04em;
 }
 
 .divider {
@@ -298,6 +298,18 @@
   letter-spacing: 0.02em;
   text-shadow: var(--text-emboss);
   font-variant-numeric: tabular-nums;
+  animation: readout-in var(--motion-base) var(--motion-ease);
+}
+
+@keyframes readout-in {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .readoutCaption {
@@ -323,10 +335,29 @@
 }
 
 .chart {
+  position: relative;
   display: flex;
   align-items: flex-end;
   gap: 3px;
-  height: 140px;
+  height: 148px;
+}
+
+/* 横向参考线：给柱高一个安静的刻度感 */
+.chart::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 21px;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    rgba(141, 125, 112, 0.05),
+    rgba(141, 125, 112, 0.16) 18%,
+    rgba(141, 125, 112, 0.16) 82%,
+    rgba(141, 125, 112, 0.05)
+  );
+  pointer-events: none;
 }
 
 .column {
@@ -351,13 +382,42 @@
 }
 
 .bar {
+  position: relative;
   width: 100%;
-  max-width: 18px;
+  max-width: 20px;
   min-height: 3px;
-  border-radius: 7px;
+  border-radius: 8px;
   transition: height var(--motion-slow) var(--motion-ease);
-  animation: bar-rise 480ms var(--motion-ease) backwards;
+  animation: bar-rise 520ms var(--motion-ease) backwards;
   animation-delay: calc(var(--i, 0) * 18ms);
+}
+
+/* 液体玻璃柱体：顶部一粒高光 + 内侧反光，柱身像竖起的果冻 */
+.bar::before {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 50%;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.92);
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.bar::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.34),
+    rgba(255, 255, 255, 0) 46%,
+    rgba(255, 255, 255, 0.16)
+  );
+  pointer-events: none;
 }
 
 @keyframes gentle-twinkle {
@@ -422,6 +482,12 @@
 .columnActive .track {
   background: rgba(255, 252, 247, 0.55);
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.6);
+}
+
+.columnActive .bar {
+  box-shadow:
+    0 6px 14px rgba(125, 96, 64, 0.18),
+    inset 0 1px 1px rgba(255, 255, 255, 0.7);
 }
 
 .tick {

@@ -157,7 +157,10 @@ export type ApiErrorCode =
   | 'FULL_RESYNC_REQUIRED'
   | 'MERGE_REQUIRES_FIELD_SELECTION'
   | 'CLIENT_CLOCK_SUSPECT'
-  | 'UNSUPPORTED_ENTITY_TYPE';
+  | 'UNSUPPORTED_ENTITY_TYPE'
+  | 'CAPSULE_SEALED'
+  | 'INVALID_CAPSULE_STATE'
+  | 'MEDIA_PROCESSING_FAILED';
 
 export const SyncOp = {
   CREATE: 'CREATE',
@@ -187,5 +190,56 @@ export const EntityType = {
   FOOD_RECORD: 'FOOD_RECORD',
   GROWTH_RECORD: 'GROWTH_RECORD',
   MILESTONE: 'MILESTONE',
+  HEALTH_EVENT: 'HEALTH_EVENT',
 } as const;
 export type EntityType = (typeof EntityType)[keyof typeof EntityType];
+
+export const HealthEventType = {
+  CHECKUP: 'CHECKUP',
+  VACCINE: 'VACCINE',
+  VISIT: 'VISIT',
+  DENTAL: 'DENTAL',
+  MEDICATION: 'MEDICATION',
+  OTHER: 'OTHER',
+} as const;
+export type HealthEventType = (typeof HealthEventType)[keyof typeof HealthEventType];
+
+export const HealthEventStatus = {
+  UPCOMING: 'UPCOMING',
+  COMPLETED: 'COMPLETED',
+  EXPIRED: 'EXPIRED',
+  CANCELED: 'CANCELED',
+} as const;
+export type HealthEventStatus =
+  (typeof HealthEventStatus)[keyof typeof HealthEventStatus];
+
+export const HealthReminderOffset = {
+  D7: 'D7',
+  D3: 'D3',
+  D1: 'D1',
+  SAME_DAY: 'SAME_DAY',
+  CUSTOM: 'CUSTOM',
+} as const;
+export type HealthReminderOffset =
+  (typeof HealthReminderOffset)[keyof typeof HealthReminderOffset];
+
+export const NotificationCategory = {
+  HEALTH: 'HEALTH',
+  FAMILY_TASKS: 'FAMILY_TASKS',
+  REWARDS: 'REWARDS',
+  BACKUP: 'BACKUP',
+  CAPSULES: 'CAPSULES',
+  ANNIVERSARIES: 'ANNIVERSARIES',
+  SYSTEM: 'SYSTEM',
+} as const;
+export type NotificationCategory =
+  (typeof NotificationCategory)[keyof typeof NotificationCategory];
+
+export const NotificationStatus = {
+  SCHEDULED: 'SCHEDULED',
+  SENT: 'SENT',
+  CANCELED: 'CANCELED',
+  FAILED: 'FAILED',
+} as const;
+export type NotificationStatus =
+  (typeof NotificationStatus)[keyof typeof NotificationStatus];

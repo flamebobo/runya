@@ -1,0 +1,183 @@
+.audioPlayerCard {
+  padding: 14px 16px;
+  margin-bottom: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(12px);
+  border-radius: 18px;
+  border: 1px solid rgba(240, 220, 205, 0.5);
+  box-shadow: 0 4px 14px rgba(210, 180, 160, 0.08);
+
+  .headerRow {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+
+    .title {
+      font-size: 15px;
+      font-weight: 600;
+      color: #4a382c;
+    }
+
+    .badge {
+      font-size: 11px;
+      padding: 3px 8px;
+      border-radius: 12px;
+      background: #fcf4ec;
+      color: #d97736;
+      font-weight: 500;
+    }
+  }
+
+  .playerControls {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+
+    .playBtn {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #ff9f59, #f27c38);
+      color: #ffffff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+      cursor: pointer;
+      box-shadow: 0 4px 10px rgba(242, 124, 56, 0.3);
+      transition: transform 0.2s ease;
+
+      &:active {
+        transform: scale(0.92);
+      }
+    }
+
+    .trackArea {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+
+      .progressBarBg {
+        width: 100%;
+        height: 6px;
+        border-radius: 3px;
+        background: #f2e6dc;
+        overflow: hidden;
+        position: relative;
+
+        .progressBarFill {
+          height: 100%;
+          background: linear-gradient(90deg, #ff9f59, #f27c38);
+          border-radius: 3px;
+          transition: width 0.1s linear;
+        }
+      }
+
+      .timeLabel {
+        display: flex;
+        justify-content: space-between;
+        font-size: 11px;
+        color: #9c8a7c;
+      }
+    }
+  }
+}
+
+.capsuleCard {
+  padding: 16px;
+  margin-bottom: 14px;
+  border-radius: 20px;
+  position: relative;
+  overflow: hidden;
+
+  &.draft {
+    background: rgba(255, 253, 248, 0.8);
+    border: 1px dashed rgba(220, 180, 140, 0.6);
+  }
+
+  &.sealed {
+    background: linear-gradient(135deg, rgba(255, 248, 240, 0.9), rgba(250, 240, 230, 0.8));
+    border: 1px solid rgba(230, 190, 150, 0.4);
+    box-shadow: 0 6px 18px rgba(200, 160, 130, 0.12);
+  }
+
+  &.opened {
+    background: linear-gradient(135deg, rgba(255, 250, 235, 0.95), rgba(255, 242, 215, 0.9));
+    border: 1px solid rgba(245, 205, 120, 0.6);
+    box-shadow: 0 8px 24px rgba(235, 175, 70, 0.18);
+  }
+
+  .capsuleHeader {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+
+    .title {
+      font-size: 16px;
+      font-weight: 700;
+      color: #3d2b1f;
+    }
+
+    .stateBadge {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 12px;
+      padding: 4px 10px;
+      border-radius: 14px;
+
+      &.draftBadge {
+        background: #fdf3e7;
+        color: #d97736;
+      }
+
+      &.sealedBadge {
+        background: #eef4fc;
+        color: #4a7bb0;
+      }
+
+      &.openedBadge {
+        background: #fef5d8;
+        color: #b38312;
+      }
+    }
+  }
+
+  .recipient {
+    font-size: 13px;
+    color: #8c7667;
+    margin-bottom: 8px;
+  }
+
+  .bodyPreview {
+    font-size: 14px;
+    color: #5c493c;
+    line-height: 1.5;
+    margin-bottom: 12px;
+  }
+
+  .sealedLockNotice {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    background: rgba(255, 255, 255, 0.6);
+    border-radius: 14px;
+    gap: 8px;
+    color: #7a6657;
+    font-size: 13px;
+    font-weight: 500;
+  }
+
+  .actionRow {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 10px;
+  }
+}

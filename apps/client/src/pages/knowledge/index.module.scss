@@ -1,0 +1,71 @@
+.page {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  padding-bottom: calc(36px + var(--safe-bottom));
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+
+.sectionRow {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px 4px 0;
+}
+
+.sectionTitle {
+  font-size: var(--font-section-title);
+  font-weight: 800;
+  color: var(--color-text-primary);
+  text-shadow: var(--text-emboss);
+  letter-spacing: 0.02em;
+}
+
+.sectionCaption {
+  font-size: var(--font-caption);
+  color: var(--color-text-secondary);
+}
+
+.searchIntro {
+  font-size: var(--font-caption);
+  color: var(--color-text-secondary);
+  padding: 0 4px;
+}
+
+.segmentRow {
+  display: flex;
+  gap: 8px;
+  padding: 0 4px;
+}
+
+.segment,
+.segmentActive {
+  flex: 1;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-chip);
+  font-size: var(--font-body);
+  font-weight: 600;
+  color: var(--color-text-secondary);
+}
+
+.segmentActive {
+  color: var(--color-sky-strong);
+  font-weight: 700;
+  background:
+    linear-gradient(rgba(169, 204, 232, 0.18), rgba(169, 204, 232, 0.08)),
+    rgba(255, 252, 247, 0.32);
+  border: 1px solid rgba(169, 204, 232, 0.35);
+}
+
+.segment {
+  border: 1px solid var(--color-border-warm);
+}

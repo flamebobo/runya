@@ -383,7 +383,12 @@ function DetailBody() {
                     <GlassTimeField label="醒来时刻" value={endTime} onChange={setEndTime} />
                   </>
                 ) : null}
-                <GlassTextArea label="备注" value={note} placeholder="可以不写" onInput={setNote} />
+                <GlassTextArea
+                  label="备注"
+                  value={note}
+                  placeholder="想留一句话，写给以后的自己"
+                  onInput={setNote}
+                />
               </GlassSurface>
               {error ? (
                 <Text className={styles.error} aria-live="polite">

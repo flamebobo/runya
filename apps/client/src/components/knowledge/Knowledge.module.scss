@@ -1,0 +1,606 @@
+/* 知识模块样式。全部复用全局 token，不新增颜色/圆角/阴影。 */
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+
+/* ---------- 卡片 ---------- */
+
+.card {
+  overflow: hidden;
+}
+
+.cardHit {
+  display: block;
+  width: 100%;
+  padding: 16px 16px 4px;
+  cursor: pointer;
+}
+
+.cardTop {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.chipApricot,
+.chipSage,
+.chipLavender,
+.chipSky,
+.chipBlush {
+  width: 30px;
+  height: 30px;
+  flex: 0 0 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.72);
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.72);
+}
+
+.chipApricot {
+  color: var(--color-apricot-strong);
+  background: var(--color-apricot-soft);
+}
+
+.chipSage {
+  color: var(--color-sage-strong);
+  background: var(--color-sage-soft);
+}
+
+.chipLavender {
+  color: var(--color-lavender-strong);
+  background: var(--color-lavender-soft);
+}
+
+.chipSky {
+  color: var(--color-sky-strong);
+  background: var(--color-sky-soft);
+}
+
+.chipBlush {
+  color: var(--color-blush-strong);
+  background: var(--color-blush-soft);
+}
+
+.cardCategory {
+  font-size: var(--font-caption);
+  font-weight: 700;
+  color: var(--color-text-secondary);
+  letter-spacing: 0.04em;
+}
+
+.cardMetaSpacer {
+  flex: 1;
+}
+
+.cardAge {
+  font-size: var(--font-caption);
+  color: var(--color-text-secondary);
+}
+
+.cardTitle {
+  display: block;
+  margin-top: 10px;
+  font-size: var(--font-card-title);
+  font-weight: 700;
+  line-height: 1.35;
+  color: var(--color-text-primary);
+}
+
+.cardSummary {
+  display: block;
+  margin-top: 6px;
+  font-size: var(--font-body);
+  line-height: 1.55;
+  color: var(--color-text-secondary);
+  text-wrap: pretty;
+}
+
+.reasonRow,
+.updatedRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.reasonRow {
+  padding: 7px 12px;
+  border-radius: var(--radius-chip);
+  background: var(--color-apricot-pale);
+  align-self: flex-start;
+  width: fit-content;
+}
+
+.reasonGlyph {
+  color: var(--color-apricot-strong);
+  flex: 0 0 auto;
+}
+
+.reasonText {
+  font-size: var(--font-caption);
+  color: var(--color-text-primary);
+}
+
+.updatedRow {
+  padding: 7px 12px;
+  border-radius: var(--radius-chip);
+  background: var(--color-sky-soft);
+  width: fit-content;
+}
+
+.updatedGlyph {
+  color: var(--color-sky-strong);
+  flex: 0 0 auto;
+}
+
+.updatedText {
+  font-size: var(--font-caption);
+  font-weight: 600;
+  color: var(--color-sky-strong);
+}
+
+.cardFooter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 10px 0 12px;
+  border-top: 1px solid var(--color-border-warm);
+}
+
+.cardSource {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--font-caption);
+  color: var(--color-text-tertiary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cardFlags {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.flagSaved {
+  color: var(--color-blush-strong);
+}
+
+.flagLater {
+  color: var(--color-sky-strong);
+}
+
+.flagLearned {
+  color: var(--color-sage-strong);
+}
+
+.cardActions {
+  display: flex;
+  border-top: 1px solid var(--color-border-warm);
+  background: rgba(255, 252, 247, 0.4);
+}
+
+.cardAction {
+  flex: 1;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-size: var(--font-caption);
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: color var(--motion-fast) var(--motion-ease);
+}
+
+.cardAction:active {
+  color: var(--color-text-primary);
+}
+
+/* ---------- 快捷入口行 ---------- */
+
+.quickRow {
+  display: flex;
+  gap: 12px;
+}
+
+.quickCard {
+  flex: 1;
+  min-width: 0;
+}
+
+.quickHit {
+  width: 100%;
+  padding: 14px 8px 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+}
+
+.quickGlyph {
+  color: var(--color-text-secondary);
+}
+
+.quickCount {
+  font-size: var(--font-card-title);
+  font-weight: 800;
+  color: var(--color-text-primary);
+  text-shadow: var(--text-emboss);
+  line-height: 1.1;
+}
+
+.quickLabel {
+  font-size: var(--font-caption);
+  color: var(--color-text-secondary);
+}
+
+/* ---------- 搜索框 ---------- */
+
+.searchBar {
+  padding: 0;
+}
+
+.searchHit {
+  min-height: 52px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 16px;
+  cursor: pointer;
+}
+
+.searchGlyph {
+  color: var(--color-text-tertiary);
+  flex: 0 0 auto;
+}
+
+.searchText,
+.searchPlaceholder {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--font-body-lg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.searchText {
+  color: var(--color-text-primary);
+}
+
+.searchPlaceholder {
+  color: var(--color-text-tertiary);
+}
+
+.searchClear {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  color: var(--color-text-tertiary);
+}
+
+/* ---------- 分类 chips ---------- */
+
+.chipRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* ---------- 详情 ---------- */
+
+.detailHeroCard {
+  padding: 18px 16px;
+}
+
+.detailTop {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.detailTitle {
+  display: block;
+  margin-top: 12px;
+  font-size: var(--font-section-title);
+  font-weight: 800;
+  line-height: 1.3;
+  color: var(--color-text-primary);
+  text-shadow: var(--text-emboss);
+  text-wrap: balance;
+}
+
+.detailSummary {
+  display: block;
+  margin-top: 8px;
+  font-size: var(--font-body-lg);
+  line-height: 1.6;
+  color: var(--color-text-secondary);
+  text-wrap: pretty;
+}
+
+.detailBody {
+  padding: 16px;
+}
+
+.detailParagraph {
+  display: block;
+  font-size: var(--font-body-lg);
+  line-height: 1.75;
+  color: var(--color-text-primary);
+  text-wrap: pretty;
+}
+
+.detailParagraph + .detailParagraph {
+  margin-top: 12px;
+}
+
+/* ---------- 可信度信息卡 ---------- */
+
+.trustCard {
+  padding: 14px 16px;
+}
+
+.trustRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 6px 0;
+}
+
+.trustGlyph {
+  color: var(--color-text-tertiary);
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+
+.trustLabel {
+  flex: 0 0 72px;
+  font-size: var(--font-caption);
+  color: var(--color-text-tertiary);
+  line-height: 1.5;
+}
+
+.trustValue,
+.trustValueLink {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--font-caption);
+  color: var(--color-text-primary);
+  line-height: 1.5;
+  word-break: break-all;
+}
+
+.trustVersion {
+  font-weight: 700;
+}
+
+/* ---------- 学到了横幅 ---------- */
+
+/* 04.07 学到了 Inline Transition：✓ 提示 → 卡片轻折叠 → 移出推荐流。
+   动画只负责反馈，数据保存由 mutation 独立完成（动画失败不影响已保存状态）。 */
+.cardLearnedOut {
+  animation: knowledgeLearnedOut 480ms var(--motion-ease) forwards;
+}
+
+@keyframes knowledgeLearnedOut {
+  0% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  45% {
+    transform: scale(0.97);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(0.94) translateY(6px);
+    opacity: 0;
+  }
+}
+
+.learnedFlash {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+  padding: 7px 12px;
+  border-radius: var(--radius-chip);
+  background: var(--color-sage-soft);
+  width: fit-content;
+}
+
+.learnedFlashGlyph {
+  color: var(--color-sage-strong);
+  flex: 0 0 auto;
+}
+
+.learnedFlashText {
+  font-size: var(--font-caption);
+  font-weight: 600;
+  color: var(--color-sage-strong);
+}
+
+/* ---------- 搜索输入 ---------- */
+
+.searchInput {
+  flex: 1;
+  min-width: 0;
+  min-height: 52px;
+  font-size: var(--font-body-lg);
+  color: var(--color-text-primary);
+  background: transparent;
+}
+
+/* Reduce Motion：去掉位移折叠，保留淡出状态反馈。 */
+@media (prefers-reduced-motion: reduce) {
+  .cardLearnedOut {
+    animation: knowledgeLearnedOutCalm 240ms linear forwards;
+  }
+
+  @keyframes knowledgeLearnedOutCalm {
+    to {
+      opacity: 0;
+    }
+  }
+}
+
+
+.learnedBanner {
+  padding: 14px 16px;
+}
+
+.learnedHit {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+}
+
+.learnedIcon {
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  color: var(--color-sage-strong);
+  background: var(--color-sage-soft);
+  border: 1px solid rgba(255, 255, 255, 0.72);
+}
+
+.learnedCopy {
+  flex: 1;
+  min-width: 0;
+}
+
+.learnedTitle {
+  display: block;
+  font-size: var(--font-body-lg);
+  font-weight: 700;
+  color: var(--color-text-primary);
+}
+
+.learnedCaption {
+  display: block;
+  margin-top: 2px;
+  font-size: var(--font-caption);
+  color: var(--color-text-secondary);
+}
+
+/* ---------- 底部操作 ---------- */
+
+.detailActions {
+  display: flex;
+  gap: 10px;
+  align-items: stretch;
+}
+
+.learnedActionCard {
+  flex: 1;
+}
+
+.detailAction {
+  flex: 1;
+  min-height: 48px;
+  width: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border-radius: var(--radius-quick);
+  font-size: var(--font-body);
+  font-weight: 700;
+  color: var(--color-text-primary);
+  cursor: pointer;
+  transition:
+    transform var(--motion-fast) var(--motion-ease),
+    color var(--motion-fast) var(--motion-ease);
+}
+
+.detailAction:active {
+  transform: scale(0.985);
+}
+
+.detailActionSaved {
+  color: var(--color-blush-strong);
+}
+
+.detailActionLater {
+  color: var(--color-sky-strong);
+}
+
+.detailActionLearned {
+  color: var(--color-sage-strong);
+}
+
+/* ---------- 04.09 内容有更新（详情横幅） ---------- */
+
+.updatedBanner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+}
+
+.updatedBannerGlyph {
+  color: var(--color-sky-strong);
+  flex: 0 0 auto;
+}
+
+.updatedBannerText {
+  font-size: var(--font-body);
+  font-weight: 600;
+  color: var(--color-sky-strong);
+  line-height: 1.5;
+}
+
+/* ---------- 更多 Sheet 行 ---------- */
+
+.moreRow {
+  width: 100%;
+  min-height: 52px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 4px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--color-border-warm);
+}
+
+.moreRow:last-child {
+  border-bottom: none;
+}
+
+.moreGlyph {
+  color: var(--color-text-secondary);
+}
+
+.moreLabel {
+  flex: 1;
+  font-size: var(--font-body-lg);
+  color: var(--color-text-primary);
+}
+
+/* ---------- 搜索结果 ---------- */
+
+.searchIntro {
+  display: block;
+  font-size: var(--font-caption);
+  color: var(--color-text-secondary);
+  padding: 0 4px;
+}

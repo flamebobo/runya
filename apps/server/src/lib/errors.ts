@@ -59,6 +59,7 @@ export function errorHandler(
     );
   }
 
+  console.error('SERVER ROUTE ERROR:', error);
   request.log.error(
     {
       route: request.routeOptions.url,

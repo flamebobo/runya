@@ -12,6 +12,7 @@ export const entityTypeSchema = z.enum([
   'FOOD_RECORD',
   'GROWTH_RECORD',
   'MILESTONE',
+  'HEALTH_EVENT',
 ]);
 
 // CREATE 的 fullPayload 字段；UPDATE 的 patch / baseSnapshot 复用同一形状（全部可选）。
@@ -31,6 +32,23 @@ export const recordPayloadSchema = z
     recordedAt: z.number().int('时间必须是完整数字').positive('时间必须晚于 1970 年').optional(),
     timezoneName: z.string().trim().min(1, '缺少时区信息').max(64, '时区信息过长').optional(),
     note: noteSchema,
+    // HEALTH_EVENT
+    eventType: z.enum(['CHECKUP', 'VACCINE', 'VISIT', 'DENTAL', 'MEDICATION', 'OTHER']).optional(),
+    scheduledAt: z.number().int('时间必须是完整数字').positive('时间必须晚于 1970 年').optional(),
+    locationName: z.string().trim().max(120).nullable().optional(),
+    locationAddress: z.string().trim().max(200).nullable().optional(),
+    doctorName: z.string().trim().max(60).nullable().optional(),
+    completedAt: z.number().int().positive().nullable().optional(),
+    status: z.enum(['UPCOMING', 'COMPLETED', 'EXPIRED', 'CANCELED']).optional(),
+    reminderOffsets: z
+      .array(
+        z.object({
+          kind: z.enum(['D7', 'D3', 'D1', 'SAME_DAY', 'CUSTOM']),
+          customOffsetMinutes: z.number().int().min(0).max(43200).nullable().optional(),
+          allowDndOverride: z.boolean().optional(),
+        }),
+      )
+      .optional(),
   })
   .passthrough();
 

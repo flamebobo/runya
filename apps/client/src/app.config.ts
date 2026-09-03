@@ -7,6 +7,8 @@ export default {
     'pages/records/compose/index',
     'pages/records/detail/index',
     'pages/growth/index',
+    'pages/knowledge/index',
+    'pages/memories/index',
     'pages/dev/design-system/index',
   ],
   window: {

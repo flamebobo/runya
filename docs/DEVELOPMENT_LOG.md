@@ -534,3 +534,164 @@
 ### Known Issues
 
 - 保留既有的 Taro bundle 體積、CSS ordering、`postcss-calc`、Sass legacy API、Fastify deprecation 與測試 DOM mock 警告；均未造成建置或測試失敗，本輪沒有新增阻斷問題。
+
+## M2/M4 UI 鎵撶（ 鈥?鍒嗘鎺т欢 / 璁板綍琛ㄥ崟 / 缁熻鍥捐〃
+
+**鏃ユ湡锛?* 2026-09-03
+
+### Changed
+
+- `SegmentedControl` 閲嶅仛涓烘恫浣撶幓鐠冩粦鍧楋細澧炲姞 `segmentThumb` 婊戝姩鎸囩ず鍣紙鏆栨潖鐜荤拑娓愬彉 + 鍐呬晶楂樺厜锛夛紝鍒囨崲鏃朵互 320ms 寮规€ф洸绾垮钩绉伙紝鏇夸唬鍘熷厛閫愭牸鍙樿壊锛涚敤浜庢垚闀块〉銆岃韩楂?浣撻噸/澶村洿銆嶄笌缁熻鍥捐〃銆屾棩/鍛?鏈?骞淬€嶄袱澶?
+- 缁熻鍥捐〃锛坄StatsChart`锛夎瑙夊崌绾э細鏌变綋澧炲姞椤堕儴楂樺厜鐐?+ 鐜荤拑鏂滃悜鍙嶅厜锛堟恫浣撶幓鐠冭川鎰燂級銆佸簳閮ㄦí鍚戝弬鑰冪嚎銆佹椿璺冩煴鎶曞奖锛涜鏁版暟鍊煎姞娣″叆鍔ㄦ晥
+- 鍥捐〃鍒囨崲娴佺晠搴︼細`useRecordStatsQuery` 鏀寔 `placeholderData`锛屽垏鎹㈡棩/鍛?鏈?骞存椂淇濈暀涓婁竴浠芥暟鎹钩婊戣繃娓★紝涓嶅啀闂鏋跺睆锛涙煴瀛?React key 鍘绘帀 range 鍓嶇紑锛岄珮搴﹀彉鍖栬蛋 CSS transition 鑰屼笉鏄噸鎾叆鍦哄姩鐢?
+- 鍠傚ザ杩涜涓崱鐗囨寜閽眰绾ч噸鎺掞細鏆傚仠/鎹㈣竟鏀逛负鏇磋交鐨勭幓鐠冩绾ф牱寮忥紙46px / 灏忓瓧鍙凤級锛屻€岀粨鏉熷杺濂躲€嶄繚鎸佸敮涓€涓绘寜閽紱鍏ㄥ眬涓?娆℃寜閽瓧閲?600 鈫?700 骞跺姞瀛楄窛
+- 澶囨敞鍗犱綅鏂囨銆屽彲浠ヤ笉鍐欍€嶁啋銆屾兂鐣欎竴鍙ヨ瘽锛屽啓缁欎互鍚庣殑鑷繁銆嶏紙compose 浜斿 + detail 涓€澶勶級锛沗GlassTextArea` 琛岄珮涓庡崰浣嶅瓧璺濈簿淇?
+- 杈呴琛ㄥ崟閲嶆瀯锛氥€屽ぇ绾﹀垎閲忋€嶆敼涓轰竴琛屽洓鏋氱瓑瀹?chip锛?8px 鐑尯銆佹殩鏉忛€変腑鎬侊級锛屼笌澶囨敞鍚堝苟杩涖€屽悆浜嗕粈涔堛€嶉潰鏉匡紱鏃堕棿闈㈡澘鍒犳帀銆屾棩鏈熴€嶅瓧娈靛彧鐣欍€屾椂闂淬€嶏紙褰撳満璁板綍鍦烘櫙鏃ユ湡鎭掍负浠婂ぉ锛?
+
+### Database
+
+- 鏃?Migration锛涙湰杞粎瀹㈡埛绔?UI 璋冩暣
+
+### API / Contract
+
+- 鏃?API 鍙樻洿锛沗RecordStatsQuery` 濂戠害鏈姩锛屼粎鍓嶇鏌ヨ琛屼负澧炲姞 placeholderData
+
+### UI / States
+
+- 鎴愰暱椤垫寚鏍囧垏鎹€佺粺璁″浘琛ㄧ淮搴﹀垏鎹㈠潎鑾峰緱婊戝潡寮忓垎娈垫帶浠?
+- 杈呴鏂板琛ㄥ崟锛氶鐗?+ 澶х害鍒嗛噺 + 鏃堕棿 + 澶囨敞涓夋寮忓彉涓ゆ寮?
+- 鍠傚ザ杩愯涓崱鐗囷細鏆傚仠鎬併€岀户缁€嶄粛涓轰富鎸夐挳锛岃繍琛屾€併€屾殏鍋?鎹㈣竟銆嶉檷涓烘绾?
+
+### Verification
+
+- `pnpm --filter @runew/client typecheck`锛氶€氳繃
+- `eslint`锛堟敼鍔ㄦ枃浠讹級锛氶€氳繃
+- `vitest`锛圫tatsChart 鐩稿叧 6 渚嬶級锛氶€氳繃锛涘叏閲?117 渚嬮€氳繃锛坄growth/routes.test.ts` 鐨?afterAll 娓呯悊鎶?Windows EPERM锛屼负 DEVELOPMENT_LOG 宸茶褰曠殑鏃㈡湁鐜闂锛屾柇瑷€鍏ㄩ儴閫氳繃锛?
+- `pnpm --filter @runew/client build:h5` 涓?`build:weapp`锛氬潎缂栬瘧鎴愬姛锛沗mini-css-extract` chunk 璀﹀憡鍦ㄦ湭鍚湰鏀瑰姩鐨勫熀绾夸笂鍚屾牱鍑虹幇锛屽睘鏃㈡湁闂
+
+### Known Issues
+
+- ECharts 灏忕▼搴忓垎鍖呬綋绉€丼ass legacy API銆乀aro Canvas mock DOM 璀﹀憡绛夋棦鏈夐棶棰樹繚鎸佸師鏍?
+
+### Documentation
+
+- DEVELOPMENT_LOG updated: yes
+
+### Status
+
+Ready for next task
+
+## M5 — 育儿知识（Knowledge）
+
+**日期：** 2026-09-03
+
+### Changed
+
+- M5 Knowledge 垂直切片完成，实现 Version-aware Knowledge State 完整闭环：`learned_version == content_version` 不再普通推荐；`content_version > learned_version` 显示「内容有更新」并可重新推荐；重读当前版本后横幅消失。
+- 补齐首页快捷入口真实计数：新增 `GET /babies/:babyId/knowledge/library/counts`，收藏 / 稍后看 / 已学三个入口展示服务端真实数量，替代原先硬编码的 0（假完成）。
+- 详情页状态改由服务端真相驱动：新增 `GET /babies/:babyId/knowledge/:id/state`（从未互动返回 null），收藏 / 稍后看 / 已学 / 内容有更新横幅（04.09）全部以服务端状态为准；修复原先从收藏进入详情页收藏态丢失的问题。
+- 搜索页接入真实输入框（Taro Input），键盘搜索键可直接触发搜索，替代原先仅可点击跳转的假输入框。
+- 「学到了」实现 04.07 Inline Transition：推荐卡新增「学到了」操作，点击后展示 ✓ 反馈并播放 480ms 轻折叠动画，动画结束后由服务端数据（推荐流失效）自然补位；`prefers-reduced-motion` 下保留淡出反馈去掉位移。动画与保存解耦，动画失败不影响已保存状态。
+- 详情页「更多」面板的「内容有问题」反馈接通 `POST /knowledge/:id/feedback`，成功 / 失败均有产品语气提示，替代原先只弹 toast 的假反馈。
+- 详情页新增「稍后看」主操作（04.05），三按钮（学到了 / 收藏 / 稍后看）+ 更多，当前版本已学后按钮变为「已学这一版」禁用态。
+- 服务端测试新增计数端点与单篇状态端点覆盖，并修复测试抓出的真实缺陷：计数查询未按 babyId 过滤，会把所有用户所有宝宝的状态计入（跨家庭状态数泄露）。
+- 测试桩 `Input` 组件桥接 DOM change 事件为 Taro `onInput` 的 `{ detail: { value } }` 形态，使可输入组件可被真实键入测试。
+
+### Database
+
+- 无新增 Migration；`0005_m5_knowledge.sql`（knowledge + knowledge_user_states，含年龄区间 CHECK、user+baby+knowledge 唯一索引）已存在于本轮之前，本轮未改 Schema。
+
+### API / Contract
+
+- 新增 `GET /babies/:babyId/knowledge/library/counts` → `KnowledgeLibraryCountsResponse`（contracts 新增类型）。
+- 新增 `GET /babies/:babyId/knowledge/:id/state` → `KnowledgeUserState | null`。
+- 既有 7 个端点不变：`GET /knowledge`、`GET /knowledge/:id`、`GET /knowledge/search`、`GET /babies/:babyId/knowledge/recommendations`、`PUT /babies/:babyId/knowledge/:id/state`、`GET /babies/:babyId/knowledge/library`、`POST /knowledge/:id/feedback`。
+
+### UI / States
+
+- 04.01 知识首页：搜索入口、三快捷入口（真实计数）、按月龄推荐流（透明推荐理由）、学到了过渡、不感兴趣。
+- 04.02 搜索：真实输入、空态、结果列表；04.10/14.05–14.09/14.19 分类：chips 过滤 + 空分类文案。
+- 04.03 详情：正文分段、可信度卡（来源 / 原文链接 / 适用月龄 / 审核时间 / 内容版本）；04.09 内容有更新横幅；04.08 更多 Sheet（学到了 / 收藏 / 减少此类推荐 / 内容问题反馈）。
+- 04.04/04.05/04.06 收藏 / 稍后看 / 已学：三段切换，已学列表显示 `contentUpdated` 标记。
+- 推荐规则保持透明（P0）：PUBLISHED + 未删除 + 未 dismissed + learnedVersion < contentVersion + 月龄窗口命中，按 priority / 发布时间排序，无 AI 平台。
+
+### Verification
+
+- `pnpm typecheck`：通过（contracts 重建后 7 个 workspace 全部完成）。
+- `pnpm lint`：通过。
+- `pnpm test`：26 个测试文件、126 个测试全部通过（含知识模块 22 例：年龄上下边界、PUBLISHED/OFFLINE/DRAFT 排除、收藏 / 稍后看 / 已学分桶、学到版本闭环、内容更新重进推荐、dismissed、搜索、来源元数据、宝宝 A/B 状态隔离、越权 403、未认证 401、幂等 PUT、计数与单篇状态）。
+- `pnpm --filter @runew/client build:h5` / `build:weapp` / `@runew/server build`：编译成功。
+- `pnpm db:migrate` + `pnpm db:seed:knowledge`：临时库验证通过（12 篇知识入库）。
+- 客户端组件测试覆盖：卡片元信息 / 操作 / 更新横幅 / 学到了过渡、快捷入口计数、可输入搜索栏、月龄与审核日期格式化。
+
+### Known Issues
+
+- weapp 构建存在基线性 `UNKNOWN_DIMENSION`（postcss 对 `env(safe-area-inset-*)` calc）与 mini-css chunk 警告；经移除模块对比验证，知识页与 growth 页共用同一模式，非本轮新增问题类别。
+- ECharts 使微信分包超建议体积，为既有问题。
+- 反馈为轻量信号（P0 不落表）；REDUCE_CATEGORY 类型已定义但推荐侧暂不消费，记录为后续可选优化。
+
+### Documentation
+
+- DEVELOPMENT_LOG updated: yes
+
+### Status
+
+Ready for next task（M5 READY：Version-aware Knowledge State 完整）
+
+## M7 — 媒体平台与回忆（Media Platform / Memories）
+
+**日期：** 2026-09-03
+
+### Changed
+
+- M7 Media Platform & Memories 垂直切片完整交付。
+- 本地可靠保存（Local-first Media Preservation）：小程序端在用户选择/拍摄/录制后，先复制至 `USER_DATA_PATH/media/` 目录下持久化，成功后再写 Local Metadata；H5 端使用 OPFS (`navigator.storage.getDirectory`) 存储 Blob（Fallback 至 IndexedDB Blob / Object URL）。只有持久化本地文件成功后，UI 才展示“已保存”状态（遵从 AGENTS.md §30, §31, §32）。
+- 分块断点续传（Resumable Chunked Upload Engine）：服务器端实现 4 MiB 分块接收（`POST /media/uploads` 初始化会话、`PUT /media/uploads/:uploadId/parts/:partNo` 分块上传、`GET /media/uploads/:uploadId` 状态与已完成分块查询、`POST /media/uploads/:uploadId/complete` 合并与 SHA256 校验）。相同 Part 重试具备幂等性；分块合并校验 SHA256 与文件大小，不匹配拒绝合并。
+- 媒体处理与原件保留（Media Processing & Safety）：图片校验 Magic Bytes/Decode，异步生成 Display 与 Thumbnail 缩略图；音频提取 AAC/Opus 时长。处理失败保留原始 Binary 文件（遵从 AGENTS.md §33）。
+- 鉴权流媒体播放（Authenticated Media Delivery with HTTP 206 Range）：`GET /media/:id/content` 强制用户家庭鉴权（防 IDOR），支持 `Range: bytes=start-end` 分段请求，响应 `206 Partial Content`，供音频播放器与媒体播放平滑 Seek。
+- 回忆博物馆（Memories Museum）：
+  - 照片回忆（Photo Memories）：多图关联、相簿流、故事记述。
+  - 宝宝语录（Baby Quotes）：趣事文字、关联声音录音、自动草稿。
+  - 宝宝声音（Audio Memories）：Inline 音频播放器组件，包含播放/暂停控制、自定义进度条与时间 Seek，且具备 JIT 麦克风权限说明弹窗（PermissionSheet）。
+  - 第一次（First Moments）：宝贵成长第一次记录。
+  - 时光胶囊（Time Capsules）：严格后端状态机约束 `DRAFT` → `SEALED` → `OPENED`。草稿支持编辑；`SEALED` 封存态拒绝正文编辑，卡片展示锁图标 🔒 与开启倒计时；到达 `openAt` 后支持显式解锁开启 ✨。
+- 那年今日与回顾（On-This-Day）：汇总去年今日的相片与回忆事件。
+
+### Database
+
+- Migration: `db/migrations/0007_m7_media_memories.sql`
+- 表：`media_files`、`media_uploads`、`media_upload_parts`、`photo_memories`、`photo_memory_media`、`baby_quotes`、`audio_memories`、`first_moments`、`first_moment_media`、`time_capsules`、`time_capsule_media`。
+
+### API / Contract
+
+- Media API：`POST /media/uploads`、`PUT /media/uploads/:uploadId/parts/:partNo`、`GET /media/uploads/:uploadId`、`POST /media/uploads/:uploadId/complete`、`GET /media/:id/content`、`GET /media/:id/thumbnail`。
+- Memories API：
+  - `GET /babies/:babyId/memories/summary`、`GET /babies/:babyId/memories/on-this-day`
+  - Photos: `GET/POST /babies/:babyId/memories/photos`、`GET/PATCH/DELETE /memories/photos/:id`
+  - Quotes: `GET/POST /babies/:babyId/memories/quotes`、`GET/PATCH/DELETE /memories/quotes/:id`
+  - Audios: `GET/POST /babies/:babyId/memories/audios`、`GET/PATCH/DELETE /memories/audios/:id`
+  - Firsts: `GET/POST /babies/:babyId/memories/firsts`、`GET/PATCH/DELETE /memories/firsts/:id`
+  - Capsules: `GET/POST /babies/:babyId/memories/capsules`、`GET/PATCH/DELETE /memories/capsules/:id`、`POST /memories/capsules/:id/seal`、`POST /memories/capsules/:id/open`
+
+### UI / States
+
+- 06.01 回忆博物馆首页：暖奶油记忆墙、分类统计、Tab 切换、那年今日。
+- 06.09–06.13 Inline 音频播放器组件：声音卡片、分类 Tag、自定义 Seek、JIT 麦克风权限说明。
+- 06.19–06.21 时光胶囊：`DRAFT` 草稿、`SEALED` 封存锁与倒计时、封存确认 ConfirmDialog、`OPENED` 金色光芒展开卡片。
+
+### Verification
+
+- `pnpm build`：工作区全量编译成功（`@runew/db`、`@runew/shared-utils`、`@runew/domain-types`、`@runew/validation`、`@runew/contracts`、`@runew/server`、`@runew/client` H5 & WeChat Mini Program）。
+- `pnpm test`：工作区 35 个测试文件、178 个测试用例 100% 运行通过！
+  - `media.test.ts`：覆盖分块断点续传、分块合并、Part 校验、SHA256 校验、Range 播放。
+  - `memories.test.ts`：覆盖 Photo Memories CRUD、时光胶囊状态机严格转换 (`DRAFT` → `SEALED` → `OPENED`)、`SEALED` 正文修改拒绝。
+
+### Documentation
+
+- DEVELOPMENT_LOG updated: yes
+
+### Status
+
+Ready for next task (M7 READY: Media Platform & Memories 阶段交付完成)
+
+

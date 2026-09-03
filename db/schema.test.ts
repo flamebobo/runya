@@ -31,6 +31,16 @@ describe('database foundation', () => {
       expect(await tableExists(databasePath, 'duplicate_candidates')).toBe(true);
       expect(await tableExists(databasePath, 'growth_records')).toBe(true);
       expect(await tableExists(databasePath, 'milestones')).toBe(true);
+      expect(await tableExists(databasePath, 'knowledge')).toBe(true);
+      expect(await tableExists(databasePath, 'knowledge_user_states')).toBe(true);
+      expect(await tableExists(databasePath, 'health_events')).toBe(true);
+      expect(await tableExists(databasePath, 'health_reminders')).toBe(true);
+      expect(await tableExists(databasePath, 'health_event_media')).toBe(true);
+      expect(await tableExists(databasePath, 'media_files')).toBe(true);
+      expect(await tableExists(databasePath, 'notification_preferences')).toBe(true);
+      expect(await tableExists(databasePath, 'notifications')).toBe(true);
+      expect(await tableExists(databasePath, 'scheduled_notifications')).toBe(true);
+      expect(await tableExists(databasePath, 'job_locks')).toBe(true);
 
       const client = createSqlClient(databasePath);
       await client.execute('PRAGMA foreign_keys = ON');

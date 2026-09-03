@@ -72,6 +72,18 @@
   padding: 0 8px;
 }
 
+/* 运行中卡片的次级动作走更轻的玻璃，让「结束」成为唯一重按钮 */
+.actionQuiet {
+  min-height: 46px;
+  font-size: var(--font-body);
+  letter-spacing: 0;
+  opacity: 0.96;
+}
+
+.actionFinish {
+  min-height: 48px;
+}
+
 .notice {
   width: 100%;
   margin-bottom: 16px;

@@ -13,10 +13,15 @@ import configContextPlugin from './plugins/config-context.js';
 import dbPlugin from './plugins/db.js';
 import { attachAuthContext } from './plugins/auth.js';
 import { healthRoutes } from './modules/health/routes.js';
+import { healthEventRoutes } from './modules/health/events.routes.js';
 import { growthRoutes } from './modules/growth/routes.js';
 import { identityRoutes } from './modules/identity/routes.js';
+import { knowledgeRoutes } from './modules/knowledge/routes.js';
+import { notificationRoutes } from './modules/notifications/routes.js';
 import { recordsRoutes } from './modules/records/routes.js';
 import { syncRoutes } from './modules/sync/routes.js';
+import { mediaRoutes } from './modules/media/media.routes.js';
+import { memoriesRoutes } from './modules/memories/memories.routes.js';
 import Fastify from 'fastify';
 
 export async function buildApp() {
@@ -85,10 +90,15 @@ export async function buildApp() {
   app.setErrorHandler(errorHandler);
 
   await app.register(healthRoutes, { prefix: '/api/v1' });
+  await app.register(healthEventRoutes, { prefix: '/api/v1' });
   await app.register(identityRoutes, { prefix: '/api/v1' });
   await app.register(recordsRoutes, { prefix: '/api/v1' });
   await app.register(growthRoutes, { prefix: '/api/v1' });
+  await app.register(knowledgeRoutes, { prefix: '/api/v1' });
+  await app.register(notificationRoutes, { prefix: '/api/v1' });
   await app.register(syncRoutes, { prefix: '/api/v1' });
+  await app.register(mediaRoutes, { prefix: '/api/v1' });
+  await app.register(memoriesRoutes, { prefix: '/api/v1' });
 
   return app;
 }

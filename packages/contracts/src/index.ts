@@ -77,4 +77,10 @@ export * from './baby.js';
 export * from './bootstrap.js';
 export * from './records.js';
 export * from './growth.js';
+export * from './knowledge.js';
+export * from './health.js';
+export * from './notifications.js';
 export * from './sync.js';
+export * from './media.js';
+export * from './memories.js';
+

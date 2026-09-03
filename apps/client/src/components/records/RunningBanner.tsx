@@ -80,16 +80,20 @@ export function FeedingRunningBanner({
           {paused ? (
             <PrimaryActionButton label="继续" className={styles.actionFlex} onClick={onResume} />
           ) : (
-            <SecondaryGlassButton label="暂停" className={styles.actionFlex} onClick={onPause} />
+            <SecondaryGlassButton
+              label="暂停"
+              className={`${styles.actionFlex} ${styles.actionQuiet}`}
+              onClick={onPause}
+            />
           )}
           <SecondaryGlassButton
             label="换边"
-            className={styles.actionFlex}
+            className={`${styles.actionFlex} ${styles.actionQuiet}`}
             onClick={onSwitch}
           />
           <PrimaryActionButton
             label="结束喂奶"
-            className={styles.actionFlex}
+            className={`${styles.actionFlex} ${styles.actionFinish}`}
             onClick={onFinish}
           />
         </View>

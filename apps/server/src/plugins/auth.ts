@@ -40,7 +40,7 @@ export async function attachAuthContext(request: FastifyRequest) {
   }
 
   try {
-    const session = await resolveSession(request.server.db, token);
+    const session = await resolveSession(request.db ?? request.server.db, token);
     request.auth = {
       userId: session.userId,
       sessionId: session.sessionId,
@@ -63,7 +63,7 @@ export async function requireAuth(request: FastifyRequest, _reply: FastifyReply)
     throw new AppError('AUTH_REQUIRED', '请先登录', 401);
   }
 
-  const session = await resolveSession(request.server.db, token);
+  const session = await resolveSession(request.db ?? request.server.db, token);
   request.auth = {
     userId: session.userId,
     sessionId: session.sessionId,

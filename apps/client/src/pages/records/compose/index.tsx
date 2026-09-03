@@ -12,6 +12,7 @@ import {
   GlassTextArea,
   GlassTimeField,
 } from '@/components/forms';
+import classNames from '@/utils/classNames';
 import { GlassSurface } from '@/components/foundation/GlassSurface';
 import { PageShell } from '@/components/foundation/PageShell';
 import { AppTopBar } from '@/components/navigation/AppTopBar';
@@ -234,7 +235,12 @@ function ComposeBody() {
             <GlassSurface level="card" radius="card" className={styles.panel}>
               <Text className={styles.panelTitle}>什么时候喝的</Text>
               <DateTimeFields date={date} time={time} onDate={setDate} onTime={setTime} />
-              <GlassTextArea label="备注" value={note} placeholder="可以不写" onInput={setNote} />
+              <GlassTextArea
+                label="备注"
+                value={note}
+                placeholder="想留一句话，写给以后的自己"
+                onInput={setNote}
+              />
             </GlassSurface>
             <PrimaryActionButton
               label="收下这一瓶"
@@ -352,7 +358,12 @@ function ComposeBody() {
                     dateLabel="醒来"
                     timeLabel="醒来时刻"
                   />
-                  <GlassTextArea label="备注" value={note} placeholder="可以不写" onInput={setNote} />
+                  <GlassTextArea
+                    label="备注"
+                    value={note}
+                    placeholder="想留一句话，写给以后的自己"
+                    onInput={setNote}
+                  />
                   <PrimaryActionButton
                     label="收下这一觉"
                     tone="lavender"
@@ -403,7 +414,12 @@ function ComposeBody() {
             <GlassSurface level="card" radius="card" className={styles.panel}>
               <Text className={styles.panelTitle}>什么时候换的</Text>
               <DateTimeFields date={date} time={time} onDate={setDate} onTime={setTime} />
-              <GlassTextArea label="备注" value={note} placeholder="可以不写" onInput={setNote} />
+              <GlassTextArea
+                label="备注"
+                value={note}
+                placeholder="想留一句话，写给以后的自己"
+                onInput={setNote}
+              />
             </GlassSurface>
             <PrimaryActionButton
               label="收下这一次"
@@ -453,6 +469,10 @@ function ComposeBody() {
                       key={item}
                       label={item}
                       selected={amountText === item}
+                      className={classNames(
+                        styles.presetChip,
+                        amountText === item && styles.presetChipSelected,
+                      )}
                       onClick={() => setAmountText(item === amountText ? '' : item)}
                     />
                   ))}
@@ -461,8 +481,13 @@ function ComposeBody() {
             </GlassSurface>
             <GlassSurface level="card" radius="card" className={styles.panel}>
               <Text className={styles.panelTitle}>什么时候吃的</Text>
-              <DateTimeFields date={date} time={time} onDate={setDate} onTime={setTime} />
-              <GlassTextArea label="备注" value={note} placeholder="可以不写" onInput={setNote} />
+              <GlassTimeField label="时间" value={time} onChange={setTime} />
+              <GlassTextArea
+                label="备注"
+                value={note}
+                placeholder="想留一句话，写给以后的自己"
+                onInput={setNote}
+              />
             </GlassSurface>
             <PrimaryActionButton
               label="收下这一口"

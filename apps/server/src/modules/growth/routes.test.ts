@@ -23,7 +23,11 @@ describe('growth api', () => {
 
   afterAll(async () => {
     await app.close();
-    fs.rmSync(tempDir, { recursive: true, force: true });
+    try {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    } catch {
+      // Windows file lock during cleanup — 临时目录，留给系统清理即可。
+    }
   });
 
   async function readyFamily() {

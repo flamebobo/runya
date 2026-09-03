@@ -26,6 +26,16 @@ const REQUIRED_TABLES = [
   'food_records',
   'sync_operations',
   'duplicate_candidates',
+  'knowledge',
+  'knowledge_user_states',
+  'health_events',
+  'health_reminders',
+  'health_event_media',
+  'media_files',
+  'notification_preferences',
+  'notifications',
+  'scheduled_notifications',
+  'job_locks',
 ] as const;
 
 async function main() {

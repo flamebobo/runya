@@ -4,10 +4,15 @@ import { drizzle, type LibSQLDatabase } from 'drizzle-orm/libsql';
 import type { FastifyInstance } from 'fastify';
 import fp from 'fastify-plugin';
 
+export type Database = LibSQLDatabase<typeof schema>;
+
 declare module 'fastify' {
   interface FastifyInstance {
-    db: LibSQLDatabase<typeof schema>;
+    db: Database;
     sqlClient: Client;
+  }
+  interface FastifyRequest {
+    db: Database;
   }
 }
 
@@ -18,6 +23,11 @@ async function dbPlugin(app: FastifyInstance) {
 
   app.decorate('sqlClient', client);
   app.decorate('db', db);
+  app.decorateRequest('db', {
+    getter() {
+      return this.server.db;
+    },
+  });
 
   app.addHook('onClose', async () => {
     await client.close();

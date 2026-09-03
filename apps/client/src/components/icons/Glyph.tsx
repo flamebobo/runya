@@ -31,7 +31,11 @@ export type GlyphName =
   | 'mic'
   | 'bowl'
   | 'diaper'
-  | 'sparkle';
+  | 'sparkle'
+  | 'shield'
+  | 'stethoscope'
+  | 'tooth'
+  | 'pill';
 
 export interface GlyphProps {
   name: GlyphName;
@@ -211,6 +215,27 @@ function renderPaths(name: GlyphName): ReactNode {
       ];
     case 'sparkle':
       return [p('M12 5.2 13.2 10 18.2 12 13.2 14 12 18.8 10.8 14 5.8 12 10.8 10z')];
+    case 'shield':
+      return [
+        p('M12 5.2 18 7.4v4.4c0 4-2.4 6.6-6 7.8-3.6-1.2-6-3.8-6-7.8V7.4z'),
+        p('M9.4 11.8l1.8 1.8 3.4-3.6'),
+      ];
+    case 'stethoscope':
+      return [
+        p('M7.4 5.4v4.4a3.6 3.6 0 0 0 7.2 0V5.4'),
+        p('M5.8 5.4h1.6M14.6 5.4h1.6'),
+        p('M11 13.4v2a3.4 3.4 0 0 0 6.8 0v-2.6'),
+        p('M17.8 11a1.4 1.4 0 1 0 0 2.8 1.4 1.4 0 0 0 0-2.8z'),
+      ];
+    case 'tooth':
+      return [
+        p('M8 5.2c2-.9 6-.9 8 0 1.4.7 1.6 2.4 1 4.4-.4 1.4-.6 2.6-.8 4.4-.2 1.6-.4 4.4-1.6 4.4-1 0-1-2.4-1.4-4.2-.2-.9-.8-1.4-1.2-1.4s-1 .5-1.2 1.4c-.4 1.8-.4 4.2-1.4 4.2-1.2 0-1.4-2.8-1.6-4.4-.2-1.8-.4-3-.8-4.4-.6-2-.4-3.7 1-4.4z'),
+      ];
+    case 'pill':
+      return [
+        p('M14.6 6.2a4.6 4.6 0 0 1 3.2 7.8l-3.8 3.8a4.6 4.6 0 0 1-6.5-6.5l3.8-3.8a4.6 4.6 0 0 1 3.3-1.3z'),
+        p('M9 9.4l5.6 5.6'),
+      ];
     default:
       return null;
   }

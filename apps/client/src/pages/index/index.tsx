@@ -258,7 +258,7 @@ function TodayShell() {
                 label="宝宝回忆"
                 glyph="photo"
                 tone="sky"
-                onClick={() => setBottomNavActive('memories')}
+                onClick={() => void Taro.navigateTo({ url: '/pages/memories/index' })}
               />
             </View>
             <SectionHeader
@@ -430,7 +430,13 @@ function TodayShell() {
       {!sheetOpen ? (
         <BottomNav
           active={bottomNavActive}
-          onSelect={setBottomNavActive}
+          onSelect={(key) => {
+            if (key === 'memories') {
+              void Taro.navigateTo({ url: '/pages/memories/index' });
+            } else {
+              setBottomNavActive(key);
+            }
+          }}
           onAddClick={() => setSheetOpen(true)}
         />
       ) : null}
@@ -449,10 +455,13 @@ function TodayShell() {
             setDrawerOpen(false);
             if (item.id === 'today') setBottomNavActive('today');
             else if (item.id === 'records') setBottomNavActive('records');
-            else if (item.id === 'memories') setBottomNavActive('memories');
-            else if (item.id === 'family') setBottomNavActive('family');
+            else if (item.id === 'memories') {
+              void Taro.navigateTo({ url: '/pages/memories/index' });
+            } else if (item.id === 'family') setBottomNavActive('family');
             else if (item.id === 'growth') {
               void Taro.navigateTo({ url: '/pages/growth/index' });
+            } else if (item.id === 'knowledge') {
+              void Taro.navigateTo({ url: '/pages/knowledge/index' });
             } else comingSoon(item.title);
           },
         }))}

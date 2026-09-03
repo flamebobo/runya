@@ -336,6 +336,10 @@ function GrowthBody() {
             active: item.id === 'growth',
             onClick: () => {
               if (item.id === 'growth') setDrawerOpen(false);
+              else if (item.id === 'knowledge') {
+                setDrawerOpen(false);
+                void Taro.navigateTo({ url: '/pages/knowledge/index' });
+              }
               else if (item.id === 'today') openRootTab('today');
               else if (item.id === 'records') openRootTab('records');
               else if (item.id === 'memories') openRootTab('memories');

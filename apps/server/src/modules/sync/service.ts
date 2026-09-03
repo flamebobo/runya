@@ -18,6 +18,7 @@ import type { LibSQLDatabase } from 'drizzle-orm/libsql';
 import { AppError } from '../../lib/errors.js';
 import { appendSyncLog } from './log.js';
 import { applyGrowthPendingOperation } from '../growth/sync.js';
+import { applyHealthPendingOperation } from '../health/sync.js';
 import { requireFamilyMembership } from '../identity/service.js';
 
 type DailySyncEntityType = Extract<SyncEntityType, 'DIAPER_RECORD' | 'FOOD_RECORD'>;
@@ -437,6 +438,9 @@ export async function applyPendingOperation(
     operation.entityType === 'MILESTONE'
   ) {
     return applyGrowthPendingOperation(db, userId, operation);
+  }
+  if (operation.entityType === 'HEALTH_EVENT') {
+    return applyHealthPendingOperation(db, userId, operation);
   }
   await requireFamilyMembership(db, userId, operation.familyId);
   const replayed = await replayOperation(db, operation);

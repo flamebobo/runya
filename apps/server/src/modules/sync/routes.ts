@@ -10,6 +10,7 @@ import {
   diaperRecords,
   foodRecords,
   growthRecords,
+  healthEvents,
   milestones,
   systemMetadata,
   SYSTEM_METADATA_KEYS,
@@ -208,6 +209,31 @@ export async function syncRoutes(app: FastifyInstance) {
           happenedAt: row.happenedAt,
           timezoneName: row.timezoneName,
           coverMediaId: row.coverMediaId,
+        },
+      });
+    }
+    const healthRows = await app.db
+      .select()
+      .from(healthEvents)
+      .where(eq(healthEvents.familyId, familyId));
+    for (const row of healthRows) {
+      entities.push({
+        entityType: 'HEALTH_EVENT' as const,
+        entityId: row.id,
+        version: row.version,
+        deleted: row.deletedAt != null,
+        payload: {
+          babyId: row.babyId,
+          eventType: row.eventType as RecordPayload['eventType'],
+          title: row.title,
+          scheduledAt: row.scheduledAt,
+          status: row.status as RecordPayload['status'],
+          completedAt: row.completedAt,
+          locationName: row.locationName,
+          locationAddress: row.locationAddress,
+          doctorName: row.doctorName,
+          note: row.note,
+          timezoneName: row.timezoneName,
         },
       });
     }

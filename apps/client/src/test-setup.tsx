@@ -35,7 +35,16 @@ vi.mock('@tarojs/components', () => ({
   Text: ({ children, ...props }: PropsWithChildren<Record<string, unknown>>) => (
     <span {...props}>{children}</span>
   ),
-  Input: (props: Record<string, unknown>) => <input {...props} />,
+  Input: ({ onInput, ...props }: Record<string, unknown>) => (
+    <input
+      {...props}
+      onChange={(event) =>
+        (onInput as ((e: { detail: { value: string } }) => void) | undefined)?.({
+          detail: { value: (event.target as HTMLInputElement).value },
+        })
+      }
+    />
+  ),
   Textarea: (props: Record<string, unknown>) => <textarea {...props} />,
   Canvas: (props: Record<string, unknown>) => <canvas {...props} />,
   Button: ({ children, ...props }: PropsWithChildren<Record<string, unknown>>) => (

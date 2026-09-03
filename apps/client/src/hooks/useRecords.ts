@@ -2,6 +2,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
   PendingOperation,
   RecordStatsQuery,
+  RecordStatsResponse,
   TimelineItem,
   TimelineQuery,
   TimelineResponse,
@@ -23,13 +24,18 @@ export function recordStatsQueryKey(babyId: string, query: RecordStatsQuery) {
   return ['record-stats', babyId, query] as const;
 }
 
-export function useRecordStatsQuery(babyId: string | null, query: RecordStatsQuery) {
+export function useRecordStatsQuery(
+  babyId: string | null,
+  query: RecordStatsQuery,
+  options: { placeholderData?: (previous: RecordStatsResponse | undefined) => RecordStatsResponse | undefined } = {},
+) {
   return useQuery({
     queryKey: recordStatsQueryKey(babyId ?? '', query),
     enabled: Boolean(babyId),
     // 图表切换要求「点开就有」：访问过的维度/日期直接从缓存渲染
     staleTime: 60_000,
     gcTime: 10 * 60_000,
+    placeholderData: options.placeholderData,
     queryFn: () => fetchRecordStats(babyId!, query),
   });
 }

@@ -95,12 +95,26 @@ export function SegmentedControl<T extends string>({
   className,
   ariaLabel,
 }: SegmentedControlProps<T>) {
+  // 液体滑动指示器按等宽 segment 平移；找不到时回落到第一项，保持 thumb 可见
+  const activeIndex = Math.max(
+    0,
+    options.findIndex((option) => option.value === value),
+  );
+
   return (
     <View
       className={classNames(styles.segmented, 'glass-control', className)}
       role="tablist"
       aria-label={ariaLabel}
     >
+      <View
+        className={styles.segmentThumb}
+        style={{
+          width: `calc((100% - 8px) / ${options.length})`,
+          transform: `translateX(${activeIndex * 100}%)`,
+        }}
+        aria-hidden
+      />
       {options.map((option) => (
         <View
           key={option.value}

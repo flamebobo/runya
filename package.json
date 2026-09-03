@@ -23,7 +23,8 @@
     "build": "pnpm -r build",
     "db:generate": "drizzle-kit generate --config db/drizzle.config.ts",
     "db:migrate": "tsx db/scripts/migrate.ts",
-    "db:check": "tsx db/scripts/check-schema.ts"
+    "db:check": "tsx db/scripts/check-schema.ts",
+    "db:seed:knowledge": "tsx db/scripts/seed-knowledge.ts"
   },
   "devDependencies": {
     "@eslint/js": "^9.17.0",
