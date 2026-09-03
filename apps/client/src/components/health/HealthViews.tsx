@@ -30,6 +30,16 @@ const STATUS_LABEL: Record<
   CANCELED: { label: '已取消', className: styles.statusCanceled },
 };
 
+function toneClass(tone: SemanticTone) {
+  return {
+    apricot: styles.chipApricot,
+    sage: styles.chipSage,
+    lavender: styles.chipLavender,
+    sky: styles.chipSky,
+    blush: styles.chipBlush,
+  }[tone];
+}
+
 export function healthTypeLabel(type: string): string {
   return HEALTH_TYPE_META[type as HealthEventType]?.label ?? '健康事项';
 }
@@ -44,7 +54,10 @@ export function formatEventTime(ms: number): string {
   return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
 }
 
-export function formatReminderOffset(kind: string, customMinutes: number | null): string {
+export function formatReminderOffset(
+  kind: string,
+  customMinutes: number | null,
+): string {
   if (kind === 'D7') return '提前 7 天';
   if (kind === 'D3') return '提前 3 天';
   if (kind === 'D1') return '提前 1 天';
@@ -109,6 +122,83 @@ export function HealthCalendarStrip({
   );
 }
 
+/** 月历查看：相邻月份的日期也保留在网格中，点击后会同步切换当天事项。 */
+export function HealthMonthCalendar({
+  monthLabel,
+  days,
+  activeIso,
+  markedIso,
+  onSelect,
+  onPrevious,
+  onNext,
+}: {
+  monthLabel: string;
+  days: Array<{ iso: string; label: string; currentMonth: boolean }>;
+  activeIso: string;
+  markedIso: Set<string>;
+  onSelect: (iso: string) => void;
+  onPrevious: () => void;
+  onNext: () => void;
+}) {
+  return (
+    <View className={styles.monthCalendar} aria-label={`${monthLabel}健康日历`}>
+      <View className={styles.monthHeader}>
+        <View
+          className={styles.monthArrow}
+          role="button"
+          aria-label="上一个月"
+          onClick={onPrevious}
+        >
+          <Glyph name="chevron" size="sm" className={styles.monthArrowPrevious} />
+        </View>
+        <Text className={styles.monthLabel}>{monthLabel}</Text>
+        <View
+          className={styles.monthArrow}
+          role="button"
+          aria-label="下一个月"
+          onClick={onNext}
+        >
+          <Glyph name="chevron" size="sm" />
+        </View>
+      </View>
+      <View className={styles.monthWeekdays} aria-hidden>
+        {['日', '一', '二', '三', '四', '五', '六'].map((weekday) => (
+          <Text key={weekday}>{weekday}</Text>
+        ))}
+      </View>
+      <View className={styles.monthGrid}>
+        {days.map((day) => {
+          const active = day.iso === activeIso;
+          const marked = markedIso.has(day.iso);
+          return (
+            <View
+              key={day.iso}
+              className={classNames(
+                styles.monthDay,
+                !day.currentMonth ? styles.monthDayOutside : undefined,
+                active ? styles.monthDayActive : undefined,
+              )}
+              role="button"
+              aria-label={`${day.iso}${marked ? '，有健康事项' : ''}`}
+              aria-pressed={active}
+              onClick={() => onSelect(day.iso)}
+            >
+              <Text>{day.label}</Text>
+              <View
+                className={classNames(
+                  styles.monthDayDot,
+                  marked ? styles.monthDayDotVisible : undefined,
+                )}
+                aria-hidden
+              />
+            </View>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
 /** 下一事项卡：放在日历下，一眼看到最近要准备什么。 */
 export function HealthNextUpCard({
   event,
@@ -138,15 +228,17 @@ export function HealthNextUpCard({
         aria-label={`查看${event.title}`}
         onClick={onClick}
       >
-        <View className={classNames(styles.nextUpIcon, styles[`chip-${meta.tone}`])}>
+        <View className={classNames(styles.nextUpIcon, toneClass(meta.tone))}>
           <Glyph name={meta.glyph} size="lg" />
         </View>
         <View className={styles.nextUpBody}>
           <Text className={styles.nextUpCaption}>下一件事</Text>
-          <Text className={`text-section-title ${styles.nextUpTitle}`}>{event.title}</Text>
+          <Text className={`text-section-title ${styles.nextUpTitle}`}>
+            {event.title}
+          </Text>
           <Text className={styles.nextUpTime}>
-            {formatEventDate(event.scheduledAt)} · {formatEventTime(event.scheduledAt)} ·{' '}
-            {meta.label}
+            {formatEventDate(event.scheduledAt)} · {formatEventTime(event.scheduledAt)}{' '}
+            · {meta.label}
           </Text>
         </View>
         <View className={styles.nextUpChevron} aria-hidden>
@@ -182,7 +274,10 @@ export function HealthTypeChips({
         return (
           <View
             key={chip.value}
-            className={classNames(styles.typeChip, selected ? styles.typeChipSelected : undefined)}
+            className={classNames(
+              styles.typeChip,
+              selected ? styles.typeChipSelected : undefined,
+            )}
             role="tab"
             aria-selected={selected}
             onClick={() => onSelect(chip.value)}
@@ -218,7 +313,7 @@ export function HealthEventCard({
         onClick={onClick}
         onLongPress={onLongPressDelete}
       >
-        <View className={classNames(styles.eventIcon, styles[`chip-${meta.tone}`])}>
+        <View className={classNames(styles.eventIcon, toneClass(meta.tone))}>
           <Glyph name={meta.glyph} size="md" />
         </View>
         <View className={styles.eventBody}>
@@ -228,7 +323,12 @@ export function HealthEventCard({
               {status.label}
             </Text>
           </View>
-          <Text className={classNames(styles.eventTitle, done ? styles.eventTitleDone : undefined)}>
+          <Text
+            className={classNames(
+              styles.eventTitle,
+              done ? styles.eventTitleDone : undefined,
+            )}
+          >
             {event.title}
           </Text>
           <Text className={styles.eventTime}>
@@ -248,7 +348,10 @@ export function HealthEventCard({
 export function HealthStatusBadge({ status }: { status: HealthEventPublic['status'] }) {
   const meta = STATUS_LABEL[status] ?? STATUS_LABEL.UPCOMING;
   return (
-    <Text className={classNames(styles.eventStatus, meta.className)} aria-label={meta.label}>
+    <Text
+      className={classNames(styles.eventStatus, meta.className)}
+      aria-label={meta.label}
+    >
       {meta.label}
     </Text>
   );

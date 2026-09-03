@@ -33,6 +33,7 @@ import {
 } from '@/hooks/useGrowth';
 import { useFamilyRuntimeStore, useUiOverlayStore } from '@/stores/runtime';
 import { formatBabyAgeLabel } from '@/utils/babyAge';
+import { rootTabUrl } from '@/utils/rootNavigation';
 import styles from './index.module.scss';
 
 type GrowthView =
@@ -145,7 +146,7 @@ function GrowthBody() {
   function openRootTab(tab: 'today' | 'records' | 'memories' | 'family') {
     setDrawerOpen(false);
     setBottomNavActive(tab);
-    void Taro.reLaunch({ url: '/pages/index/index' });
+    void Taro.reLaunch({ url: rootTabUrl(tab) });
   }
 
   function renderView() {

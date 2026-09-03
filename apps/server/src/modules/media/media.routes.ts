@@ -15,58 +15,90 @@ import {
   assembleCompletedUpload,
   assertUploadActorPermission,
 } from './upload.service.js';
-import { processCompletedMedia } from './processing.service.js';
+import {
+  processCompletedMedia,
+  retryFailedMediaProcessing,
+} from './processing.service.js';
 import { checkMediaAccessPermission, getMediaFilePath } from './media.service.js';
 import { AppError } from '../../lib/errors.js';
+import { withIdempotency } from '../../lib/idempotency.js';
 
 export async function mediaRoutes(fastify: FastifyInstance) {
   // Support raw binary buffer parsing for chunk uploads
-  fastify.addContentTypeParser('application/octet-stream', { parseAs: 'buffer' }, (_req, payload, done) => {
-    done(null, payload);
-  });
-  fastify.addContentTypeParser('image/*', { parseAs: 'buffer' }, (_req, payload, done) => {
-    done(null, payload);
-  });
-  fastify.addContentTypeParser('audio/*', { parseAs: 'buffer' }, (_req, payload, done) => {
-    done(null, payload);
-  });
+  fastify.addContentTypeParser(
+    'application/octet-stream',
+    { parseAs: 'buffer' },
+    (_req, payload, done) => {
+      done(null, payload);
+    },
+  );
+  fastify.addContentTypeParser(
+    'image/*',
+    { parseAs: 'buffer' },
+    (_req, payload, done) => {
+      done(null, payload);
+    },
+  );
+  fastify.addContentTypeParser(
+    'audio/*',
+    { parseAs: 'buffer' },
+    (_req, payload, done) => {
+      done(null, payload);
+    },
+  );
 
   // POST /media/uploads - Init Upload Session
-  fastify.post('/media/uploads', { preHandler: requireAuth }, async (request, reply) => {
-    const userId = request.auth.userId!;
-    const body = initUploadBodySchema.parse(request.body);
+  fastify.post(
+    '/media/uploads',
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const userId = request.auth.userId!;
+      const body = initUploadBodySchema.parse(request.body);
 
-    // Get active family of user
-    const membership = await request.db.query.familyMembers.findFirst({
-      where: (fm, { and, eq }) =>
-        and(eq(fm.userId, userId), eq(fm.status, 'ACTIVE')),
-    });
-
-    if (!membership) {
-      throw new AppError('FAMILY_ACCESS_DENIED', '尚未加入任何家庭', 400);
-    }
-
-    if (body.babyId) {
-      const baby = await request.db.query.babies.findFirst({
-        where: (babies, { and, eq, isNull }) =>
-          and(
-            eq(babies.id, body.babyId!),
-            eq(babies.familyId, membership.familyId),
-            isNull(babies.deletedAt),
-          ),
+      // Get active family of user
+      const membership = await request.db.query.familyMembers.findFirst({
+        where: (fm, { and, eq }) => and(eq(fm.userId, userId), eq(fm.status, 'ACTIVE')),
       });
-      if (!baby) {
-        throw new AppError('FAMILY_ACCESS_DENIED', '無權為這個寶寶新增媒體', 403);
-      }
-    }
 
-    const result = await initUploadSession(request.db, userId, membership.familyId, body);
-    return createSuccessEnvelope(result, request.id);
-  });
+      if (!membership) {
+        throw new AppError('FAMILY_ACCESS_DENIED', '尚未加入任何家庭', 400);
+      }
+
+      if (body.babyId) {
+        const baby = await request.db.query.babies.findFirst({
+          where: (babies, { and, eq, isNull }) =>
+            and(
+              eq(babies.id, body.babyId!),
+              eq(babies.familyId, membership.familyId),
+              isNull(babies.deletedAt),
+            ),
+        });
+        if (!baby) {
+          throw new AppError('FAMILY_ACCESS_DENIED', '無權為這個寶寶新增媒體', 403);
+        }
+      }
+
+      return withIdempotency(fastify, request, reply, {
+        endpoint: 'POST /media/uploads',
+        userId,
+        payload: body,
+        handler: async () => ({
+          statusCode: 200,
+          body: createSuccessEnvelope(
+            await initUploadSession(request.db, userId, membership.familyId, body),
+            request.id,
+          ),
+        }),
+      });
+    },
+  );
 
   // PUT /media/uploads/:uploadId/parts/:partNo - Upload Part Chunk (token protected)
-  fastify.put('/media/uploads/:uploadId/parts/:partNo', async (request, reply) => {
-    const { uploadId, partNo: rawPartNo } = request.params as { uploadId: string; partNo: string };
+  fastify.put('/media/uploads/:uploadId/parts/:partNo', async (request, _reply) => {
+    const { uploadId, partNo: rawPartNo } = request.params as {
+      uploadId: string;
+      partNo: string;
+    };
     const partNo = parseInt(rawPartNo, 10);
 
     if (isNaN(partNo) || partNo < 1) {
@@ -96,12 +128,19 @@ export async function mediaRoutes(fastify: FastifyInstance) {
       throw new AppError('VALIDATION_ERROR', '分块数据不能为空', 400);
     }
 
-    const result = await saveUploadPart(request.db, uploadId, partNo, buffer);
+    const expectedSha256 = request.headers['x-part-sha256'] as string | undefined;
+    const result = await saveUploadPart(
+      request.db,
+      uploadId,
+      partNo,
+      buffer,
+      expectedSha256,
+    );
     return createSuccessEnvelope(result, request.id);
   });
 
   // GET /media/uploads/:uploadId - Query Upload State
-  fastify.get('/media/uploads/:uploadId', async (request, reply) => {
+  fastify.get('/media/uploads/:uploadId', async (request, _reply) => {
     const { uploadId } = request.params as { uploadId: string };
     const token =
       (request.headers['x-upload-token'] as string) ||
@@ -115,101 +154,148 @@ export async function mediaRoutes(fastify: FastifyInstance) {
   });
 
   // POST /media/uploads/:uploadId/complete - Complete Upload Assembly & Processing
-  fastify.post('/media/uploads/:uploadId/complete', { preHandler: requireAuth }, async (request, reply) => {
-    const { uploadId } = request.params as { uploadId: string };
-    const userId = request.auth.userId!;
-    const body = request.body ? completeUploadBodySchema.parse(request.body) : {};
+  fastify.post(
+    '/media/uploads/:uploadId/complete',
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const { uploadId } = request.params as { uploadId: string };
+      const userId = request.auth.userId!;
+      const body = request.body ? completeUploadBodySchema.parse(request.body) : {};
 
-    await assertUploadActorPermission(request.db, uploadId, userId);
-    const assembled = await assembleCompletedUpload(request.db, uploadId, body.finalSha256);
+      await assertUploadActorPermission(request.db, uploadId, userId);
+      return withIdempotency(fastify, request, reply, {
+        endpoint: `POST /media/uploads/${uploadId}/complete`,
+        userId,
+        payload: body,
+        handler: async () => {
+          const assembled = await assembleCompletedUpload(
+            request.db,
+            uploadId,
+            body.finalSha256,
+          );
 
-    const processed = await processCompletedMedia(
-      request.db,
-      assembled.mediaId,
-      uploadId,
-      assembled.assembledPath,
-      assembled.sha256,
-      assembled.sizeBytes,
-    );
+          if (assembled.alreadyProcessed) {
+            return {
+              statusCode: 200,
+              body: createSuccessEnvelope(
+                { mediaId: assembled.mediaId, status: 'READY' as const },
+                request.id,
+              ),
+            };
+          }
 
-    return createSuccessEnvelope(processed, request.id);
-  });
+          const processed = await processCompletedMedia(
+            request.db,
+            assembled.mediaId,
+            uploadId,
+            assembled.assembledPath,
+            assembled.sha256,
+            assembled.sizeBytes,
+          );
+
+          return {
+            statusCode: 200,
+            body: createSuccessEnvelope(processed, request.id),
+          };
+        },
+      });
+    },
+  );
 
   // GET /media/:id/content - Authenticated Content Delivery with Range Request Support
-  fastify.get('/media/:id/content', { preHandler: requireAuth }, async (request, reply) => {
+  fastify.get(
+    '/media/:id/content',
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const userId = request.auth.userId!;
+      const { id } = request.params as { id: string };
+
+      const media = await checkMediaAccessPermission(request.db, userId, id);
+      const storageKey = media.storageKey || media.originalStorageKey;
+
+      if (!storageKey) {
+        throw new AppError('NOT_FOUND', '媒体资源文件尚未就绪', 404);
+      }
+
+      const filePath = await getMediaFilePath(storageKey);
+      const stat = await fsp.stat(filePath);
+      const totalSize = stat.size;
+
+      const rawRange = request.headers.range;
+      const rangeHeader = Array.isArray(rawRange) ? rawRange[0] : rawRange;
+
+      if (rangeHeader) {
+        const match = rangeHeader.match(/bytes=(\d+)-(\d+)?/);
+        if (match) {
+          const start = parseInt(match[1], 10);
+          const end = match[2] ? parseInt(match[2], 10) : totalSize - 1;
+
+          if (start >= totalSize || end >= totalSize || start > end) {
+            reply.status(416).headers({
+              'Content-Range': `bytes */${totalSize}`,
+            });
+            return reply.send(
+              new AppError('VALIDATION_ERROR', '请求的 Range 超出范围', 416),
+            );
+          }
+
+          const chunkSize = end - start + 1;
+          const stream = fs.createReadStream(filePath, { start, end });
+
+          reply.raw.statusCode = 206;
+          reply.raw.setHeader('Content-Range', `bytes ${start}-${end}/${totalSize}`);
+          reply.raw.setHeader('Accept-Ranges', 'bytes');
+          reply.raw.setHeader('Content-Length', chunkSize.toString());
+          reply.raw.setHeader('Content-Type', media.mimeType);
+
+          return reply.send(stream);
+        }
+      }
+
+      // Full Content
+      const stream = fs.createReadStream(filePath);
+      reply.raw.statusCode = 200;
+      reply.raw.setHeader('Accept-Ranges', 'bytes');
+      reply.raw.setHeader('Content-Length', totalSize.toString());
+      reply.raw.setHeader('Content-Type', media.mimeType);
+
+      return reply.send(stream);
+    },
+  );
+
+  fastify.post('/media/:id/retry', { preHandler: requireAuth }, async (request) => {
     const userId = request.auth.userId!;
     const { id } = request.params as { id: string };
-
-    const media = await checkMediaAccessPermission(request.db, userId, id);
-    const storageKey = media.storageKey || media.originalStorageKey;
-
-    if (!storageKey) {
-      throw new AppError('NOT_FOUND', '媒体资源文件尚未就绪', 404);
-    }
-
-    const filePath = await getMediaFilePath(storageKey);
-    const stat = await fsp.stat(filePath);
-    const totalSize = stat.size;
-
-    const rawRange = request.headers.range;
-    const rangeHeader = Array.isArray(rawRange) ? rawRange[0] : rawRange;
-
-    if (rangeHeader) {
-      const match = rangeHeader.match(/bytes=(\d+)-(\d+)?/);
-      if (match) {
-        const start = parseInt(match[1], 10);
-        const end = match[2] ? parseInt(match[2], 10) : totalSize - 1;
-
-        if (start >= totalSize || end >= totalSize || start > end) {
-          reply.status(416).headers({
-            'Content-Range': `bytes */${totalSize}`,
-          });
-          return reply.send(new AppError('VALIDATION_ERROR', '请求的 Range 超出范围', 416));
-        }
-
-        const chunkSize = end - start + 1;
-        const stream = fs.createReadStream(filePath, { start, end });
-
-        reply.raw.statusCode = 206;
-        reply.raw.setHeader('Content-Range', `bytes ${start}-${end}/${totalSize}`);
-        reply.raw.setHeader('Accept-Ranges', 'bytes');
-        reply.raw.setHeader('Content-Length', chunkSize.toString());
-        reply.raw.setHeader('Content-Type', media.mimeType);
-
-        return reply.send(stream);
-      }
-    }
-
-    // Full Content
-    const stream = fs.createReadStream(filePath);
-    reply.raw.statusCode = 200;
-    reply.raw.setHeader('Accept-Ranges', 'bytes');
-    reply.raw.setHeader('Content-Length', totalSize.toString());
-    reply.raw.setHeader('Content-Type', media.mimeType);
-
-    return reply.send(stream);
+    await checkMediaAccessPermission(request.db, userId, id);
+    const result = await retryFailedMediaProcessing(request.db, id);
+    return createSuccessEnvelope(result, request.id);
   });
 
   // GET /media/:id/thumbnail - Authenticated Thumbnail Delivery
-  fastify.get('/media/:id/thumbnail', { preHandler: requireAuth }, async (request, reply) => {
-    const userId = request.auth.userId!;
-    const { id } = request.params as { id: string };
+  fastify.get(
+    '/media/:id/thumbnail',
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const userId = request.auth.userId!;
+      const { id } = request.params as { id: string };
 
-    const media = await checkMediaAccessPermission(request.db, userId, id);
-    const thumbKey = media.thumbnailStorageKey || media.storageKey || media.originalStorageKey;
+      const media = await checkMediaAccessPermission(request.db, userId, id);
+      const thumbKey =
+        media.thumbnailStorageKey || media.storageKey || media.originalStorageKey;
 
-    if (!thumbKey) {
-      throw new AppError('NOT_FOUND', '媒体缩略图不存在', 404);
-    }
+      if (!thumbKey) {
+        throw new AppError('NOT_FOUND', '媒体缩略图不存在', 404);
+      }
 
-    const filePath = await getMediaFilePath(thumbKey);
-    const stat = await fsp.stat(filePath);
-    const stream = fs.createReadStream(filePath);
+      const filePath = await getMediaFilePath(thumbKey);
+      const stat = await fsp.stat(filePath);
+      const stream = fs.createReadStream(filePath);
 
-    reply.raw.statusCode = 200;
-    reply.raw.setHeader('Content-Length', stat.size.toString());
-    reply.raw.setHeader('Content-Type', media.mimeType);
+      reply.raw.statusCode = 200;
+      reply.raw.setHeader('Content-Length', stat.size.toString());
+      reply.raw.setHeader('Content-Type', media.mimeType);
 
-    return reply.send(stream);
-  });
+      return reply.send(stream);
+    },
+  );
 }

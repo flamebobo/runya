@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { runMigrations } from '@runew/db';
+import { mediaFiles, runMigrations } from '@runew/db';
 import { createUlid } from '@runew/shared-utils';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { buildApp } from '../../app.js';
@@ -103,7 +103,6 @@ describe('Memories & Time Capsule API', () => {
         favorite: true,
       },
     });
-    console.log('CREATE RES PAYLOAD:', createRes.payload);
     expect(createRes.statusCode).toBe(200);
     const photo = createRes.json().data;
     expect(photo.id).toBeDefined();
@@ -280,6 +279,7 @@ describe('Memories & Time Capsule API', () => {
     expect(sealRes.statusCode).toBe(200);
     const sealedCapsule = sealRes.json().data;
     expect(sealedCapsule.state).toBe('SEALED');
+    expect(sealedCapsule.body).toBe('');
 
     // 4. Edit SEALED Capsule is DENIED (409 CAPSULE_SEALED)
     const patchSealedRes = await app.inject({
@@ -292,6 +292,16 @@ describe('Memories & Time Capsule API', () => {
     });
     expect(patchSealedRes.statusCode).toBe(409);
     expect(patchSealedRes.json().error.code).toBe('CAPSULE_SEALED');
+
+    // Favoriting is metadata-only and remains available without reopening the payload.
+    const favoriteSealedRes = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/memories/capsules/${capsule.id}/favorite`,
+      headers: { ...authHeaders, 'idempotency-key': createUlid() },
+      payload: { favorite: true },
+    });
+    expect(favoriteSealedRes.statusCode).toBe(200);
+    expect(favoriteSealedRes.json().data.favorite).toBe(true);
 
     // 5. Open before openAt is DENIED
     const openEarlyRes = await app.inject({
@@ -323,6 +333,72 @@ describe('Memories & Time Capsule API', () => {
     });
     expect(openSuccessRes.statusCode).toBe(200);
     expect(openSuccessRes.json().data.state).toBe('OPENED');
+    expect(openSuccessRes.json().data.body).toBe('时间到了，现在开启！');
+
+    const sealAgainRes = await app.inject({
+      method: 'POST',
+      url: `/api/v1/memories/capsules/${pastCapsule.id}/seal`,
+      headers: authHeaders,
+    });
+    expect(sealAgainRes.statusCode).toBe(400);
+    const openAgainRes = await app.inject({
+      method: 'POST',
+      url: `/api/v1/memories/capsules/${pastCapsule.id}/open`,
+      headers: authHeaders,
+    });
+    expect(openAgainRes.statusCode).toBe(400);
+  });
+
+  it('supports audio memory delete and restore without deleting its media metadata', async () => {
+    const member = await app.db.query.familyMembers.findFirst({
+      where: (row, { eq }) => eq(row.familyId, familyId),
+    });
+    expect(member?.userId).toBeTruthy();
+    const mediaId = createUlid();
+    const now = Date.now();
+    await app.db.insert(mediaFiles).values({
+      id: mediaId,
+      familyId,
+      babyId,
+      ownerUserId: member!.userId,
+      mediaType: 'AUDIO',
+      status: 'READY',
+      mimeType: 'audio/aac',
+      originalFilename: 'memory.aac',
+      sizeBytes: 321,
+      sha256: '0'.repeat(64),
+      keepOriginal: true,
+      durationMs: 1000,
+      createdAt: now,
+      updatedAt: now,
+      version: 1,
+    });
+
+    const createRes = await app.inject({
+      method: 'POST',
+      url: `/api/v1/babies/${babyId}/memories/audios`,
+      headers: authHeaders,
+      payload: { mediaId, title: '第一声笑', category: 'LAUGH', happenedAt: now },
+    });
+    expect(createRes.statusCode).toBe(200);
+    const audioId = createRes.json().data.id as string;
+    const deleteRes = await app.inject({
+      method: 'DELETE',
+      url: `/api/v1/memories/audios/${audioId}`,
+      headers: authHeaders,
+    });
+    expect(deleteRes.statusCode).toBe(200);
+    const restoreRes = await app.inject({
+      method: 'POST',
+      url: `/api/v1/memories/audios/${audioId}/restore`,
+      headers: authHeaders,
+    });
+    expect(restoreRes.statusCode).toBe(200);
+    expect(restoreRes.json().data.media.id).toBe(mediaId);
+    const mediaAfter = await app.db.query.mediaFiles.findFirst({
+      where: (row, { eq }) => eq(row.id, mediaId),
+    });
+    expect(mediaAfter?.status).toBe('READY');
   });
 
   it('returns Memories Home Summary', async () => {

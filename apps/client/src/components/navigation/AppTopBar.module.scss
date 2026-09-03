@@ -1,11 +1,49 @@
 .root {
+  position: sticky;
+  top: 0;
+  z-index: 20;
   display: grid;
   grid-template-columns: 48px minmax(0, 1fr) auto;
   align-items: center;
   column-gap: 10px;
   width: 100%;
   min-width: 0;
-  padding: 4px 20px 16px 12px;
+  padding: max(4px, var(--safe-top)) 20px 16px 12px;
+  background:
+    linear-gradient(180deg, rgba(251, 247, 240, 0.96), rgba(251, 247, 240, 0.76) 72%, rgba(251, 247, 240, 0));
+  backdrop-filter: blur(18px) saturate(1.16);
+  -webkit-backdrop-filter: blur(18px) saturate(1.16);
+  transition:
+    padding var(--motion-slow) var(--motion-ease),
+    background var(--motion-slow) var(--motion-ease),
+    box-shadow var(--motion-slow) var(--motion-ease);
+  will-change: padding, background;
+}
+
+.root::after {
+  content: '';
+  position: absolute;
+  left: 24px;
+  right: 24px;
+  bottom: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.82), transparent);
+  opacity: 0;
+  transition: opacity var(--motion-slow) var(--motion-ease);
+  pointer-events: none;
+}
+
+.collapsed {
+  padding-top: max(2px, var(--safe-top));
+  padding-bottom: 4px;
+  background:
+    linear-gradient(180deg, rgba(251, 247, 240, 0.98), rgba(251, 247, 240, 0.9)),
+    rgba(251, 247, 240, 0.86);
+  box-shadow: 0 8px 20px rgba(125, 96, 64, 0.08);
+}
+
+.collapsed::after {
+  opacity: 1;
 }
 
 .left,
@@ -31,6 +69,18 @@
   color: var(--color-text-primary);
   text-wrap: balance;
   text-shadow: var(--text-emboss);
+  transition:
+    font-size var(--motion-slow) var(--motion-ease),
+    line-height var(--motion-slow) var(--motion-ease),
+    transform var(--motion-slow) var(--motion-ease);
+}
+
+.collapsed .title {
+  overflow: hidden;
+  font-size: 18px;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .subtitle {
@@ -39,6 +89,19 @@
   font-size: var(--font-caption);
   color: var(--color-text-secondary);
   line-height: 1.4;
+  max-height: 24px;
+  opacity: 1;
+  overflow: hidden;
+  transition:
+    max-height var(--motion-slow) var(--motion-ease),
+    margin-top var(--motion-slow) var(--motion-ease),
+    opacity var(--motion-base) var(--motion-ease);
+}
+
+.collapsed .subtitle {
+  max-height: 0;
+  margin-top: 0;
+  opacity: 0;
 }
 
 .right {

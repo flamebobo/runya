@@ -17,6 +17,7 @@ export interface ApiRequestOptions {
   idempotencyKey?: string;
   ifMatch?: string;
   auth?: boolean;
+  authToken?: string;
 }
 
 export class ApiError extends Error {
@@ -43,10 +44,16 @@ export async function apiRequest<T>(
 ): Promise<T> {
   const platform = getClientPlatform();
   const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
     'X-Client-Platform': platform,
     'X-Client-Version': '0.1.0',
   };
+
+  // Do not label body-less POST/DELETE requests as JSON. Fastify correctly
+  // rejects an empty JSON body, while capsule seal/open and restore are
+  // intentionally body-less mutations.
+  if (options.body !== undefined) {
+    headers['Content-Type'] = 'application/json';
+  }
 
   if (options.idempotencyKey) {
     headers['Idempotency-Key'] = options.idempotencyKey;
@@ -56,7 +63,7 @@ export async function apiRequest<T>(
   }
 
   if (platform === 'WEAPP' && options.auth !== false) {
-    const token = Taro.getStorageSync('runew_session_token');
+    const token = options.authToken ?? Taro.getStorageSync('runew_session_token');
     if (token) {
       headers.Authorization = `Bearer ${token}`;
     }

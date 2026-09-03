@@ -4,11 +4,12 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
-  background: rgba(255, 255, 255, 0.7);
-  backdrop-filter: blur(12px);
-  border-radius: 18px;
-  border: 1px solid rgba(240, 220, 205, 0.5);
-  box-shadow: 0 4px 14px rgba(210, 180, 160, 0.08);
+  background: rgba(255, 252, 247, 0.54);
+  backdrop-filter: blur(18px) saturate(1.14);
+  -webkit-backdrop-filter: blur(18px) saturate(1.14);
+  border-radius: var(--radius-card);
+  border: 1px solid var(--color-border-white);
+  box-shadow: var(--shadow-card);
 
   .headerRow {
     display: flex;
@@ -18,15 +19,15 @@
     .title {
       font-size: 15px;
       font-weight: 600;
-      color: #4a382c;
+      color: var(--color-text-primary);
     }
 
     .badge {
       font-size: 11px;
       padding: 3px 8px;
       border-radius: 12px;
-      background: #fcf4ec;
-      color: #d97736;
+      background: var(--color-apricot-pale);
+      color: var(--color-apricot-strong);
       font-weight: 500;
     }
   }
@@ -37,17 +38,24 @@
     gap: 12px;
 
     .playBtn {
-      width: 40px;
-      height: 40px;
+      width: 48px;
+      min-width: 48px;
+      height: 48px;
       border-radius: 50%;
-      background: linear-gradient(135deg, #ff9f59, #f27c38);
-      color: #ffffff;
+      background: linear-gradient(
+        135deg,
+        rgba(247, 224, 199, 0.96),
+        rgba(255, 252, 247, 0.88)
+      );
+      color: var(--color-apricot-strong);
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 16px;
+      font-size: 12px;
+      font-weight: 700;
       cursor: pointer;
-      box-shadow: 0 4px 10px rgba(242, 124, 56, 0.3);
+      border: 1px solid rgba(243, 160, 91, 0.42);
+      box-shadow: var(--shadow-control);
       transition: transform 0.2s ease;
 
       &:active {
@@ -61,30 +69,66 @@
       flex-direction: column;
       gap: 4px;
 
-      .progressBarBg {
+      .progressSlider {
         width: 100%;
-        height: 6px;
-        border-radius: 3px;
-        background: #f2e6dc;
-        overflow: hidden;
-        position: relative;
-
-        .progressBarFill {
-          height: 100%;
-          background: linear-gradient(90deg, #ff9f59, #f27c38);
-          border-radius: 3px;
-          transition: width 0.1s linear;
-        }
+        margin: 0;
+        accent-color: var(--color-apricot-strong);
       }
 
       .timeLabel {
         display: flex;
         justify-content: space-between;
         font-size: 11px;
-        color: #9c8a7c;
+        color: var(--color-text-secondary);
       }
     }
   }
+}
+
+.mediaLoading {
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: 132px;
+  background: linear-gradient(
+    135deg,
+    rgba(247, 224, 199, 0.72),
+    rgba(232, 243, 249, 0.68)
+  );
+}
+
+.mediaStrip {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 4px 0 12px;
+}
+
+.mediaThumb,
+.mediaVideo {
+  display: block;
+  width: 100%;
+  min-height: 140px;
+  max-height: 320px;
+  overflow: hidden;
+  object-fit: cover;
+  border-radius: 14px;
+  background: rgba(247, 224, 199, 0.42);
+}
+
+.mediaPending {
+  display: flex;
+  min-height: 48px;
+  padding: 10px 12px;
+  box-sizing: border-box;
+  align-items: center;
+  gap: 8px;
+  color: #7a6657;
+  font-size: 12px;
+  line-height: 1.45;
+  background: rgba(255, 252, 247, 0.6);
+  border: 1px solid rgba(238, 226, 215, 0.8);
+  border-radius: 12px;
 }
 
 .capsuleCard {
@@ -100,13 +144,21 @@
   }
 
   &.sealed {
-    background: linear-gradient(135deg, rgba(255, 248, 240, 0.9), rgba(250, 240, 230, 0.8));
+    background: linear-gradient(
+      135deg,
+      rgba(255, 248, 240, 0.9),
+      rgba(250, 240, 230, 0.8)
+    );
     border: 1px solid rgba(230, 190, 150, 0.4);
     box-shadow: 0 6px 18px rgba(200, 160, 130, 0.12);
   }
 
   &.opened {
-    background: linear-gradient(135deg, rgba(255, 250, 235, 0.95), rgba(255, 242, 215, 0.9));
+    background: linear-gradient(
+      135deg,
+      rgba(255, 250, 235, 0.95),
+      rgba(255, 242, 215, 0.9)
+    );
     border: 1px solid rgba(245, 205, 120, 0.6);
     box-shadow: 0 8px 24px rgba(235, 175, 70, 0.18);
   }

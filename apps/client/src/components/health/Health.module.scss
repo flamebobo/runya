@@ -107,6 +107,96 @@
   background: var(--color-apricot-strong);
 }
 
+/* 月历查看：保持 48px 触控热区，并让事项日期有轻轻的标记。 */
+
+.monthCalendar {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.monthHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 4px;
+}
+
+.monthArrow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  color: var(--color-text-secondary);
+}
+
+.monthArrowPrevious {
+  transform: rotate(180deg);
+}
+
+.monthLabel {
+  font-size: var(--font-body);
+  font-weight: 800;
+  color: var(--color-text-primary);
+}
+
+.monthWeekdays,
+.monthGrid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.monthWeekdays {
+  padding: 0 2px;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-micro);
+  text-align: center;
+}
+
+.monthGrid {
+  padding: 0 2px;
+}
+
+.monthDay {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  min-width: 0;
+  min-height: 48px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-chip);
+  color: var(--color-text-primary);
+  font-size: var(--font-caption);
+  font-weight: 700;
+}
+
+.monthDayOutside {
+  color: var(--color-text-tertiary);
+  opacity: 0.52;
+}
+
+.monthDayActive {
+  border-color: rgba(155, 196, 163, 0.42);
+  color: var(--color-sage-strong);
+  background: var(--color-sage-soft);
+}
+
+.monthDayDot {
+  position: absolute;
+  bottom: 5px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: transparent;
+}
+
+.monthDayDotVisible {
+  background: var(--color-apricot-strong);
+}
+
 /* ---------- 下一事项 ---------- */
 
 .nextUp {
@@ -619,4 +709,269 @@
 
 .attachmentGlyph {
   flex: 0 0 auto;
+}
+
+.formSectionTitle {
+  margin: 0 4px 2px;
+}
+
+.detailHeroCopy {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.detailType {
+  font-size: var(--font-caption);
+  font-weight: 700;
+  color: var(--color-text-secondary);
+}
+
+.detailTitle {
+  overflow: hidden;
+  font-size: var(--font-page-title);
+  font-weight: 800;
+  line-height: 1.3;
+  color: var(--color-text-primary);
+  text-overflow: ellipsis;
+  text-shadow: var(--text-emboss);
+  white-space: nowrap;
+}
+
+.detailLead {
+  padding-left: 48px;
+  font-size: var(--font-caption);
+  line-height: 1.5;
+  color: var(--color-text-secondary);
+}
+
+.reminderHeading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 0 4px;
+}
+
+.reminderHeadingTitle {
+  margin: 0;
+}
+
+.reminderHeadingCaption {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-size: var(--font-caption);
+  color: var(--color-text-secondary);
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.attachmentCard {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px;
+}
+
+.attachmentStatus {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  color: var(--color-sage-strong);
+  font-size: var(--font-caption);
+}
+
+.attachmentPreviewWrap {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 4px 0 8px;
+}
+
+.attachmentPreview,
+.attachmentPreviewFallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 72px;
+  height: 72px;
+  flex: 0 0 72px;
+  overflow: hidden;
+  border: 1px solid var(--color-border-warm);
+  border-radius: var(--radius-control);
+  color: var(--color-sky-strong);
+  background: var(--color-sky-soft);
+}
+
+.attachmentPreview {
+  cursor: pointer;
+  object-fit: cover;
+}
+
+.attachmentPreviewCopy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.attachmentPreviewTitle {
+  overflow: hidden;
+  font-size: var(--font-body);
+  font-weight: 700;
+  color: var(--color-text-primary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.attachmentPreviewCaption {
+  font-size: var(--font-caption);
+  line-height: 1.5;
+  color: var(--color-text-secondary);
+}
+
+.formColumns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.reminderTrigger {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 58px;
+  padding: 0 4px 14px;
+  border-bottom: 1px solid var(--color-border-warm);
+  cursor: pointer;
+}
+
+.reminderTriggerIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  flex: 0 0 38px;
+  border-radius: 50%;
+  color: var(--color-sky-strong);
+  background: var(--color-sky-soft);
+}
+
+.reminderTriggerBody {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.reminderTriggerTitle {
+  font-size: var(--font-body);
+  font-weight: 800;
+  color: var(--color-text-primary);
+}
+
+.reminderTriggerSummary {
+  overflow: hidden;
+  color: var(--color-text-secondary);
+  font-size: var(--font-caption);
+  line-height: 1.45;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.toggle {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 44px;
+  height: 26px;
+  padding: 3px;
+  flex: 0 0 44px;
+  border: 1px solid var(--color-border-warm);
+  border-radius: 999px;
+  background: rgba(255, 252, 247, 0.62);
+  transition: background var(--motion-fast) var(--motion-ease);
+}
+
+.toggleKnob {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--color-text-tertiary);
+  transition: transform var(--motion-fast) var(--motion-ease);
+}
+
+.toggleOn {
+  background: var(--color-sage-soft);
+  border-color: rgba(92, 148, 102, 0.35);
+}
+
+.toggleOn .toggleKnob {
+  background: var(--color-sage-strong);
+  transform: translateX(18px);
+}
+
+.attachmentCopy {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.attachmentTitle {
+  font-size: var(--font-body);
+  font-weight: 700;
+  color: var(--color-text-primary);
+}
+
+.attachmentCaption,
+.permissionCopy {
+  font-size: var(--font-caption);
+  line-height: 1.5;
+  color: var(--color-text-secondary);
+}
+
+.attachmentPending {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 8px 4px 0;
+  color: var(--color-sage-strong);
+  font-size: var(--font-caption);
+}
+
+.attachmentRemove {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  margin-left: auto;
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+}
+
+.formMessage,
+.formError {
+  display: block;
+  padding: 0 4px;
+  font-size: var(--font-caption);
+  line-height: 1.5;
+}
+
+.formMessage {
+  color: var(--color-sage-strong);
+}
+
+.formError {
+  color: var(--color-danger-text);
 }

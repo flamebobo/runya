@@ -5,6 +5,7 @@ import { BottomNav } from './navigation/BottomNav';
 import { PrimaryActionButton } from './buttons';
 import { GlassDateField } from './forms';
 import { ChoiceCard } from './shell/ChoiceCard';
+import { AddMomentOverlay } from './overlay/AddMomentOverlay';
 
 describe('design system components', () => {
   it('renders BottomNav with five hit areas', () => {
@@ -18,6 +19,15 @@ describe('design system components', () => {
     expect(screen.getByLabelText('留下这一刻')).toBeTruthy();
     expect(screen.getByLabelText('回忆')).toBeTruthy();
     expect(screen.getByLabelText('小家')).toBeTruthy();
+  });
+
+  it('keeps memory capture as one entry in the central add flow', () => {
+    render(<AddMomentOverlay open onSelect={() => undefined} />);
+
+    expect(screen.getByRole('button', { name: '回忆' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: '照片' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '声音' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '宝宝语录' })).toBeNull();
   });
 
   it('renders the side drawer with 11 items and a backdrop', () => {

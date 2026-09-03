@@ -2,7 +2,12 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { createUlid, utcNowMs } from '@runew/shared-utils';
-import { healthEvents, jobLocks, notifications as notificationsTable, scheduledNotifications } from '@runew/db';
+import { notificationPreferencesSchema } from '@runew/contracts';
+import {
+  jobLocks,
+  notifications as notificationsTable,
+  scheduledNotifications,
+} from '@runew/db';
 import { and, eq } from 'drizzle-orm';
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { buildApp } from '../../app.js';
@@ -133,7 +138,7 @@ describe('notification scheduler', () => {
   }
 
   it('delivers due notifications exactly once, even across scheduler restarts', async () => {
-    const family = await readyFamily();
+    const family = await readyFamily({ dndEnabled: false });
     const { eventId, reminderId } = await seedDue({
       userId: family.userId,
       babyId: family.babyId,
@@ -163,10 +168,13 @@ describe('notification scheduler', () => {
       .from(notificationsTable)
       .where(and(eq(notificationsTable.targetId, eventId)));
     expect(delivered).toHaveLength(1);
+    expect(delivered[0]!.targetType).toBe('HEALTH_EVENT');
+    expect(delivered[0]!.targetId).toBe(eventId);
+    expect(delivered[0]!.body).not.toMatch(/诊断|风险判断|医疗结论/);
   });
 
   it('uses job locks so concurrent ticks do not double-dispatch', async () => {
-    const family = await readyFamily();
+    const family = await readyFamily({ dndEnabled: false });
     const { reminderId } = await seedDue({
       userId: family.userId,
       babyId: family.babyId,
@@ -236,8 +244,40 @@ describe('notification scheduler', () => {
     expect(rows[0]!.status).toBe('SENT');
   });
 
-  it('marks notifications read individually and all at once', async () => {
+  it('does not dispatch reminders after the source event is completed', async () => {
     const family = await readyFamily();
+    const { eventId, reminderId } = await seedDue({
+      userId: family.userId,
+      babyId: family.babyId,
+      headers: family.headers,
+      fireAt: utcNowMs() - 1000,
+    });
+    const completed = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/health/events/${eventId}`,
+      headers: family.headers,
+      payload: { status: 'COMPLETED' },
+    });
+    expect(completed.statusCode).toBe(200);
+
+    const scheduler = startScheduler(app.db, app.log);
+    await scheduler.runOnce();
+    scheduler.stop();
+
+    const scheduled = await app.db
+      .select()
+      .from(scheduledNotifications)
+      .where(eq(scheduledNotifications.sourceId, reminderId));
+    expect(scheduled[0]!.status).toBe('CANCELED');
+    const delivered = await app.db
+      .select()
+      .from(notificationsTable)
+      .where(eq(notificationsTable.targetId, eventId));
+    expect(delivered).toHaveLength(0);
+  });
+
+  it('marks notifications read individually and all at once', async () => {
+    const family = await readyFamily({ dndEnabled: false });
     await seedDue({
       userId: family.userId,
       babyId: family.babyId,
@@ -254,7 +294,10 @@ describe('notification scheduler', () => {
       headers: family.headers,
     });
     expect(list.statusCode).toBe(200);
-    const items = list.json().data.items as Array<{ id: string; readAt: number | null }>;
+    const items = list.json().data.items as Array<{
+      id: string;
+      readAt: number | null;
+    }>;
     expect(items.length).toBeGreaterThan(0);
     expect(list.json().data.unreadCount).toBe(items.length);
 
@@ -297,6 +340,9 @@ describe('notification scheduler', () => {
       headers: family.headers,
     });
     expect(initial.statusCode).toBe(200);
+    expect(() =>
+      notificationPreferencesSchema.parse(initial.json().data),
+    ).not.toThrow();
     expect(initial.json().data.dndStartMinute).toBe(21 * 60);
     expect(initial.json().data.dndEndMinute).toBe(8 * 60);
 
@@ -321,7 +367,7 @@ describe('notification scheduler', () => {
   });
 
   it('releases expired job locks so a fresh process can take over', async () => {
-    const family = await readyFamily();
+    const family = await readyFamily({ dndEnabled: false });
     const { reminderId } = await seedDue({
       userId: family.userId,
       babyId: family.babyId,

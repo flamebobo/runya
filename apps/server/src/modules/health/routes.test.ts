@@ -2,10 +2,10 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { createUlid } from '@runew/shared-utils';
-import { runMigrations } from '@runew/db';
+import { healthReminders, runMigrations, scheduledNotifications } from '@runew/db';
+import { eq } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { buildApp } from '../../app.js';
-import { startScheduler } from '../notifications/scheduler.js';
 
 const WEAPP_HEADERS = { 'x-client-platform': 'WEAPP' };
 
@@ -98,6 +98,7 @@ describe('health api', () => {
     return response.json().data as {
       id: string;
       version: number;
+      scheduledAt: number;
       reminder: { offsets: Array<{ id: string; kind: string; fireAt: number }> };
     };
   }
@@ -127,6 +128,31 @@ describe('health api', () => {
     expect(patched.json().data.title).toBe('满月体检（改约）');
     expect(patched.json().data.status).toBe('COMPLETED');
     expect(patched.json().data.completedAt).toBeTruthy();
+
+    const completedReminders = await app.db
+      .select()
+      .from(healthReminders)
+      .where(eq(healthReminders.healthEventId, created.id));
+    expect(completedReminders.every((item) => item.status === 'CANCELED')).toBe(true);
+    const completedReminderIds = new Set(completedReminders.map((item) => item.id));
+    const completedSchedules = (
+      await app.db
+        .select()
+        .from(scheduledNotifications)
+        .where(eq(scheduledNotifications.sourceType, 'HEALTH_REMINDER'))
+    ).filter((item) => completedReminderIds.has(item.sourceId));
+    expect(completedSchedules.every((item) => item.status === 'CANCELED')).toBe(true);
+
+    // 终态事项编辑提醒时仍保持 COMPLETED，不能被 PUT 意外重开。
+    const reminderEdit = await app.inject({
+      method: 'PUT',
+      url: `/api/v1/health/events/${created.id}/reminders`,
+      headers: family.headers,
+      payload: { offsets: [{ kind: 'D1' }] },
+    });
+    expect(reminderEdit.statusCode).toBe(200);
+    expect(reminderEdit.json().data.status).toBe('COMPLETED');
+    expect(reminderEdit.json().data.reminder.offsets).toHaveLength(0);
 
     // If-Match 版本冲突（ETag 契约格式是 "v{version}"）。
     const stale = await app.inject({
@@ -198,7 +224,9 @@ describe('health api', () => {
 
   it('replaces reminders via PUT and cancels a single reminder via DELETE', async () => {
     const family = await readyFamily();
-    const created = await createEvent(family, { reminder: { offsets: [{ kind: 'D3' }] } });
+    const created = await createEvent(family, {
+      reminder: { offsets: [{ kind: 'D3' }] },
+    });
     expect(created.reminder.offsets[0]!.kind).toBe('D3');
 
     // PUT 整体替换：D3 → D7 + SAME_DAY。
@@ -206,7 +234,9 @@ describe('health api', () => {
       method: 'PUT',
       url: `/api/v1/health/events/${created.id}/reminders`,
       headers: family.headers,
-      payload: { offsets: [{ kind: 'D7' }, { kind: 'SAME_DAY', allowDndOverride: true }] },
+      payload: {
+        offsets: [{ kind: 'D7' }, { kind: 'SAME_DAY', allowDndOverride: true }],
+      },
     });
     expect(replaced.statusCode).toBe(200);
     const offsets = replaced.json().data.reminder.offsets;
@@ -246,11 +276,71 @@ describe('health api', () => {
       payload: { scheduledAt: newScheduledAt },
     });
     expect(moved.statusCode).toBe(200);
-    const after = moved.json().data.reminder.offsets.map((o: { fireAt: number }) => o.fireAt);
+    const after = moved
+      .json()
+      .data.reminder.offsets.map((o: { fireAt: number }) => o.fireAt);
     expect(after).not.toEqual(before);
     // D1 提醒 = scheduledAt - 24h。
     const dayMs = 24 * 60 * 60 * 1000;
     expect(after).toContain(newScheduledAt - dayMs);
+  });
+
+  it('cancels all pending reminders when an event is canceled', async () => {
+    const family = await readyFamily();
+    const created = await createEvent(family);
+    const canceled = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/health/events/${created.id}`,
+      headers: family.headers,
+      payload: { status: 'CANCELED' },
+    });
+    expect(canceled.statusCode).toBe(200);
+    expect(canceled.json().data.status).toBe('CANCELED');
+
+    const reminders = await app.db
+      .select()
+      .from(healthReminders)
+      .where(eq(healthReminders.healthEventId, created.id));
+    expect(reminders.every((item) => item.status === 'CANCELED')).toBe(true);
+  });
+
+  it('restores a deleted upcoming event with its active reminders', async () => {
+    const family = await readyFamily();
+    const created = await createEvent(family);
+    const deleted = await app.inject({
+      method: 'DELETE',
+      url: `/api/v1/health/events/${created.id}`,
+      headers: family.headers,
+    });
+    expect(deleted.statusCode).toBe(200);
+
+    const restored = await app.inject({
+      method: 'POST',
+      url: `/api/v1/health/events/${created.id}/restore`,
+      headers: family.headers,
+    });
+    expect(restored.statusCode).toBe(200);
+    expect(restored.json().data.status).toBe('UPCOMING');
+    expect(restored.json().data.reminder.offsets).toHaveLength(2);
+
+    const reminders = await app.db
+      .select()
+      .from(healthReminders)
+      .where(eq(healthReminders.healthEventId, created.id));
+    expect(reminders.filter((item) => item.status === 'SCHEDULED')).toHaveLength(2);
+    expect(reminders.filter((item) => item.status === 'CANCELED')).toHaveLength(2);
+
+    const activeIds = new Set(
+      reminders.filter((item) => item.status === 'SCHEDULED').map((item) => item.id),
+    );
+    const schedules = (
+      await app.db
+        .select()
+        .from(scheduledNotifications)
+        .where(eq(scheduledNotifications.sourceType, 'HEALTH_REMINDER'))
+    ).filter((item) => activeIds.has(item.sourceId));
+    expect(schedules).toHaveLength(2);
+    expect(schedules.every((item) => item.status === 'SCHEDULED')).toBe(true);
   });
 
   it('denies access to another family baby and unauthenticated requests', async () => {
@@ -280,6 +370,61 @@ describe('health api', () => {
     expect(anon.statusCode).toBe(401);
   });
 
+  it('only returns reminders owned by the requesting family member', async () => {
+    const family = await readyFamily();
+    const created = await createEvent(family, {
+      reminder: { offsets: [{ kind: 'D1' }] },
+    });
+
+    const memberRegister = await app.inject({
+      method: 'POST',
+      url: '/api/v1/auth/register',
+      headers: { ...WEAPP_HEADERS, 'idempotency-key': createUlid() },
+      payload: {
+        username: `m6_member_${Date.now().toString(36)}`,
+        password: 'password123',
+        nickname: '家庭成员',
+      },
+    });
+    expect(memberRegister.statusCode).toBe(201);
+    const memberHeaders = {
+      ...WEAPP_HEADERS,
+      authorization: `Bearer ${memberRegister.json().data.session.token as string}`,
+    };
+
+    const invite = await app.inject({
+      method: 'POST',
+      url: `/api/v1/families/${family.familyId}/invites`,
+      headers: family.headers,
+      payload: { relationshipHint: 'DAD', expiresInHours: 72 },
+    });
+    expect(invite.statusCode).toBe(200);
+
+    const accepted = await app.inject({
+      method: 'POST',
+      url: `/api/v1/family-invites/${invite.json().data.token as string}/accept`,
+      headers: memberHeaders,
+      payload: { relationship: 'DAD' },
+    });
+    expect(accepted.statusCode).toBe(200);
+
+    const detail = await app.inject({
+      method: 'GET',
+      url: `/api/v1/health/events/${created.id}`,
+      headers: memberHeaders,
+    });
+    expect(detail.statusCode).toBe(200);
+    expect(detail.json().data.reminder.offsets).toHaveLength(0);
+
+    const list = await app.inject({
+      method: 'GET',
+      url: `/api/v1/babies/${family.babyId}/health/events`,
+      headers: memberHeaders,
+    });
+    expect(list.statusCode).toBe(200);
+    expect(list.json().data.items[0].reminder.offsets).toHaveLength(0);
+  });
+
   it('replays offline sync operations without duplicating events or notifications', async () => {
     const family = await readyFamily();
     const operationId = createUlid();
@@ -298,7 +443,9 @@ describe('health api', () => {
         eventType: 'DENTAL',
         title: '牙齿检查',
         scheduledAt,
-        reminderOffsets: [{ kind: 'D1', customOffsetMinutes: null, allowDndOverride: false }],
+        reminderOffsets: [
+          { kind: 'D1', customOffsetMinutes: null, allowDndOverride: false },
+        ],
       },
     };
     const headers = { ...family.headers, 'content-type': 'application/json' };
@@ -306,7 +453,11 @@ describe('health api', () => {
       method: 'POST',
       url: '/api/v1/sync/push',
       headers,
-      payload: { deviceId: 'device-offline-1', familyId: family.familyId, operations: [payload] },
+      payload: {
+        deviceId: 'device-offline-1',
+        familyId: family.familyId,
+        operations: [payload],
+      },
     });
     expect(first.statusCode).toBe(200);
     expect(first.json().data.results[0]!.status).toBe('APPLIED');
@@ -316,7 +467,11 @@ describe('health api', () => {
       method: 'POST',
       url: '/api/v1/sync/push',
       headers,
-      payload: { deviceId: 'device-offline-1', familyId: family.familyId, operations: [payload] },
+      payload: {
+        deviceId: 'device-offline-1',
+        familyId: family.familyId,
+        operations: [payload],
+      },
     });
     expect(replay.statusCode).toBe(200);
     expect(replay.json().data.results[0]!.status).toBe('APPLIED');
@@ -329,5 +484,138 @@ describe('health api', () => {
     });
     const events = list.json().data.items as Array<{ id: string; title: string }>;
     expect(events.filter((item) => item.id === entityId)).toHaveLength(1);
+  });
+
+  it('replays an offline edit with reminder offsets and reschedules the event', async () => {
+    const family = await readyFamily();
+    const created = await createEvent(family, { reminder: undefined });
+    const newScheduledAt = futureAt(45);
+    const operation = {
+      operationId: createUlid(),
+      deviceId: 'device-offline-edit',
+      clientCreatedAt: newScheduledAt - 60_000,
+      familyId: family.familyId,
+      entityType: 'HEALTH_EVENT',
+      entityId: created.id,
+      op: 'UPDATE',
+      baseVersion: created.version,
+      baseSnapshot: {
+        babyId: family.babyId,
+        eventType: 'CHECKUP',
+        title: '满月体检',
+        scheduledAt: created.scheduledAt,
+        status: 'UPCOMING',
+        locationName: null,
+        locationAddress: null,
+        doctorName: null,
+        note: null,
+        timezoneName: 'Asia/Shanghai',
+      },
+      patch: {
+        scheduledAt: newScheduledAt,
+        reminderOffsets: [
+          { kind: 'D7', customOffsetMinutes: null, allowDndOverride: false },
+        ],
+      },
+      changedFields: ['scheduledAt', 'reminderOffsets'],
+    };
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/v1/sync/push',
+      headers: { ...family.headers, 'content-type': 'application/json' },
+      payload: {
+        deviceId: 'device-offline-edit',
+        familyId: family.familyId,
+        operations: [operation],
+      },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json().data.results[0]!.status).toBe('APPLIED');
+
+    const reminderRows = await app.db
+      .select()
+      .from(healthReminders)
+      .where(eq(healthReminders.healthEventId, created.id));
+    expect(
+      reminderRows
+        .filter((item) => item.status === 'SCHEDULED')
+        .map((item) => item.offsetKind),
+    ).toEqual(['D7']);
+    expect(reminderRows.find((item) => item.status === 'SCHEDULED')!.fireAt).toBe(
+      newScheduledAt - 7 * 24 * 60 * 60 * 1000,
+    );
+  });
+
+  it('keeps a completed event completed when an offline edit omits status', async () => {
+    const family = await readyFamily();
+    const created = await createEvent(family, { reminder: undefined });
+    const completed = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/health/events/${created.id}`,
+      headers: family.headers,
+      payload: { status: 'COMPLETED' },
+    });
+    expect(completed.statusCode).toBe(200);
+    const completedData = completed.json().data as {
+      version: number;
+      babyId: string;
+      eventType: string;
+      title: string;
+      scheduledAt: number;
+      status: string;
+      completedAt: number | null;
+      locationName: string | null;
+      locationAddress: string | null;
+      doctorName: string | null;
+      note: string | null;
+      timezoneName: string;
+    };
+
+    const operation = {
+      operationId: createUlid(),
+      deviceId: 'device-offline-completed',
+      clientCreatedAt: Date.now(),
+      familyId: family.familyId,
+      entityType: 'HEALTH_EVENT',
+      entityId: created.id,
+      op: 'UPDATE',
+      baseVersion: completedData.version,
+      baseSnapshot: {
+        babyId: completedData.babyId,
+        eventType: completedData.eventType,
+        title: completedData.title,
+        scheduledAt: completedData.scheduledAt,
+        status: completedData.status,
+        completedAt: completedData.completedAt,
+        locationName: completedData.locationName,
+        locationAddress: completedData.locationAddress,
+        doctorName: completedData.doctorName,
+        note: completedData.note,
+        timezoneName: completedData.timezoneName,
+      },
+      patch: { note: '完成后补充的记录' },
+      changedFields: ['note'],
+    };
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/v1/sync/push',
+      headers: { ...family.headers, 'content-type': 'application/json' },
+      payload: {
+        deviceId: operation.deviceId,
+        familyId: family.familyId,
+        operations: [operation],
+      },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json().data.results[0]!.status).toBe('APPLIED');
+
+    const detail = await app.inject({
+      method: 'GET',
+      url: `/api/v1/health/events/${created.id}`,
+      headers: family.headers,
+    });
+    expect(detail.statusCode).toBe(200);
+    expect(detail.json().data.status).toBe('COMPLETED');
+    expect(detail.json().data.note).toBe('完成后补充的记录');
   });
 });

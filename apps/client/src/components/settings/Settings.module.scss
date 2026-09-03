@@ -1,0 +1,181 @@
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+
+.settingsHero,
+.dndHero {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 18px 16px;
+}
+
+.heroArt,
+.dndMoon {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 54px;
+  height: 54px;
+  flex: 0 0 54px;
+  border-radius: 20px;
+  color: var(--color-sky-strong);
+  background: var(--color-sky-soft);
+}
+
+.dndMoon {
+  color: var(--color-lavender-strong);
+  background: var(--color-lavender-soft);
+}
+
+.heroSpark {
+  position: absolute;
+  right: -5px;
+  top: -8px;
+  color: var(--color-apricot-strong);
+}
+
+.heroCopy,
+.preferenceCopy {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.heroTitle {
+  font-size: var(--font-card-title);
+  font-weight: 800;
+  line-height: 1.3;
+  color: var(--color-text-primary);
+  text-shadow: var(--text-emboss);
+}
+
+.heroCaption,
+.preferenceCaption,
+.dndHint,
+.updateHint {
+  font-size: var(--font-caption);
+  line-height: 1.5;
+  color: var(--color-text-secondary);
+}
+
+.preferenceList {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.preferenceCard,
+.dndLink {
+  overflow: hidden;
+}
+
+.preferenceRow,
+.switchHeading {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 72px;
+  padding: 12px 16px;
+}
+
+.preferenceIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  flex: 0 0 40px;
+  border-radius: 50%;
+}
+
+.tone-apricot {
+  color: var(--color-apricot-strong);
+  background: var(--color-apricot-soft);
+}
+
+.tone-sage {
+  color: var(--color-sage-strong);
+  background: var(--color-sage-soft);
+}
+
+.tone-sky {
+  color: var(--color-sky-strong);
+  background: var(--color-sky-soft);
+}
+
+.tone-lavender {
+  color: var(--color-lavender-strong);
+  background: var(--color-lavender-soft);
+}
+
+.tone-blush {
+  color: var(--color-blush-strong);
+  background: var(--color-blush-soft);
+}
+
+.preferenceTitle {
+  font-size: var(--font-body);
+  font-weight: 800;
+  line-height: 1.3;
+  color: var(--color-text-primary);
+}
+
+.toggle {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 44px;
+  height: 26px;
+  padding: 3px;
+  flex: 0 0 44px;
+  border: 1px solid var(--color-border-warm);
+  border-radius: 999px;
+  background: rgba(255, 252, 247, 0.62);
+}
+
+.toggleKnob {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--color-text-tertiary);
+  transition: transform var(--motion-fast) var(--motion-ease);
+}
+
+.toggleOn {
+  border-color: rgba(92, 148, 102, 0.35);
+  background: var(--color-sage-soft);
+}
+
+.toggleOn .toggleKnob {
+  background: var(--color-sage-strong);
+  transform: translateX(18px);
+}
+
+.updateHint {
+  padding: 0 4px;
+  color: var(--color-sage-strong);
+}
+
+.formCard {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+}
+
+.formColumns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.dndHint {
+  padding: 0 4px;
+}

@@ -76,7 +76,11 @@ async function setScheduledStatus(
 
 // 事务内派发：写 notifications 与置 SENT 同一事务，崩溃只留下「要么发了、要么还是 SCHEDULED」。
 // 幂等来源：状态翻转带 status='SCHEDULED' 守卫，Job 重跑不会产生第二条通知。
-async function dispatchOne(db: Database, item: typeof scheduledNotifications.$inferSelect, now: number) {
+async function dispatchOne(
+  db: Database,
+  item: typeof scheduledNotifications.$inferSelect,
+  now: number,
+) {
   // sourceId 是 health_reminders.id；join 出事件取标题。提醒被删或事件被删 → 作废。
   const rows = await db
     .select({
@@ -90,6 +94,7 @@ async function dispatchOne(db: Database, item: typeof scheduledNotifications.$in
       and(
         eq(healthReminders.id, item.sourceId),
         eq(healthReminders.status, 'SCHEDULED'),
+        eq(healthEvents.status, 'UPCOMING'),
         sql`${healthEvents.deletedAt} IS NULL`,
       ),
     )
@@ -170,7 +175,10 @@ async function dispatchDue(db: Database, now: number, logger: FastifyBaseLogger)
     }
 
     // DND：普通提醒推迟到 DND 结束那一刻；allowDndOverride 的健康提醒原时点发送。
-    if (isInDnd(prefs.window, minutesOf(item.fireAt, P0_TZ_OFFSET_MINUTES)) && !item.dndOverride) {
+    if (
+      isInDnd(prefs.window, minutesOf(item.fireAt, P0_TZ_OFFSET_MINUTES)) &&
+      !item.dndOverride
+    ) {
       const effective = effectiveFireAt(
         prefs.window,
         item.fireAt,
@@ -197,11 +205,23 @@ async function dispatchDue(db: Database, now: number, logger: FastifyBaseLogger)
       if (outcome === 'delivered') delivered += 1;
     } catch (error) {
       // 失败记录留在 scheduled_notifications（attempts + last_error_code），下一轮重试。
-      logger.warn({ err: error, id: item.id }, 'scheduler: dispatch failed, will retry');
+      logger.warn(
+        { err: error, id: item.id },
+        'scheduler: dispatch failed, will retry',
+      );
       await db
         .update(scheduledNotifications)
-        .set({ attempts: item.attempts + 1, lastErrorCode: 'DISPATCH_FAILED', updatedAt: now })
-        .where(eq(scheduledNotifications.id, item.id));
+        .set({
+          attempts: item.attempts + 1,
+          lastErrorCode: 'DISPATCH_FAILED',
+          updatedAt: now,
+        })
+        .where(
+          and(
+            eq(scheduledNotifications.id, item.id),
+            eq(scheduledNotifications.status, 'SCHEDULED'),
+          ),
+        );
     }
   }
   return { delivered, deferred, scanned: due.length };
@@ -224,7 +244,12 @@ async function expireOverdueEvents(db: Database, now: number): Promise<number> {
 
 // job_locks：UPDATE ... WHERE locked_until <= now 抢锁。抢到的进程执行，抢不到跳过。
 // 崩溃的进程锁会过期，下一个 tick 任何实例都能重新抢到——Restart-safe 的关键。
-async function acquireJobLock(db: Database, jobName: string, now: number, ownerId: string) {
+async function acquireJobLock(
+  db: Database,
+  jobName: string,
+  now: number,
+  ownerId: string,
+) {
   // 锁行不存在时先 seed，保证首次可抢。
   await db
     .insert(jobLocks)
@@ -232,9 +257,37 @@ async function acquireJobLock(db: Database, jobName: string, now: number, ownerI
     .onConflictDoNothing();
   const result = await db
     .update(jobLocks)
-    .set({ lockedUntil: now + LOCK_TTL_MS, ownerId, lastRunAt: now })
+    .set({ lockedUntil: now + LOCK_TTL_MS, ownerId, lastRunAt: now, lastError: null })
     .where(and(eq(jobLocks.jobName, jobName), lte(jobLocks.lockedUntil, now)));
   return result.rowsAffected === 1;
+}
+
+function errorMessage(error: unknown): string {
+  return (error instanceof Error ? error.message : String(error)).slice(0, 500);
+}
+
+async function runLockedJob<T>(
+  db: Database,
+  jobName: string,
+  now: number,
+  ownerId: string,
+  run: () => Promise<T>,
+): Promise<T | null> {
+  if (!(await acquireJobLock(db, jobName, now, ownerId))) return null;
+  try {
+    const result = await run();
+    await db
+      .update(jobLocks)
+      .set({ lastError: null })
+      .where(eq(jobLocks.jobName, jobName));
+    return result;
+  } catch (error) {
+    await db
+      .update(jobLocks)
+      .set({ lastError: errorMessage(error) })
+      .where(eq(jobLocks.jobName, jobName));
+    throw error;
+  }
 }
 
 export interface SchedulerHandle {
@@ -242,7 +295,10 @@ export interface SchedulerHandle {
   runOnce(): Promise<void>;
 }
 
-export function startScheduler(db: Database, logger: FastifyBaseLogger): SchedulerHandle {
+export function startScheduler(
+  db: Database,
+  logger: FastifyBaseLogger,
+): SchedulerHandle {
   const ownerId = createUlid();
   let timer: ReturnType<typeof setInterval> | null = null;
   let running = false;
@@ -252,19 +308,38 @@ export function startScheduler(db: Database, logger: FastifyBaseLogger): Schedul
     running = true;
     try {
       const now = utcNowMs();
-      if (await acquireJobLock(db, JOB_DUE_NOTIFICATIONS, now, ownerId)) {
-        const result = await dispatchDue(db, now, logger);
+      try {
+        const result = await runLockedJob(db, JOB_DUE_NOTIFICATIONS, now, ownerId, () =>
+          dispatchDue(db, now, logger),
+        );
+        if (result === null) return;
         if (result.delivered || result.deferred) {
           logger.info(result, 'scheduler: due notifications processed');
         }
+      } catch (error) {
+        logger.error(
+          { err: error, jobName: JOB_DUE_NOTIFICATIONS },
+          'scheduler job failed',
+        );
+        return;
       }
       const expireNow = utcNowMs();
-      if (await acquireJobLock(db, JOB_EXPIRE_EVENTS, expireNow, ownerId)) {
-        const expired = await expireOverdueEvents(db, expireNow);
-        if (expired > 0) logger.info({ expired }, 'scheduler: health events expired');
+      try {
+        const expired = await runLockedJob(
+          db,
+          JOB_EXPIRE_EVENTS,
+          expireNow,
+          ownerId,
+          () => expireOverdueEvents(db, expireNow),
+        );
+        if (expired && expired > 0)
+          logger.info({ expired }, 'scheduler: health events expired');
+      } catch (error) {
+        logger.error(
+          { err: error, jobName: JOB_EXPIRE_EVENTS },
+          'scheduler job failed',
+        );
       }
-    } catch (error) {
-      logger.error({ err: error }, 'scheduler tick failed');
     } finally {
       running = false;
     }

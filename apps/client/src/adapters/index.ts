@@ -1,9 +1,11 @@
 import Taro from '@tarojs/taro';
 import type {
+  AudioRecordingSession,
   FileSystemAdapter,
   MediaPickerAdapter,
   NetworkAdapter,
   PermissionAdapter,
+  PickedMedia,
   SafeAreaAdapter,
   ShareAdapter,
   StorageAdapter,
@@ -64,27 +66,48 @@ export const h5SafeAreaAdapter: SafeAreaAdapter = {
   },
 };
 
+async function requestH5Device(kind: 'camera' | 'microphone') {
+  if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia)
+    return false;
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia(
+      kind === 'camera' ? { video: true } : { audio: true },
+    );
+    stream.getTracks().forEach((track) => track.stop());
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export const h5PermissionAdapter: PermissionAdapter = {
-  async requestCamera() {
-    return 'denied';
-  },
+  requestCamera: () =>
+    requestH5Device('camera').then((granted) => (granted ? 'granted' : 'denied')),
   async requestAlbum() {
-    return 'denied';
+    return typeof document !== 'undefined' ? 'granted' : 'denied';
   },
-  async requestMicrophone() {
-    return 'denied';
-  },
+  requestMicrophone: () =>
+    requestH5Device('microphone').then((granted) => (granted ? 'granted' : 'denied')),
   async requestNotification() {
-    return 'denied';
+    if (typeof Notification === 'undefined') return 'denied';
+    if (Notification.permission === 'granted') return 'granted';
+    return (await Notification.requestPermission()) === 'granted'
+      ? 'granted'
+      : 'denied';
   },
 };
 
 export const h5FileSystemAdapter: FileSystemAdapter = {
   async persistTempFile(tempPath) {
-    return tempPath;
+    const response = await fetch(tempPath);
+    if (!response.ok) throw new Error('读取 H5 临时媒体失败');
+    const { saveDurableLocalMedia } = await import('../local/mediaStorage');
+    const record = await saveDurableLocalMedia(await response.blob());
+    return record.durablePath;
   },
   async readFile(path) {
     const response = await fetch(path);
+    if (!response.ok) throw new Error('读取 H5 媒体失败');
     return response.arrayBuffer();
   },
   async deleteFile() {
@@ -92,26 +115,115 @@ export const h5FileSystemAdapter: FileSystemAdapter = {
   },
 };
 
+function pickBrowserFile(
+  accept: string,
+  capture?: string,
+): Promise<PickedMedia | null> {
+  if (typeof document === 'undefined') return Promise.resolve(null);
+  return new Promise((resolve) => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = accept;
+    if (capture) input.setAttribute('capture', capture);
+    input.onchange = () => {
+      const file = input.files?.[0];
+      resolve(
+        file
+          ? {
+              file,
+              mimeType: file.type,
+              originalFilename: file.name,
+            }
+          : null,
+      );
+      input.remove();
+    };
+    input.oncancel = () => {
+      input.remove();
+      resolve(null);
+    };
+    input.click();
+  });
+}
+
+function selectRecorderMimeType() {
+  if (typeof MediaRecorder === 'undefined') return '';
+  const candidates = ['audio/ogg;codecs=opus', 'audio/webm;codecs=opus', 'audio/webm'];
+  return candidates.find((candidate) => MediaRecorder.isTypeSupported(candidate)) ?? '';
+}
+
+async function startH5AudioRecording(): Promise<AudioRecordingSession> {
+  if (
+    typeof MediaRecorder === 'undefined' ||
+    typeof navigator === 'undefined' ||
+    !navigator.mediaDevices?.getUserMedia
+  ) {
+    throw new Error('当前浏览器不支持录音');
+  }
+  const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  const mimeType = selectRecorderMimeType();
+  const recorder = mimeType
+    ? new MediaRecorder(stream, { mimeType })
+    : new MediaRecorder(stream);
+  const chunks: BlobPart[] = [];
+  const startedAt = Date.now();
+  let cancelled = false;
+  let settled = false;
+
+  const result = new Promise<PickedMedia>((resolve, reject) => {
+    recorder.ondataavailable = (event) => {
+      if (event.data.size > 0) chunks.push(event.data);
+    };
+    recorder.onerror = () => {
+      settled = true;
+      stream.getTracks().forEach((track) => track.stop());
+      reject(new Error('录音过程中断，请重试'));
+    };
+    recorder.onstop = () => {
+      stream.getTracks().forEach((track) => track.stop());
+      if (settled) return;
+      settled = true;
+      if (cancelled) {
+        reject(new Error('录音已取消'));
+        return;
+      }
+      const resolvedMimeType = recorder.mimeType || mimeType || 'audio/webm';
+      resolve({
+        file: new Blob(chunks, { type: resolvedMimeType }),
+        mimeType: resolvedMimeType,
+        originalFilename: `baby-voice-${Date.now()}.${resolvedMimeType.includes('ogg') ? 'ogg' : 'webm'}`,
+        durationMs: Date.now() - startedAt,
+      });
+    };
+  });
+  recorder.start();
+
+  return {
+    stop: async () => {
+      if (recorder.state !== 'inactive') recorder.stop();
+      return result;
+    },
+    cancel: () => {
+      cancelled = true;
+      if (recorder.state !== 'inactive') recorder.stop();
+    },
+  };
+}
+
 export const h5MediaPickerAdapter: MediaPickerAdapter = {
-  async pickImage() {
-    return null;
-  },
-  async pickVideo() {
-    return null;
-  },
-  async capturePhoto() {
-    return null;
-  },
+  pickImage: () => pickBrowserFile('image/*'),
+  pickVideo: () => pickBrowserFile('video/*'),
+  capturePhoto: () => pickBrowserFile('image/*', 'environment'),
+  startAudioRecording: startH5AudioRecording,
   async recordAudio() {
-    return null;
+    const session = await startH5AudioRecording();
+    return session.stop();
   },
 };
 
 export const h5ShareAdapter: ShareAdapter = {
   async shareText(text) {
-    if (navigator.share) {
-      await navigator.share({ text });
-    }
+    if (navigator.share) await navigator.share({ text });
   },
   async shareImage() {
     return undefined;
@@ -155,18 +267,26 @@ export const weappSafeAreaAdapter: SafeAreaAdapter = {
   },
 };
 
+async function hasWeappPermission(scope: 'scope.camera' | 'scope.record') {
+  const setting = await Taro.getSetting();
+  if (setting.authSetting[scope]) return true;
+  try {
+    await Taro.authorize({ scope });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export const weappPermissionAdapter: PermissionAdapter = {
   async requestCamera() {
-    const auth = await Taro.getSetting();
-    if (auth.authSetting['scope.camera']) return 'granted';
-    await Taro.authorize({ scope: 'scope.camera' }).catch(() => undefined);
-    return 'denied';
+    return (await hasWeappPermission('scope.camera')) ? 'granted' : 'denied';
   },
   async requestAlbum() {
-    return 'denied';
+    return 'granted';
   },
   async requestMicrophone() {
-    return 'denied';
+    return (await hasWeappPermission('scope.record')) ? 'granted' : 'denied';
   },
   async requestNotification() {
     return 'denied';
@@ -176,10 +296,32 @@ export const weappPermissionAdapter: PermissionAdapter = {
 export const weappFileSystemAdapter: FileSystemAdapter = {
   async persistTempFile(tempPath, targetName) {
     const fs = Taro.getFileSystemManager();
-    const targetPath = `${Taro.env.USER_DATA_PATH}/${targetName}`;
-    await new Promise<void>((resolve, reject) => {
-      fs.copyFile({ srcPath: tempPath, destPath: targetPath, success: () => resolve(), fail: reject });
-    });
+    const mediaDir = `${Taro.env.USER_DATA_PATH}/media`;
+    try {
+      fs.accessSync(mediaDir);
+    } catch {
+      fs.mkdirSync(mediaDir, true);
+    }
+    const targetPath = `${mediaDir}/${targetName}`;
+    const uploadingPath = `${targetPath}.uploading`;
+    try {
+      await new Promise<void>((resolve, reject) => {
+        fs.copyFile({
+          srcPath: tempPath,
+          destPath: uploadingPath,
+          success: () => resolve(),
+          fail: reject,
+        });
+      });
+      fs.renameSync(uploadingPath, targetPath);
+    } catch (error) {
+      try {
+        fs.unlinkSync(uploadingPath);
+      } catch {
+        // The temporary copy may not have been created.
+      }
+      throw error;
+    }
     return targetPath;
   },
   async readFile(path) {
@@ -187,7 +329,7 @@ export const weappFileSystemAdapter: FileSystemAdapter = {
     const buffer = await new Promise<ArrayBuffer>((resolve, reject) => {
       fs.readFile({
         filePath: path,
-        success: (res) => resolve(res.data as ArrayBuffer),
+        success: (result) => resolve(result.data as ArrayBuffer),
         fail: reject,
       });
     });
@@ -201,22 +343,97 @@ export const weappFileSystemAdapter: FileSystemAdapter = {
   },
 };
 
+let weappRecorder: Taro.RecorderManager | null = null;
+let activeWeappRecording: {
+  resolve: (media: PickedMedia) => void;
+  reject: (error: Error) => void;
+  cancelled: boolean;
+} | null = null;
+
+function startWeappAudioRecording(): Promise<AudioRecordingSession> {
+  weappRecorder ??= Taro.getRecorderManager();
+  if (activeWeappRecording) throw new Error('已有录音正在进行');
+  weappRecorder.onStop((result) => {
+    const active = activeWeappRecording;
+    activeWeappRecording = null;
+    if (!active || active.cancelled) return;
+    active.resolve({
+      localPath: result.tempFilePath,
+      mimeType: 'audio/aac',
+      originalFilename: `baby-voice-${Date.now()}.aac`,
+      durationMs: result.duration,
+    });
+  });
+  weappRecorder.onError((result) => {
+    const active = activeWeappRecording;
+    activeWeappRecording = null;
+    active?.reject(new Error(result.errMsg || '录音失败'));
+  });
+
+  let resolveSession: (session: AudioRecordingSession) => void;
+  const sessionReady = new Promise<AudioRecordingSession>((resolve) => {
+    resolveSession = resolve;
+  });
+  const result = new Promise<PickedMedia>((resolve, reject) => {
+    activeWeappRecording = { resolve, reject, cancelled: false };
+  });
+  weappRecorder.start({
+    format: 'aac',
+    duration: 600000,
+    sampleRate: 44100,
+    numberOfChannels: 1,
+  });
+  resolveSession!({
+    stop: async () => {
+      weappRecorder?.stop();
+      return result;
+    },
+    cancel: () => {
+      if (activeWeappRecording) {
+        const active = activeWeappRecording;
+        activeWeappRecording = null;
+        active.cancelled = true;
+        active.reject(new Error('录音已取消'));
+      }
+      weappRecorder?.stop();
+    },
+  });
+  return sessionReady;
+}
+
 export const weappMediaPickerAdapter: MediaPickerAdapter = {
   async pickImage() {
     const result = await Taro.chooseImage({ count: 1 }).catch(() => null);
-    const path = result?.tempFilePaths?.[0];
-    return path ? { localPath: path } : null;
+    const localPath = result?.tempFilePaths?.[0];
+    return localPath
+      ? { localPath, mimeType: 'image/jpeg', originalFilename: `${Date.now()}.jpg` }
+      : null;
   },
   async pickVideo() {
-    return null;
+    const result = await Taro.chooseVideo({ sourceType: ['album', 'camera'] }).catch(
+      () => null,
+    );
+    return result?.tempFilePath
+      ? {
+          localPath: result.tempFilePath,
+          mimeType: 'video/mp4',
+          originalFilename: `${Date.now()}.mp4`,
+        }
+      : null;
   },
   async capturePhoto() {
-    const result = await Taro.chooseImage({ count: 1, sourceType: ['camera'] }).catch(() => null);
-    const path = result?.tempFilePaths?.[0];
-    return path ? { localPath: path } : null;
+    const result = await Taro.chooseImage({ count: 1, sourceType: ['camera'] }).catch(
+      () => null,
+    );
+    const localPath = result?.tempFilePaths?.[0];
+    return localPath
+      ? { localPath, mimeType: 'image/jpeg', originalFilename: `${Date.now()}.jpg` }
+      : null;
   },
+  startAudioRecording: startWeappAudioRecording,
   async recordAudio() {
-    return null;
+    const session = await startWeappAudioRecording();
+    return session.stop();
   },
 };
 

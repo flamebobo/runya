@@ -1,4 +1,10 @@
-import { index, integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
+import {
+  index,
+  integer,
+  sqliteTable,
+  text,
+  uniqueIndex,
+} from 'drizzle-orm/sqlite-core';
 import { users } from './identity.js';
 
 // Technical Design §19。DND 分钟数是当日内的本地分钟（0–1439），默认 21:00 → 08:00（跨午夜）。
@@ -12,12 +18,18 @@ export const notificationPreferences = sqliteTable(
     userId: text('user_id')
       .notNull()
       .references(() => users.id),
-    healthEnabled: integer('health_enabled', { mode: 'boolean' }).notNull().default(true),
+    healthEnabled: integer('health_enabled', { mode: 'boolean' })
+      .notNull()
+      .default(true),
     familyTasksEnabled: integer('family_tasks_enabled', { mode: 'boolean' })
       .notNull()
       .default(true),
-    rewardsEnabled: integer('rewards_enabled', { mode: 'boolean' }).notNull().default(true),
-    backupEnabled: integer('backup_enabled', { mode: 'boolean' }).notNull().default(true),
+    rewardsEnabled: integer('rewards_enabled', { mode: 'boolean' })
+      .notNull()
+      .default(true),
+    backupEnabled: integer('backup_enabled', { mode: 'boolean' })
+      .notNull()
+      .default(true),
     capsulesEnabled: integer('capsules_enabled', { mode: 'boolean' })
       .notNull()
       .default(true),
@@ -25,7 +37,9 @@ export const notificationPreferences = sqliteTable(
       .notNull()
       .default(true),
     dndEnabled: integer('dnd_enabled', { mode: 'boolean' }).notNull().default(true),
-    dndStartMinute: integer('dnd_start_minute').notNull().default(DEFAULT_DND_START_MINUTE),
+    dndStartMinute: integer('dnd_start_minute')
+      .notNull()
+      .default(DEFAULT_DND_START_MINUTE),
     dndEndMinute: integer('dnd_end_minute').notNull().default(DEFAULT_DND_END_MINUTE),
     timezoneName: text('timezone_name').notNull().default('Asia/Shanghai'),
     updatedAt: integer('updated_at').notNull(),
@@ -58,7 +72,10 @@ export const notifications = sqliteTable(
       table.userId,
       table.createdAt,
     ),
-    userUnreadIdx: index('idx_notifications_user_unread').on(table.userId, table.readAt),
+    userUnreadIdx: index('idx_notifications_user_unread').on(
+      table.userId,
+      table.readAt,
+    ),
   }),
 );
 
@@ -84,9 +101,13 @@ export const scheduledNotifications = sqliteTable(
   },
   (table) => ({
     // 唯一键含 fire_at 与 category：重排提醒时间 = 旧行 CANCELED + 新行 INSERT。
-    deliveryUnique: uniqueIndex(
-      'uq_scheduled_notifications_user_source_fire',
-    ).on(table.userId, table.sourceType, table.sourceId, table.fireAt, table.category),
+    deliveryUnique: uniqueIndex('uq_scheduled_notifications_user_source_fire').on(
+      table.userId,
+      table.sourceType,
+      table.sourceId,
+      table.fireAt,
+      table.category,
+    ),
     dueIdx: index('idx_scheduled_notifications_status_fire').on(
       table.status,
       table.fireAt,
@@ -99,13 +120,10 @@ export const scheduledNotifications = sqliteTable(
 );
 
 // Technical Design §37：job_locks(job_name, locked_until, owner_id) 防止热重启重入。
-export const jobLocks = sqliteTable(
-  'job_locks',
-  {
-    jobName: text('job_name').primaryKey(),
-    lockedUntil: integer('locked_until').notNull(),
-    ownerId: text('owner_id').notNull(),
-    lastRunAt: integer('last_run_at'),
-    lastError: text('last_error'),
-  },
-);
+export const jobLocks = sqliteTable('job_locks', {
+  jobName: text('job_name').primaryKey(),
+  lockedUntil: integer('locked_until').notNull(),
+  ownerId: text('owner_id').notNull(),
+  lastRunAt: integer('last_run_at'),
+  lastError: text('last_error'),
+});

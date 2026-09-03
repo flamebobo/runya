@@ -12,12 +12,27 @@ import { eq } from 'drizzle-orm';
 
 const WEAPP_HEADERS = { 'x-client-platform': 'WEAPP' };
 
+function createAacAdtsBuffer(frameCount = 3) {
+  const frameLength = 107;
+  const frames = Array.from({ length: frameCount }, () => {
+    const frame = Buffer.alloc(frameLength);
+    frame[0] = 0xff;
+    frame[1] = 0xf1;
+    frame[2] = 0x50; // AAC-LC, 44.1 kHz, mono
+    frame[3] = 0x40;
+    frame[4] = 0;
+    frame[5] = 0xe0;
+    frame[6] = 0xfc;
+    return frame;
+  });
+  return Buffer.concat(frames);
+}
+
 describe('Media Platform API', () => {
   let tempDir: string;
   let app: Awaited<ReturnType<typeof buildApp>>;
   let authHeaders: Record<string, string>;
   let otherAuthHeaders: Record<string, string>;
-  let familyId: string;
   let babyId: string;
   let otherBabyId: string;
 
@@ -57,7 +72,6 @@ describe('Media Platform API', () => {
     });
     expect(onboardingRes.statusCode).toBe(200);
     const bootData = onboardingRes.json().data;
-    familyId = bootData.family.id;
     babyId = bootData.baby.id;
 
     const otherRegisterRes = await app.inject({
@@ -102,7 +116,9 @@ describe('Media Platform API', () => {
         channels: 3,
         background: { r: 245, g: 180, b: 120 },
       },
-    }).png().toBuffer();
+    })
+      .png()
+      .toBuffer();
     const splitAt = Math.floor(fullBuffer.length / 2);
     const chunk1 = fullBuffer.subarray(0, splitAt);
     const chunk2 = fullBuffer.subarray(splitAt);
@@ -223,8 +239,119 @@ describe('Media Platform API', () => {
       },
     });
     expect(rangeRes.statusCode).toBe(206);
-    expect(rangeRes.headers['content-range']).toContain(`bytes 0-11/${contentRes.rawPayload.length}`);
+    expect(rangeRes.headers['content-range']).toContain(
+      `bytes 0-11/${contentRes.rawPayload.length}`,
+    );
     expect(rangeRes.rawPayload).toEqual(contentRes.rawPayload.subarray(0, 12));
+
+    const samePartMismatchRes = await app.inject({
+      method: 'PUT',
+      url: `/api/v1/media/uploads/${uploadId}/parts/1`,
+      headers: {
+        ...WEAPP_HEADERS,
+        'content-type': 'application/octet-stream',
+        'x-upload-token': uploadToken,
+      },
+      payload: Buffer.from('different part content'),
+    });
+    expect(samePartMismatchRes.statusCode).toBe(400);
+  });
+
+  it('supports AAC metadata, idempotent init and authenticated range playback', async () => {
+    const audioBuffer = createAacAdtsBuffer();
+    const expectedSha256 = crypto
+      .createHash('sha256')
+      .update(audioBuffer)
+      .digest('hex');
+    const idempotencyKey = createUlid();
+    const initPayload = {
+      mediaType: 'AUDIO',
+      mimeType: 'audio/aac',
+      originalFilename: 'baby-voice.aac',
+      expectedSize: audioBuffer.length,
+      expectedSha256,
+      babyId,
+    };
+
+    const initRes = await app.inject({
+      method: 'POST',
+      url: '/api/v1/media/uploads',
+      headers: { ...authHeaders, 'idempotency-key': idempotencyKey },
+      payload: initPayload,
+    });
+    const firstInit = initRes.json().data;
+    const retryInitRes = await app.inject({
+      method: 'POST',
+      url: '/api/v1/media/uploads',
+      headers: { ...authHeaders, 'idempotency-key': idempotencyKey },
+      payload: initPayload,
+    });
+    expect(retryInitRes.statusCode).toBe(200);
+    expect(retryInitRes.json().data.uploadId).toBe(firstInit.uploadId);
+    expect(retryInitRes.json().data.mediaId).toBe(firstInit.mediaId);
+
+    const partRes = await app.inject({
+      method: 'PUT',
+      url: `/api/v1/media/uploads/${firstInit.uploadId}/parts/1`,
+      headers: {
+        ...WEAPP_HEADERS,
+        'content-type': 'application/octet-stream',
+        'x-upload-token': firstInit.uploadToken,
+      },
+      payload: audioBuffer,
+    });
+    expect(partRes.statusCode).toBe(200);
+
+    const completeIdempotencyKey = createUlid();
+    const completeRes = await app.inject({
+      method: 'POST',
+      url: `/api/v1/media/uploads/${firstInit.uploadId}/complete`,
+      headers: { ...authHeaders, 'idempotency-key': completeIdempotencyKey },
+      payload: { finalSha256: expectedSha256 },
+    });
+    expect(completeRes.statusCode).toBe(200);
+    expect(completeRes.json().data.status).toBe('READY');
+
+    const completeRetryRes = await app.inject({
+      method: 'POST',
+      url: `/api/v1/media/uploads/${firstInit.uploadId}/complete`,
+      headers: { ...authHeaders, 'idempotency-key': completeIdempotencyKey },
+      payload: { finalSha256: expectedSha256 },
+    });
+    expect(completeRetryRes.statusCode).toBe(200);
+    expect(completeRetryRes.json().data).toEqual(completeRes.json().data);
+
+    const media = await app.db.query.mediaFiles.findFirst({
+      where: eq(mediaFiles.id, firstInit.mediaId),
+    });
+    expect(media?.durationMs).toBeGreaterThan(0);
+    expect(media?.storageKey).toBeTruthy();
+
+    const rangeRes = await app.inject({
+      method: 'GET',
+      url: `/api/v1/media/${firstInit.mediaId}/content`,
+      headers: { ...authHeaders, range: 'bytes=0-9' },
+    });
+    expect(rangeRes.statusCode).toBe(206);
+    expect(rangeRes.rawPayload).toEqual(audioBuffer.subarray(0, 10));
+  });
+
+  it('rejects media type and MIME mismatches before creating an upload', async () => {
+    const audioAsImage = await app.inject({
+      method: 'POST',
+      url: '/api/v1/media/uploads',
+      headers: authHeaders,
+      payload: { mediaType: 'AUDIO', mimeType: 'image/png', expectedSize: 10, babyId },
+    });
+    expect(audioAsImage.statusCode).toBe(400);
+
+    const imageAsAudio = await app.inject({
+      method: 'POST',
+      url: '/api/v1/media/uploads',
+      headers: authHeaders,
+      payload: { mediaType: 'IMAGE', mimeType: 'audio/aac', expectedSize: 10, babyId },
+    });
+    expect(imageAsAudio.statusCode).toBe(400);
   });
 
   it('rejects wrong SHA256 or wrong size completion', async () => {
@@ -238,7 +365,8 @@ describe('Media Platform API', () => {
         mediaType: 'IMAGE',
         mimeType: 'image/png',
         expectedSize: data.length,
-        expectedSha256: '0000000000000000000000000000000000000000000000000000000000000000',
+        expectedSha256:
+          '0000000000000000000000000000000000000000000000000000000000000000',
         babyId,
       },
     });
@@ -263,6 +391,36 @@ describe('Media Platform API', () => {
 
     expect(completeRes.statusCode).toBe(400);
     expect(completeRes.json().error.code).toBe('VALIDATION_ERROR');
+
+    const wrongSizeInitRes = await app.inject({
+      method: 'POST',
+      url: '/api/v1/media/uploads',
+      headers: authHeaders,
+      payload: {
+        mediaType: 'FILE',
+        mimeType: 'application/octet-stream',
+        expectedSize: data.length + 1,
+        babyId,
+      },
+    });
+    const wrongSizeUpload = wrongSizeInitRes.json().data;
+    await app.inject({
+      method: 'PUT',
+      url: `/api/v1/media/uploads/${wrongSizeUpload.uploadId}/parts/1`,
+      headers: {
+        ...WEAPP_HEADERS,
+        'content-type': 'application/octet-stream',
+        'x-upload-token': wrongSizeUpload.uploadToken,
+      },
+      payload: data,
+    });
+    const wrongSizeCompleteRes = await app.inject({
+      method: 'POST',
+      url: `/api/v1/media/uploads/${wrongSizeUpload.uploadId}/complete`,
+      headers: authHeaders,
+    });
+    expect(wrongSizeCompleteRes.statusCode).toBe(400);
+    expect(wrongSizeCompleteRes.json().error.code).toBe('VALIDATION_ERROR');
   });
 
   it('keeps the original and reports FAILED when image decoding fails', async () => {
@@ -307,7 +465,9 @@ describe('Media Platform API', () => {
     });
     expect(failedMedia?.status).toBe('FAILED');
     expect(failedMedia?.originalStorageKey).toBeTruthy();
-    expect(fs.existsSync(path.join(tempDir, 'media', failedMedia!.originalStorageKey!))).toBe(true);
+    expect(
+      fs.existsSync(path.join(tempDir, 'media', failedMedia!.originalStorageKey!)),
+    ).toBe(true);
   });
 
   it('requires the upload token for resume state and the owning family for completion', async () => {
@@ -375,5 +535,19 @@ describe('Media Platform API', () => {
       headers: WEAPP_HEADERS,
     });
     expect(unauthRes.statusCode).toBe(401);
+
+    const privateInitRes = await app.inject({
+      method: 'POST',
+      url: '/api/v1/media/uploads',
+      headers: authHeaders,
+      payload: { mediaType: 'IMAGE', mimeType: 'image/png', expectedSize: 10, babyId },
+    });
+    const privateMediaId = privateInitRes.json().data.mediaId as string;
+    const crossFamilyRes = await app.inject({
+      method: 'GET',
+      url: `/api/v1/media/${privateMediaId}/content`,
+      headers: otherAuthHeaders,
+    });
+    expect(crossFamilyRes.statusCode).toBe(403);
   });
 });

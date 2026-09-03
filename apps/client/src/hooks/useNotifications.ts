@@ -36,7 +36,9 @@ export function useUnreadNotificationCount() {
 
 function applyListUpdate(
   old: NotificationListResponse | undefined,
-  updater: (items: NotificationListResponse['items']) => NotificationListResponse['items'],
+  updater: (
+    items: NotificationListResponse['items'],
+  ) => NotificationListResponse['items'],
 ): NotificationListResponse | undefined {
   if (!old) return old;
   const items = updater(old.items);
@@ -53,9 +55,8 @@ export function useNotificationReadActions() {
     mutationFn: (id: string) => markNotificationRead(id),
     onMutate: async (id: string) => {
       await queryClient.cancelQueries({ queryKey: notificationsQueryKey });
-      const previous = queryClient.getQueryData<NotificationListResponse>(
-        notificationsQueryKey,
-      );
+      const previous =
+        queryClient.getQueryData<NotificationListResponse>(notificationsQueryKey);
       queryClient.setQueryData<NotificationListResponse>(notificationsQueryKey, (old) =>
         applyListUpdate(old, (items) =>
           items.map((item) =>
@@ -81,9 +82,8 @@ export function useNotificationReadActions() {
     mutationFn: () => markAllNotificationsRead(),
     onMutate: async () => {
       await queryClient.cancelQueries({ queryKey: notificationsQueryKey });
-      const previous = queryClient.getQueryData<NotificationListResponse>(
-        notificationsQueryKey,
-      );
+      const previous =
+        queryClient.getQueryData<NotificationListResponse>(notificationsQueryKey);
       queryClient.setQueryData<NotificationListResponse>(notificationsQueryKey, (old) =>
         applyListUpdate(old, (items) =>
           items.map((item) =>

@@ -4,7 +4,6 @@
   max-width: min(100%, 430PX);
   margin-inline: auto;
   min-height: 100vh;
-  overflow-x: hidden;
   background: var(--color-bg-page);
   padding-top: max(var(--safe-top), 8px);
 }
@@ -21,7 +20,8 @@
 }
 
 .scroll {
-  overflow-x: hidden;
+  // 避免在 shell 上建立第二个滚动容器，让吸顶标题跟随外层页面保持可见。
+  overflow: visible;
 }
 
 .noScroll {

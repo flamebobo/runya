@@ -5,11 +5,7 @@ const timestampSchema = z
   .number()
   .int('时间必须是完整数字')
   .positive('时间必须晚于 1970 年');
-const timezoneSchema = z
-  .string()
-  .trim()
-  .min(1, '缺少时区信息')
-  .max(64, '时区信息过长');
+const timezoneSchema = z.string().trim().min(1, '缺少时区信息').max(64, '时区信息过长');
 const noteSchema = z
   .string()
   .trim()
@@ -110,7 +106,12 @@ export const healthReminderPublicSchema = z.object({
     z.object({
       id: ulidSchema,
       kind: healthReminderOffsetSchema,
-      customOffsetMinutes: z.number().int().min(0).max(60 * 24 * 30).nullable(),
+      customOffsetMinutes: z
+        .number()
+        .int()
+        .min(0)
+        .max(60 * 24 * 30)
+        .nullable(),
       fireAt: timestampSchema,
       allowDndOverride: z.boolean(),
       status: z.enum(['SCHEDULED', 'SENT', 'CANCELED']),

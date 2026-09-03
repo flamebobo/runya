@@ -6,7 +6,12 @@ const timestampSchema = z.number().int().positive();
 const timezoneSchema = z.string().trim().min(1).max(64);
 
 export const audioCategorySchema = z.enum([
+  'FIRST_MOM',
+  'FIRST_DAD',
   'LAUGH',
+  'BABBLING',
+  'DAD_STORY',
+  'MOM_LULLABY',
   'FIRST_WORDS',
   'SINGING',
   'SLEEP_TALK',
@@ -17,7 +22,11 @@ export const capsuleStateSchema = z.enum(['DRAFT', 'SEALED', 'OPENED']);
 
 // --- Photo Memories ---
 export const createPhotoMemoryBodySchema = z.object({
-  title: z.string().trim().min(1, '照片回忆需要一个标题').max(100, '标题不能超过 100 字'),
+  title: z
+    .string()
+    .trim()
+    .min(1, '照片回忆需要一个标题')
+    .max(100, '标题不能超过 100 字'),
   story: z.string().trim().max(2000, '故事不能超过 2000 字').optional(),
   happenedAt: timestampSchema,
   timezoneName: timezoneSchema.optional(),
@@ -115,7 +124,7 @@ export const audioMemoryPublicSchema = z.object({
   happenedAt: timestampSchema,
   timezoneName: z.string(),
   favorite: z.boolean(),
-  media: mediaPublicSchema,
+  media: mediaPublicSchema.nullable(),
   createdBy: ulidSchema,
   createdAt: timestampSchema,
   updatedBy: ulidSchema,
@@ -125,7 +134,11 @@ export const audioMemoryPublicSchema = z.object({
 
 // --- First Moments ---
 export const createFirstMomentBodySchema = z.object({
-  title: z.string().trim().min(1, '第一次发生的事是什么呢').max(100, '标题不能超过 100 字'),
+  title: z
+    .string()
+    .trim()
+    .min(1, '第一次发生的事是什么呢')
+    .max(100, '标题不能超过 100 字'),
   description: z.string().trim().max(2000).optional(),
   happenedAt: timestampSchema,
   timezoneName: timezoneSchema.optional(),
@@ -174,6 +187,7 @@ export const createTimeCapsuleBodySchema = z.object({
   openAt: timestampSchema,
   recipientText: z.string().trim().max(100, '收件人不能超过 100 字').optional(),
   mediaIds: z.array(ulidSchema).max(20).optional(),
+  favorite: z.boolean().optional(),
   sealNow: z.boolean().optional(),
 });
 
@@ -183,6 +197,11 @@ export const updateTimeCapsuleBodySchema = z.object({
   openAt: timestampSchema.optional(),
   recipientText: z.string().trim().max(100).nullable().optional(),
   mediaIds: z.array(ulidSchema).max(20).optional(),
+  favorite: z.boolean().optional(),
+});
+
+export const updateTimeCapsuleFavoriteBodySchema = z.object({
+  favorite: z.boolean(),
 });
 
 export const timeCapsulePublicSchema = z.object({
@@ -194,6 +213,7 @@ export const timeCapsulePublicSchema = z.object({
   title: z.string(),
   body: z.string(),
   openAt: timestampSchema,
+  favorite: z.boolean(),
   state: capsuleStateSchema,
   sealedAt: timestampSchema.nullable(),
   openedAt: timestampSchema.nullable(),
@@ -224,6 +244,32 @@ export const onThisDayResponseSchema = z.object({
   quotes: z.array(babyQuotePublicSchema),
   audios: z.array(audioMemoryPublicSchema),
   firsts: z.array(firstMomentPublicSchema),
+  capsules: z.array(timeCapsulePublicSchema),
+});
+
+export const memoriesFavoritesSchema = z.object({
+  photos: z.array(photoMemoryPublicSchema),
+  quotes: z.array(babyQuotePublicSchema),
+  audios: z.array(audioMemoryPublicSchema),
+  firsts: z.array(firstMomentPublicSchema),
+  capsules: z.array(timeCapsulePublicSchema),
+  totalCount: z.number().int().nonnegative(),
+});
+
+export const annualReviewResponseSchema = z.object({
+  year: z.number().int(),
+  photos: z.array(photoMemoryPublicSchema),
+  quotes: z.array(babyQuotePublicSchema),
+  audios: z.array(audioMemoryPublicSchema),
+  firsts: z.array(firstMomentPublicSchema),
+  capsules: z.array(timeCapsulePublicSchema),
+  photosCount: z.number().int().nonnegative(),
+  quotesCount: z.number().int().nonnegative(),
+  audiosCount: z.number().int().nonnegative(),
+  firstsCount: z.number().int().nonnegative(),
+  capsulesCount: z.number().int().nonnegative(),
+  favoritesCount: z.number().int().nonnegative(),
+  totalCount: z.number().int().nonnegative(),
 });
 
 export type AudioCategory = z.infer<typeof audioCategorySchema>;
@@ -242,6 +288,11 @@ export type UpdateFirstMomentBody = z.infer<typeof updateFirstMomentBodySchema>;
 export type FirstMomentPublic = z.infer<typeof firstMomentPublicSchema>;
 export type CreateTimeCapsuleBody = z.infer<typeof createTimeCapsuleBodySchema>;
 export type UpdateTimeCapsuleBody = z.infer<typeof updateTimeCapsuleBodySchema>;
+export type UpdateTimeCapsuleFavoriteBody = z.infer<
+  typeof updateTimeCapsuleFavoriteBodySchema
+>;
 export type TimeCapsulePublic = z.infer<typeof timeCapsulePublicSchema>;
 export type MemoriesHomeSummary = z.infer<typeof memoriesHomeSummarySchema>;
 export type OnThisDayResponse = z.infer<typeof onThisDayResponseSchema>;
+export type MemoriesFavorites = z.infer<typeof memoriesFavoritesSchema>;
+export type AnnualReviewResponse = z.infer<typeof annualReviewResponseSchema>;

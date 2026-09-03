@@ -1,536 +1,2258 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, ScrollView } from '@tarojs/components';
-import Taro from '@tarojs/taro';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Image, ScrollView, Text, View } from '@tarojs/components';
+import Taro, { useRouter } from '@tarojs/taro';
+import type {
+  AnnualReviewResponse,
+  AudioCategory,
+  AudioMemoryPublic,
+  BabyQuotePublic,
+  FirstMomentPublic,
+  MemoriesFavorites,
+  MemoriesHomeSummary,
+  OnThisDayResponse,
+  PhotoMemoryPublic,
+  TimeCapsulePublic,
+} from '@runew/contracts';
 import styles from './index.module.scss';
+import {
+  AppDrawer,
+  AppTopBar,
+  BottomNav,
+  DEFAULT_DRAWER_ITEMS,
+} from '@/components';
+import { AppBootstrapGate } from '@/components/shell/AppBootstrapGate';
+import { AddMomentOverlay } from '@/components/overlay/AddMomentOverlay';
 import { PageShell } from '@/components/foundation/PageShell';
-import { PrimaryActionButton, SecondaryGlassButton } from '@/components/buttons';
+import {
+  IconActionButton,
+  PrimaryActionButton,
+  SecondaryGlassButton,
+  TextAction,
+} from '@/components/buttons';
+import { Glyph } from '@/components/icons/Glyph';
 import { BottomSheet, ConfirmDialog } from '@/components/overlay';
-import { GlassInput, GlassTextArea } from '@/components/forms';
+import {
+  FilterChip,
+  GlassDateField,
+  GlassInput,
+  GlassTextArea,
+} from '@/components/forms';
 import {
   InlineAudioPlayer,
-  TimeCapsuleCard,
   JitMicrophonePermissionSheet,
+  MemoryMediaStrip,
+  ProtectedMediaImage,
+  TimeCapsuleCard,
 } from '@/components/memories/MemoriesComponents';
 import {
-  fetchMemoriesSummary,
-  fetchPhotoMemories,
-  createPhotoMemory,
-  fetchBabyQuotes,
-  createBabyQuote,
-  fetchAudioMemories,
   createAudioMemory,
-  fetchFirstMoments,
+  createBabyQuote,
   createFirstMoment,
-  fetchTimeCapsules,
+  createPhotoMemory,
   createTimeCapsule,
-  sealTimeCapsule,
+  deleteAudioMemory,
+  deleteBabyQuote,
+  deleteFirstMoment,
+  deletePhotoMemory,
+  deleteTimeCapsule,
+  fetchAnnualReview,
+  fetchAudioMemories,
+  fetchBabyQuotes,
+  fetchFavoriteMemories,
+  fetchFirstMoments,
+  fetchMemoriesSummary,
+  fetchOnThisDay,
+  fetchPhotoMemories,
+  fetchTimeCapsules,
+  favoriteTimeCapsule,
   openTimeCapsule,
+  restoreAudioMemory,
+  restoreBabyQuote,
+  restoreFirstMoment,
+  restorePhotoMemory,
+  restoreTimeCapsule,
+  retryMediaProcessing,
+  sealTimeCapsule,
+  updateBabyQuote,
+  updateAudioMemory,
+  updateFirstMoment,
+  updatePhotoMemory,
+  updateTimeCapsule,
 } from '@/api/memories';
-import { saveDurableLocalMedia } from '@/local/mediaStorage';
+import { platformAdapters } from '@/adapters/platform';
+import type { AudioRecordingSession, PickedMedia } from '@/adapters/types';
+import {
+  enqueueMediaUpload,
+  createEphemeralPreviewUrl,
+  getDurableMediaMetadata,
+  getMediaUploadQueueEntry,
+  saveDurableLocalMedia,
+  type DurableLocalMedia,
+} from '@/local/mediaStorage';
+import { clearDraft, loadDraft, saveDraft } from '@/local/draftStore';
+import { resumePendingMediaUploads, uploadDurableMedia } from '@/local/uploadManager';
+import { useBootstrapQuery } from '@/hooks/useBootstrap';
+import { useFamilyRuntimeStore, useUiOverlayStore } from '@/stores/runtime';
+import { formatBabyAgeLabel } from '@/utils/babyAge';
+import { rootTabUrl } from '@/utils/rootNavigation';
 
-export default function MemoriesPage() {
-  const babyId = '01JDEFAULTBABYID000000000'; // Active baby ID fallback
-  const [activeTab, setActiveTab] = useState<'summary' | 'photos' | 'quotes' | 'audios' | 'firsts' | 'capsules'>(
-    'summary',
-  );
+const AUDIO_CATEGORY_OPTIONS: Array<{ value: AudioCategory; label: string }> = [
+  { value: 'FIRST_MOM', label: '第一次叫妈妈' },
+  { value: 'FIRST_DAD', label: '第一次叫爸爸' },
+  { value: 'LAUGH', label: '大笑' },
+  { value: 'BABBLING', label: '咿咿呀呀' },
+  { value: 'SINGING', label: '唱歌' },
+  { value: 'DAD_STORY', label: '爸爸故事' },
+  { value: 'MOM_LULLABY', label: '妈妈摇篮曲' },
+  { value: 'OTHER', label: '其他' },
+];
 
-  const [summary, setSummary] = useState<any>(null);
-  const [photos, setPhotos] = useState<any[]>([]);
-  const [quotes, setQuotes] = useState<any[]>([]);
-  const [audios, setAudios] = useState<any[]>([]);
-  const [firsts, setFirsts] = useState<any[]>([]);
-  const [capsules, setCapsules] = useState<any[]>([]);
+function todayDateInput() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function dateInputFromTimestamp(timestamp: number) {
+  return new Date(timestamp).toISOString().slice(0, 10);
+}
+
+function timestampFromDateInput(value: string) {
+  const [year = 1970, month = 1, day = 1] = value.split('-').map(Number);
+  return Date.UTC(year, month - 1, day, 12);
+}
+
+type MemoriesTab =
+  | 'summary'
+  | 'photos'
+  | 'quotes'
+  | 'audios'
+  | 'firsts'
+  | 'capsules'
+  | 'favorites'
+  | 'onThisDay'
+  | 'annual';
+
+type MemoryQuickAction =
+  | 'memory'
+  | 'photo'
+  | 'audio'
+  | 'quote'
+  | 'first'
+  | 'capsule';
+
+function memoryQuickAction(value: string | undefined): MemoryQuickAction | null {
+  return value === 'memory' ||
+    value === 'photo' ||
+    value === 'audio' ||
+    value === 'quote' ||
+    value === 'first' ||
+    value === 'capsule'
+    ? value
+    : null;
+}
+
+type DeleteRequest = {
+  kind: 'photo' | 'quote' | 'audio' | 'first' | 'capsule';
+  id: string;
+  label: string;
+};
+
+type DeletedMemory = DeleteRequest;
+
+function formatDate(timestamp: number) {
+  return new Date(timestamp).toLocaleDateString('zh-CN', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  });
+}
+
+function getPickedInput(picked: PickedMedia) {
+  const input = picked.file ?? picked.localPath;
+  if (!input) throw new Error('没有拿到可保存的媒体文件');
+  return input;
+}
+
+function memoryDraftKey(kind: 'quote' | 'capsule', babyId: string) {
+  return `memories:${kind}:${babyId}`;
+}
+
+type MemoryAttachmentType = 'IMAGE' | 'AUDIO' | 'VIDEO';
+
+function toMemoryAttachmentType(value: string | undefined): MemoryAttachmentType {
+  return value === 'AUDIO' || value === 'VIDEO' ? value : 'IMAGE';
+}
+
+export default function MemoriesPage({ embedded = false }: { embedded?: boolean } = {}) {
+  const body = <MemoriesBody embedded={embedded} />;
+  return embedded ? body : <AppBootstrapGate>{body}</AppBootstrapGate>;
+}
+
+export function MemoriesBody({ embedded = false }: { embedded?: boolean }) {
+  const router = useRouter();
+  const quickAction = memoryQuickAction(router.params.action);
+  const babyId = useFamilyRuntimeStore((state) => state.babyId);
+  const bootstrap = useBootstrapQuery(false);
+  const baby = bootstrap.data?.currentBaby;
+  const babyName = baby?.nickname ?? baby?.name ?? '宝宝';
+  const babyAgeLabel = baby ? formatBabyAgeLabel(baby.birthday) : '成长中';
+  const gemAmount = bootstrap.data?.gemBalance ?? 0;
+  const {
+    drawerOpen,
+    sheetOpen,
+    setDrawerOpen,
+    setBottomNavActive,
+    setSheetOpen,
+    showToast,
+  } = useUiOverlayStore();
+  const [activeTab, setActiveTab] = useState<MemoriesTab>('summary');
+  const [summary, setSummary] = useState<MemoriesHomeSummary | null>(null);
+  const [photos, setPhotos] = useState<PhotoMemoryPublic[]>([]);
+  const [quotes, setQuotes] = useState<BabyQuotePublic[]>([]);
+  const [audios, setAudios] = useState<AudioMemoryPublic[]>([]);
+  const [firsts, setFirsts] = useState<FirstMomentPublic[]>([]);
+  const [capsules, setCapsules] = useState<TimeCapsulePublic[]>([]);
+  const [favorites, setFavorites] = useState<MemoriesFavorites | null>(null);
+  const [onThisDay, setOnThisDay] = useState<OnThisDayResponse | null>(null);
+  const [annualReview, setAnnualReview] = useState<AnnualReviewResponse | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [uploadNotice, setUploadNotice] = useState<string | null>(null);
 
   const [composeSheetVisible, setComposeSheetVisible] = useState(false);
   const [micSheetVisible, setMicSheetVisible] = useState(false);
-
-  // Modal forms
-  const [photoModalVisible, setPhotoModalVisible] = useState(false);
-  const [photoTitle, setPhotoTitle] = useState('');
-  const [photoStory, setPhotoStory] = useState('');
-
-  const [quoteModalVisible, setQuoteModalVisible] = useState(false);
-  const [quoteText, setQuoteText] = useState('');
-
-  const [audioModalVisible, setAudioModalVisible] = useState(false);
-  const [audioTitle, setAudioTitle] = useState('');
-  const [audioCategory] = useState<'LAUGH' | 'FIRST_WORDS' | 'SINGING' | 'SLEEP_TALK' | 'OTHER'>(
-    'OTHER',
-  );
+  const [recordingPurpose, setRecordingPurpose] = useState<
+    'audio' | 'quote' | 'first' | 'capsule'
+  >('audio');
+  const [recordingSession, setRecordingSession] =
+    useState<AudioRecordingSession | null>(null);
+  const recordingStopInFlight = useRef(false);
   const [isRecording, setIsRecording] = useState(false);
+  const [recordStartedAt, setRecordStartedAt] = useState(0);
   const [recordSec, setRecordSec] = useState(0);
 
+  const [photoModalVisible, setPhotoModalVisible] = useState(false);
+  const [editingPhotoId, setEditingPhotoId] = useState<string | null>(null);
+  const [photoTitle, setPhotoTitle] = useState('');
+  const [photoStory, setPhotoStory] = useState('');
+  const [photoDate, setPhotoDate] = useState(todayDateInput());
+  const [photoFavorite, setPhotoFavorite] = useState(false);
+  const [photoMediaId, setPhotoMediaId] = useState<string | null>(null);
+  const [photoPendingMedia, setPhotoPendingMedia] = useState<DurableLocalMedia | null>(
+    null,
+  );
+  const [photoExistingMediaIds, setPhotoExistingMediaIds] = useState<string[]>([]);
+  const [photoPreviewUrl, setPhotoPreviewUrl] = useState<string | null>(null);
+
+  const [quoteModalVisible, setQuoteModalVisible] = useState(false);
+  const [editingQuoteId, setEditingQuoteId] = useState<string | null>(null);
+  const [quoteText, setQuoteText] = useState('');
+  const [quoteDate, setQuoteDate] = useState(todayDateInput());
+  const [quoteFavorite, setQuoteFavorite] = useState(false);
+  const [quoteAudioMediaId, setQuoteAudioMediaId] = useState<string | null>(null);
+  const [quotePendingAudio, setQuotePendingAudio] = useState<DurableLocalMedia | null>(
+    null,
+  );
+
+  const [audioModalVisible, setAudioModalVisible] = useState(false);
+  const [editingAudioId, setEditingAudioId] = useState<string | null>(null);
+  const [audioTitle, setAudioTitle] = useState('');
+  const [audioCategory, setAudioCategory] = useState<AudioCategory>('OTHER');
+  const [audioDate, setAudioDate] = useState(todayDateInput());
+  const [audioMediaId, setAudioMediaId] = useState<string | null>(null);
+  const [audioPendingMedia, setAudioPendingMedia] = useState<DurableLocalMedia | null>(
+    null,
+  );
+  const [audioFavorite, setAudioFavorite] = useState(false);
+
   const [firstModalVisible, setFirstModalVisible] = useState(false);
+  const [editingFirstId, setEditingFirstId] = useState<string | null>(null);
   const [firstTitle, setFirstTitle] = useState('');
   const [firstDesc, setFirstDesc] = useState('');
+  const [firstDate, setFirstDate] = useState(todayDateInput());
+  const [firstFavorite, setFirstFavorite] = useState(false);
+  const [firstMediaId, setFirstMediaId] = useState<string | null>(null);
+  const [firstMediaType, setFirstMediaType] = useState<'IMAGE' | 'AUDIO' | 'VIDEO'>(
+    'IMAGE',
+  );
+  const [firstPendingMedia, setFirstPendingMedia] = useState<DurableLocalMedia | null>(
+    null,
+  );
+  const [firstPendingMediaType, setFirstPendingMediaType] = useState<
+    'IMAGE' | 'AUDIO' | 'VIDEO'
+  >('IMAGE');
 
   const [capsuleModalVisible, setCapsuleModalVisible] = useState(false);
+  const [editingCapsuleId, setEditingCapsuleId] = useState<string | null>(null);
+  const [capsuleRecipient, setCapsuleRecipient] = useState('');
   const [capsuleTitle, setCapsuleTitle] = useState('');
   const [capsuleBody, setCapsuleBody] = useState('');
-  const [capsuleRecipient, setCapsuleRecipient] = useState('');
-  const [sealConfirmVisible, setSealConfirmVisible] = useState(false);
+  const [capsuleOpenDate, setCapsuleOpenDate] = useState(todayDateInput());
+  const [capsuleMediaId, setCapsuleMediaId] = useState<string | null>(null);
+  const [capsulePendingMedia, setCapsulePendingMedia] =
+    useState<DurableLocalMedia | null>(null);
+  const [capsuleMediaType, setCapsuleMediaType] = useState<'IMAGE' | 'AUDIO' | 'VIDEO'>(
+    'IMAGE',
+  );
+  const [capsulePendingMediaType, setCapsulePendingMediaType] = useState<
+    'IMAGE' | 'AUDIO' | 'VIDEO'
+  >('IMAGE');
   const [pendingCapsuleId, setPendingCapsuleId] = useState<string | null>(null);
+  const [sealConfirmVisible, setSealConfirmVisible] = useState(false);
+  const [deleteRequest, setDeleteRequest] = useState<DeleteRequest | null>(null);
+  const [deletedMemory, setDeletedMemory] = useState<DeletedMemory | null>(null);
+  const handledQuickAction = useRef<MemoryQuickAction | null>(null);
 
-  const loadData = async () => {
-    try {
-      const s = await fetchMemoriesSummary(babyId);
-      if (s) setSummary(s);
-
-      const p = await fetchPhotoMemories(babyId);
-      setPhotos(p);
-
-      const q = await fetchBabyQuotes(babyId);
-      setQuotes(q);
-
-      const a = await fetchAudioMemories(babyId);
-      setAudios(a);
-
-      const f = await fetchFirstMoments(babyId);
-      setFirsts(f);
-
-      const c = await fetchTimeCapsules(babyId);
-      setCapsules(c);
-    } catch {
-      // Fallback
+  const loadData = useCallback(async () => {
+    if (!babyId) {
+      setSummary(null);
+      setErrorMessage('还没有选中的宝宝，请先完成家庭设置');
+      return;
     }
-  };
-
-  useEffect(() => {
-    loadData();
+    setLoading(true);
+    setErrorMessage(null);
+    try {
+      const [
+        nextSummary,
+        nextPhotos,
+        nextQuotes,
+        nextAudios,
+        nextFirsts,
+        nextCapsules,
+      ] = await Promise.all([
+        fetchMemoriesSummary(babyId),
+        fetchPhotoMemories(babyId),
+        fetchBabyQuotes(babyId),
+        fetchAudioMemories(babyId),
+        fetchFirstMoments(babyId),
+        fetchTimeCapsules(babyId),
+      ]);
+      setSummary(nextSummary);
+      setPhotos(nextPhotos);
+      setQuotes(nextQuotes);
+      setAudios(nextAudios);
+      setFirsts(nextFirsts);
+      setCapsules(nextCapsules);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : '回忆暂时加载失败');
+    } finally {
+      setLoading(false);
+    }
   }, [babyId]);
 
-  // Audio recording timer
-  useEffect(() => {
-    let timer: NodeJS.Timeout;
-    if (isRecording) {
-      timer = setInterval(() => {
-        setRecordSec((s) => s + 1);
-      }, 1000);
+  const loadOnThisDay = useCallback(async () => {
+    if (!babyId) return;
+    try {
+      setOnThisDay(await fetchOnThisDay(babyId));
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : '那年今日暂时打不开');
     }
-    return () => clearInterval(timer);
-  }, [isRecording]);
+  }, [babyId]);
 
-  const handleCreatePhoto = async () => {
-    if (!photoTitle.trim()) {
-      Taro.showToast({ title: '请输入回忆标题', icon: 'none' });
+  const loadFavorites = useCallback(async () => {
+    if (!babyId) return;
+    try {
+      setFavorites(await fetchFavoriteMemories(babyId));
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : '珍藏暂时加载失败');
+    }
+  }, [babyId]);
+
+  const loadAnnualReview = useCallback(async () => {
+    if (!babyId) return;
+    try {
+      setAnnualReview(await fetchAnnualReview(babyId, new Date().getUTCFullYear()));
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : '年度回顾暂时加载失败');
+    }
+  }, [babyId]);
+
+  useEffect(() => {
+    void loadData();
+    void resumePendingMediaUploads().catch(() => {
+      setUploadNotice('本机媒体仍会保留，上传队列将在网络恢复后继续');
+    });
+  }, [loadData]);
+
+  useEffect(() => {
+    const unsubscribe = platformAdapters.network.onStatusChange((online) => {
+      if (!online) {
+        setUploadNotice('网络暂时离开了，本机媒体会留在上传队列里');
+        return;
+      }
+      void resumePendingMediaUploads().catch(() => {
+        setUploadNotice('本机媒体仍会保留，上传队列将在网络恢复后继续');
+      });
+    });
+    return unsubscribe;
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === 'onThisDay') void loadOnThisDay();
+    if (activeTab === 'favorites') void loadFavorites();
+    if (activeTab === 'annual') void loadAnnualReview();
+  }, [activeTab, loadAnnualReview, loadFavorites, loadOnThisDay]);
+
+  useEffect(() => {
+    if (!isRecording) return undefined;
+    const update = () =>
+      setRecordSec(Math.floor((Date.now() - recordStartedAt) / 1000));
+    update();
+    const timer = setInterval(update, 500);
+    return () => clearInterval(timer);
+  }, [isRecording, recordStartedAt]);
+
+  useEffect(() => {
+    return () => {
+      if (photoPreviewUrl?.startsWith('blob:')) URL.revokeObjectURL(photoPreviewUrl);
+    };
+  }, [photoPreviewUrl]);
+
+  Taro.useDidHide(() => {
+    if (isRecording) void handleStopRecord();
+  });
+
+  const stats = useMemo(
+    () => ({
+      photos: summary?.photosCount ?? photos.length,
+      quotes: summary?.quotesCount ?? quotes.length,
+      audios: summary?.audiosCount ?? audios.length,
+      capsules: summary?.capsulesCount ?? capsules.length,
+    }),
+    [audios.length, capsules.length, photos.length, quotes.length, summary],
+  );
+
+  const saveAndUploadPicked = useCallback(
+    async (picked: PickedMedia, mediaType: 'IMAGE' | 'AUDIO' | 'VIDEO') => {
+      if (!babyId) throw new Error('请先选择宝宝');
+      const mimeType =
+        picked.mimeType ||
+        {
+          IMAGE: 'image/jpeg',
+          AUDIO: 'audio/aac',
+          VIDEO: 'video/mp4',
+        }[mediaType];
+      const durable = await saveDurableLocalMedia(getPickedInput(picked), mimeType);
+      await enqueueMediaUpload(durable, {
+        mediaType,
+        babyId,
+      });
+      setUploadNotice('已经安全保存在本机，正在继续上传…');
+      try {
+        const mediaId = await uploadDurableMedia(durable, {
+          mediaType,
+          mimeType,
+          originalFilename: picked.originalFilename || durable.originalFilename,
+          babyId,
+        });
+        setUploadNotice('媒体已保存并上传完成');
+        return { durable, mediaId };
+      } catch {
+        const queue = await getMediaUploadQueueEntry(durable.localId);
+        if (queue?.mediaId) {
+          setUploadNotice('本机原件已保存，网络恢复后会自动续传');
+          return { durable, mediaId: queue.mediaId };
+        }
+        setUploadNotice('本机原件已保存，上传会在网络恢复后重试');
+        return { durable, mediaId: null };
+      }
+    },
+    [babyId],
+  );
+
+  async function retryLocalMedia(
+    durable: DurableLocalMedia,
+    mediaType: 'IMAGE' | 'AUDIO' | 'VIDEO',
+    onUploaded: (mediaId: string) => void,
+  ) {
+    if (!babyId) return;
+    try {
+      const mediaId = await uploadDurableMedia(durable, {
+        mediaType,
+        mimeType: durable.mimeType,
+        originalFilename: durable.originalFilename,
+        babyId,
+      });
+      onUploaded(mediaId);
+      setUploadNotice('本机原件已上传完成，可以继续保存这份回忆');
+    } catch (error) {
+      setUploadNotice('本机原件仍然保留，网络恢复后会继续上传');
+      Taro.showToast({
+        title: error instanceof Error ? error.message : '上传仍在等待重试',
+        icon: 'none',
+      });
+    }
+  }
+
+  async function pickMediaFor(
+    target: 'photo' | 'first' | 'capsule',
+    mediaType: 'IMAGE' | 'VIDEO',
+    capture = false,
+  ) {
+    const permission = capture
+      ? await platformAdapters.permission.requestCamera()
+      : await platformAdapters.permission.requestAlbum();
+    if (permission !== 'granted') {
+      Taro.showToast({
+        title: capture
+          ? mediaType === 'VIDEO'
+            ? '需要相机权限才能录视频'
+            : '需要相机权限才能拍照'
+          : mediaType === 'VIDEO'
+            ? '需要相册权限才能选视频'
+            : '需要相册权限才能选照片',
+        icon: 'none',
+      });
       return;
     }
-    await createPhotoMemory(babyId, {
-      title: photoTitle,
-      story: photoStory,
-      happenedAt: Date.now(),
-      mediaIds: [],
-    });
-    setPhotoModalVisible(false);
+    const picked =
+      mediaType === 'VIDEO'
+        ? await platformAdapters.mediaPicker.pickVideo()
+        : capture
+          ? await platformAdapters.mediaPicker.capturePhoto()
+          : await platformAdapters.mediaPicker.pickImage();
+    if (!picked) return;
+    try {
+      const saved = await saveAndUploadPicked(picked, mediaType);
+      if (target === 'photo') {
+        setPhotoMediaId(saved.mediaId);
+        setPhotoPendingMedia(saved.mediaId ? null : saved.durable);
+        const preview = await createEphemeralPreviewUrl(saved.durable);
+        setPhotoPreviewUrl(preview);
+      } else if (target === 'first') {
+        setFirstMediaId(saved.mediaId);
+        setFirstMediaType(mediaType);
+        setFirstPendingMedia(saved.mediaId ? null : saved.durable);
+        setFirstPendingMediaType(mediaType);
+      } else {
+        setCapsuleMediaId(saved.mediaId);
+        setCapsuleMediaType(mediaType);
+        setCapsulePendingMedia(saved.mediaId ? null : saved.durable);
+        setCapsulePendingMediaType(mediaType);
+      }
+    } catch (error) {
+      Taro.showToast({
+        title: error instanceof Error ? error.message : '媒体保存失败',
+        icon: 'none',
+      });
+    }
+  }
+
+  function pickImageFor(target: 'photo' | 'first' | 'capsule', capture = false) {
+    return pickMediaFor(target, 'IMAGE', capture);
+  }
+
+  async function handleStartRecord() {
+    setMicSheetVisible(false);
+    const permission = await platformAdapters.permission.requestMicrophone();
+    if (permission !== 'granted') {
+      Taro.showToast({ title: '需要麦克风权限才能记录声音', icon: 'none' });
+      return;
+    }
+    try {
+      const session = await platformAdapters.mediaPicker.startAudioRecording();
+      setRecordingSession(session);
+      setRecordStartedAt(Date.now());
+      setRecordSec(0);
+      setIsRecording(true);
+      setAudioModalVisible(true);
+    } catch (error) {
+      Taro.showToast({
+        title: error instanceof Error ? error.message : '录音启动失败',
+        icon: 'none',
+      });
+    }
+  }
+
+  const handleStopRecord = useCallback(async () => {
+    if (!recordingSession || recordingStopInFlight.current) return;
+    recordingStopInFlight.current = true;
+    setIsRecording(false);
+    try {
+      const picked = await recordingSession.stop();
+      const saved = await saveAndUploadPicked(picked, 'AUDIO');
+      setRecordingSession(null);
+      if (recordingPurpose === 'quote') {
+        setQuoteAudioMediaId(saved.mediaId);
+        setQuotePendingAudio(saved.mediaId ? null : saved.durable);
+        setAudioModalVisible(false);
+        setQuoteModalVisible(true);
+      } else if (recordingPurpose === 'first') {
+        setFirstMediaId(saved.mediaId);
+        setFirstMediaType('AUDIO');
+        setFirstPendingMedia(saved.mediaId ? null : saved.durable);
+        setFirstPendingMediaType('AUDIO');
+        setAudioModalVisible(false);
+        setFirstModalVisible(true);
+      } else if (recordingPurpose === 'capsule') {
+        setCapsuleMediaId(saved.mediaId);
+        setCapsuleMediaType('AUDIO');
+        setCapsulePendingMedia(saved.mediaId ? null : saved.durable);
+        setCapsulePendingMediaType('AUDIO');
+        setAudioModalVisible(false);
+        setCapsuleModalVisible(true);
+      } else {
+        setAudioMediaId(saved.mediaId);
+        setAudioPendingMedia(saved.mediaId ? null : saved.durable);
+      }
+    } catch (error) {
+      setRecordingSession(null);
+      Taro.showToast({
+        title: error instanceof Error ? error.message : '录音保存失败',
+        icon: 'none',
+      });
+    } finally {
+      recordingStopInFlight.current = false;
+    }
+  }, [recordingPurpose, recordingSession, saveAndUploadPicked]);
+
+  useEffect(() => {
+    if (!isRecording || typeof document === 'undefined') return undefined;
+    const handleVisibilityChange = () => {
+      if (document.hidden) void handleStopRecord();
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () =>
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [handleStopRecord, isRecording]);
+
+  const openPhotoCreate = useCallback(() => {
+    setEditingPhotoId(null);
     setPhotoTitle('');
     setPhotoStory('');
-    loadData();
-    Taro.showToast({ title: '照片回忆已保存 🌱', icon: 'success' });
-  };
+    setPhotoDate(todayDateInput());
+    setPhotoFavorite(false);
+    setPhotoMediaId(null);
+    setPhotoPendingMedia(null);
+    setPhotoExistingMediaIds([]);
+    setPhotoPreviewUrl(null);
+    setPhotoModalVisible(true);
+  }, []);
 
-  const handleCreateQuote = async () => {
-    if (!quoteText.trim()) {
-      Taro.showToast({ title: '请写下宝宝说的话', icon: 'none' });
+  function openPhotoEdit(photo: PhotoMemoryPublic) {
+    setEditingPhotoId(photo.id);
+    setPhotoTitle(photo.title);
+    setPhotoStory(photo.story ?? '');
+    setPhotoDate(dateInputFromTimestamp(photo.happenedAt));
+    setPhotoFavorite(photo.favorite);
+    setPhotoMediaId(photo.media[0]?.id ?? null);
+    setPhotoPendingMedia(null);
+    setPhotoExistingMediaIds(photo.media.map((media) => media.id));
+    setPhotoPreviewUrl(null);
+    setPhotoModalVisible(true);
+  }
+
+  async function handleSavePhoto() {
+    if (!babyId || !photoTitle.trim()) {
+      Taro.showToast({ title: '请给这段回忆写一个标题', icon: 'none' });
       return;
     }
-    await createBabyQuote(babyId, {
-      quoteText,
-      happenedAt: Date.now(),
-    });
-    setQuoteModalVisible(false);
-    setQuoteText('');
-    loadData();
-    Taro.showToast({ title: '宝宝语录已保存 💬', icon: 'success' });
-  };
-
-  const handleStartRecord = () => {
-    setMicSheetVisible(false);
-    setAudioModalVisible(true);
-    setIsRecording(true);
-    setRecordSec(0);
-  };
-
-  const handleStopRecord = async () => {
-    setIsRecording(false);
-    if (!audioTitle.trim()) {
-      setAudioTitle(`宝宝的声音记录 (${recordSec}秒)`);
-    }
-  };
-
-  const handleSaveAudio = async () => {
-    if (!audioTitle.trim()) {
-      Taro.showToast({ title: '请输入声音标题', icon: 'none' });
+    if (photoPendingMedia && !photoMediaId) {
+      Taro.showToast({ title: '原件已安全保存在本机，请先重试上传', icon: 'none' });
       return;
     }
-    const durable = await saveDurableLocalMedia('tmp_audio_recording.m4a', 'audio/m4a');
-    await createAudioMemory(babyId, {
-      mediaId: durable.localId,
-      title: audioTitle,
-      category: audioCategory,
-      happenedAt: Date.now(),
-    });
-    setAudioModalVisible(false);
-    setAudioTitle('');
-    loadData();
-    Taro.showToast({ title: '声音记忆已安全保存 🎙️', icon: 'success' });
-  };
-
-  const handleCreateFirst = async () => {
-    if (!firstTitle.trim()) {
-      Taro.showToast({ title: '请输入第一次发生的事', icon: 'none' });
+    if (!editingPhotoId && !photoMediaId) {
+      Taro.showToast({ title: '先选一张照片，原件会先安全保存', icon: 'none' });
       return;
     }
-    await createFirstMoment(babyId, {
-      title: firstTitle,
-      description: firstDesc,
-      happenedAt: Date.now(),
-    });
-    setFirstModalVisible(false);
+    try {
+      if (editingPhotoId) {
+        await updatePhotoMemory(editingPhotoId, {
+          title: photoTitle,
+          story: photoStory || null,
+          happenedAt: timestampFromDateInput(photoDate),
+          favorite: photoFavorite,
+          ...(photoMediaId || photoExistingMediaIds.length > 0
+            ? { mediaIds: photoMediaId ? [photoMediaId] : photoExistingMediaIds }
+            : {}),
+        });
+      } else {
+        await createPhotoMemory(babyId, {
+          title: photoTitle,
+          story: photoStory || undefined,
+          happenedAt: timestampFromDateInput(photoDate),
+          mediaIds: photoMediaId ? [photoMediaId] : undefined,
+          favorite: photoFavorite,
+        });
+      }
+      setPhotoModalVisible(false);
+      await loadData();
+      Taro.showToast({
+        title: editingPhotoId ? '照片回忆已更新' : '照片回忆已珍藏',
+        icon: 'success',
+      });
+    } catch (error) {
+      Taro.showToast({
+        title: error instanceof Error ? error.message : '照片回忆保存失败',
+        icon: 'none',
+      });
+    }
+  }
+
+  const openQuoteDraft = useCallback(async () => {
+    setEditingQuoteId(null);
+    const draft = babyId
+      ? await loadDraft(memoryDraftKey('quote', babyId)).catch(() => null)
+      : null;
+    const pendingLocalId =
+      typeof draft?.quotePendingAudioLocalId === 'string'
+        ? draft.quotePendingAudioLocalId
+        : null;
+    const pendingAudio = pendingLocalId
+      ? await getDurableMediaMetadata(pendingLocalId).catch(() => null)
+      : null;
+    setQuoteText(typeof draft?.quoteText === 'string' ? draft.quoteText : '');
+    setQuoteDate(
+      typeof draft?.quoteDate === 'string' ? draft.quoteDate : todayDateInput(),
+    );
+    setQuoteFavorite(draft?.quoteFavorite === true);
+    setQuoteAudioMediaId(
+      typeof draft?.quoteAudioMediaId === 'string' ? draft.quoteAudioMediaId : null,
+    );
+    setQuotePendingAudio(pendingAudio ?? null);
+    setQuoteModalVisible(true);
+  }, [babyId]);
+
+  const openQuoteCreate = useCallback(() => {
+    void openQuoteDraft();
+  }, [openQuoteDraft]);
+
+  function openQuoteEdit(quote: BabyQuotePublic) {
+    setEditingQuoteId(quote.id);
+    setQuoteText(quote.quoteText);
+    setQuoteDate(dateInputFromTimestamp(quote.happenedAt));
+    setQuoteFavorite(quote.favorite);
+    setQuoteAudioMediaId(quote.audioMedia?.id ?? null);
+    setQuotePendingAudio(null);
+    setQuoteModalVisible(true);
+  }
+
+  async function handleSaveQuote() {
+    if (!babyId || !quoteText.trim()) {
+      Taro.showToast({ title: '写下宝宝说的这句话吧', icon: 'none' });
+      return;
+    }
+    if (quotePendingAudio && !quoteAudioMediaId) {
+      Taro.showToast({ title: '语音原件已安全保存在本机，请先重试上传', icon: 'none' });
+      return;
+    }
+    try {
+      const body = {
+        quoteText,
+        happenedAt: timestampFromDateInput(quoteDate),
+        audioMediaId: quoteAudioMediaId ?? undefined,
+        favorite: quoteFavorite,
+      };
+      if (editingQuoteId) await updateBabyQuote(editingQuoteId, body);
+      else await createBabyQuote(babyId, body);
+      setQuoteModalVisible(false);
+      await loadData();
+      if (babyId)
+        void clearDraft(memoryDraftKey('quote', babyId)).catch(() => undefined);
+      Taro.showToast({
+        title: editingQuoteId ? '宝宝语录已更新' : '宝宝语录已收藏',
+        icon: 'success',
+      });
+    } catch (error) {
+      Taro.showToast({
+        title: error instanceof Error ? error.message : '宝宝语录保存失败',
+        icon: 'none',
+      });
+    }
+  }
+
+  async function handleSaveAudio() {
+    if (!babyId || !audioTitle.trim()) {
+      Taro.showToast({ title: '请给这段声音起个名字', icon: 'none' });
+      return;
+    }
+    if (!editingAudioId && !audioMediaId) {
+      Taro.showToast({
+        title: audioPendingMedia ? '原件正在等待上传，请先重试上传' : '请先录好声音',
+        icon: 'none',
+      });
+      return;
+    }
+    try {
+      if (editingAudioId) {
+        await updateAudioMemory(editingAudioId, {
+          title: audioTitle,
+          category: audioCategory,
+          happenedAt: timestampFromDateInput(audioDate),
+          favorite: audioFavorite,
+        });
+      } else {
+        await createAudioMemory(babyId, {
+          mediaId: audioMediaId!,
+          title: audioTitle,
+          category: audioCategory,
+          happenedAt: timestampFromDateInput(audioDate),
+          favorite: audioFavorite,
+        });
+      }
+      setAudioModalVisible(false);
+      setEditingAudioId(null);
+      setAudioTitle('');
+      setAudioCategory('OTHER');
+      setAudioDate(todayDateInput());
+      setAudioMediaId(null);
+      setAudioPendingMedia(null);
+      await loadData();
+      Taro.showToast({
+        title: editingAudioId ? '声音信息已更新' : '声音原件已安全珍藏',
+        icon: 'success',
+      });
+    } catch (error) {
+      Taro.showToast({
+        title: error instanceof Error ? error.message : '声音记录保存失败',
+        icon: 'none',
+      });
+    }
+  }
+
+  const openFirstCreate = useCallback(() => {
+    setEditingFirstId(null);
     setFirstTitle('');
     setFirstDesc('');
-    loadData();
-    Taro.showToast({ title: '第一次已成功珍藏 ✨', icon: 'success' });
-  };
+    setFirstDate(todayDateInput());
+    setFirstFavorite(false);
+    setFirstMediaId(null);
+    setFirstMediaType('IMAGE');
+    setFirstPendingMedia(null);
+    setFirstPendingMediaType('IMAGE');
+    setFirstModalVisible(true);
+  }, []);
 
-  const handleCreateCapsule = async (sealNow = false) => {
-    if (!capsuleTitle.trim() || !capsuleBody.trim()) {
-      Taro.showToast({ title: '请填写标题与主要内容', icon: 'none' });
+  function openFirstEdit(first: FirstMomentPublic) {
+    setEditingFirstId(first.id);
+    setFirstTitle(first.title);
+    setFirstDesc(first.description ?? '');
+    setFirstDate(dateInputFromTimestamp(first.happenedAt));
+    setFirstFavorite(first.favorite);
+    setFirstMediaId(first.media[0]?.id ?? null);
+    setFirstMediaType(toMemoryAttachmentType(first.media[0]?.mediaType));
+    setFirstPendingMedia(null);
+    setFirstPendingMediaType(toMemoryAttachmentType(first.media[0]?.mediaType));
+    setFirstModalVisible(true);
+  }
+
+  async function handleSaveFirst() {
+    if (!babyId || !firstTitle.trim()) {
+      Taro.showToast({ title: '写下这个难忘的第一次吧', icon: 'none' });
       return;
     }
-    const openAt = Date.now() + 365 * 24 * 3600 * 1000;
-    await createTimeCapsule(babyId, {
-      title: capsuleTitle,
-      body: capsuleBody,
-      recipientText: capsuleRecipient,
-      openAt,
-      sealNow,
-    });
-    setCapsuleModalVisible(false);
-    setCapsuleTitle('');
-    setCapsuleBody('');
-    setCapsuleRecipient('');
-    loadData();
-    Taro.showToast({ title: sealNow ? '时光胶囊已正式封存 🔒' : '胶囊草稿已保存 📝', icon: 'success' });
-  };
+    if (firstPendingMedia && !firstMediaId) {
+      Taro.showToast({ title: '附件原件已安全保存在本机，请先重试上传', icon: 'none' });
+      return;
+    }
+    try {
+      const body = {
+        title: firstTitle,
+        description: firstDesc || undefined,
+        happenedAt: timestampFromDateInput(firstDate),
+        mediaIds: firstMediaId ? [firstMediaId] : undefined,
+        favorite: firstFavorite,
+      };
+      if (editingFirstId) await updateFirstMoment(editingFirstId, body);
+      else await createFirstMoment(babyId, body);
+      setFirstModalVisible(false);
+      await loadData();
+      Taro.showToast({
+        title: editingFirstId ? '第一次记录已更新' : '第一次已珍藏',
+        icon: 'success',
+      });
+    } catch (error) {
+      Taro.showToast({
+        title: error instanceof Error ? error.message : '第一次记录保存失败',
+        icon: 'none',
+      });
+    }
+  }
 
-  const handleSealConfirm = async () => {
-    if (pendingCapsuleId) {
+  const openCapsuleDraft = useCallback(async () => {
+    setEditingCapsuleId(null);
+    const draft = babyId
+      ? await loadDraft(memoryDraftKey('capsule', babyId)).catch(() => null)
+      : null;
+    const pendingLocalId =
+      typeof draft?.capsulePendingMediaLocalId === 'string'
+        ? draft.capsulePendingMediaLocalId
+        : null;
+    const pendingMedia = pendingLocalId
+      ? await getDurableMediaMetadata(pendingLocalId).catch(() => null)
+      : null;
+    setCapsuleRecipient(
+      typeof draft?.capsuleRecipient === 'string' ? draft.capsuleRecipient : '',
+    );
+    setCapsuleTitle(typeof draft?.capsuleTitle === 'string' ? draft.capsuleTitle : '');
+    setCapsuleBody(typeof draft?.capsuleBody === 'string' ? draft.capsuleBody : '');
+    setCapsuleOpenDate(
+      typeof draft?.capsuleOpenDate === 'string'
+        ? draft.capsuleOpenDate
+        : todayDateInput(),
+    );
+    setCapsuleMediaId(
+      typeof draft?.capsuleMediaId === 'string' ? draft.capsuleMediaId : null,
+    );
+    setCapsuleMediaType(
+      toMemoryAttachmentType(
+        typeof draft?.capsuleMediaType === 'string'
+          ? draft.capsuleMediaType
+          : undefined,
+      ),
+    );
+    setCapsulePendingMedia(pendingMedia ?? null);
+    setCapsulePendingMediaType(
+      toMemoryAttachmentType(
+        typeof draft?.capsulePendingMediaType === 'string'
+          ? draft.capsulePendingMediaType
+          : undefined,
+      ),
+    );
+    setCapsuleModalVisible(true);
+  }, [babyId]);
+
+  const openCapsuleCreate = useCallback(() => {
+    void openCapsuleDraft();
+  }, [openCapsuleDraft]);
+
+  function openCapsuleEdit(capsule: TimeCapsulePublic) {
+    if (capsule.state !== 'DRAFT') return;
+    setEditingCapsuleId(capsule.id);
+    setCapsuleRecipient(capsule.recipientText ?? '');
+    setCapsuleTitle(capsule.title);
+    setCapsuleBody(capsule.body);
+    setCapsuleOpenDate(dateInputFromTimestamp(capsule.openAt));
+    setCapsuleMediaId(capsule.media[0]?.id ?? null);
+    setCapsuleMediaType(toMemoryAttachmentType(capsule.media[0]?.mediaType));
+    setCapsulePendingMedia(null);
+    setCapsulePendingMediaType(toMemoryAttachmentType(capsule.media[0]?.mediaType));
+    setCapsuleModalVisible(true);
+  }
+
+  async function handleSaveCapsule(sealNow = false) {
+    if (!babyId || !capsuleTitle.trim() || !capsuleBody.trim()) {
+      Taro.showToast({ title: '请填写胶囊标题和想说的话', icon: 'none' });
+      return;
+    }
+    if (capsulePendingMedia && !capsuleMediaId) {
+      Taro.showToast({ title: '附件原件已安全保存在本机，请先重试上传', icon: 'none' });
+      return;
+    }
+    try {
+      if (editingCapsuleId) {
+        await updateTimeCapsule(editingCapsuleId, {
+          title: capsuleTitle,
+          body: capsuleBody,
+          openAt: timestampFromDateInput(capsuleOpenDate),
+          recipientText: capsuleRecipient || null,
+          mediaIds: capsuleMediaId ? [capsuleMediaId] : undefined,
+        });
+      } else {
+        await createTimeCapsule(babyId, {
+          title: capsuleTitle,
+          body: capsuleBody,
+          recipientText: capsuleRecipient || undefined,
+          openAt: timestampFromDateInput(capsuleOpenDate),
+          mediaIds: capsuleMediaId ? [capsuleMediaId] : undefined,
+          sealNow,
+        });
+      }
+      setCapsuleModalVisible(false);
+      await loadData();
+      if (babyId)
+        void clearDraft(memoryDraftKey('capsule', babyId)).catch(() => undefined);
+      Taro.showToast({
+        title: sealNow ? '时光胶囊已封存' : '时光胶囊草稿已保存',
+        icon: 'success',
+      });
+    } catch (error) {
+      Taro.showToast({
+        title: error instanceof Error ? error.message : '时光胶囊保存失败',
+        icon: 'none',
+      });
+    }
+  }
+
+  async function handleSealConfirm() {
+    if (!pendingCapsuleId) return;
+    try {
       await sealTimeCapsule(pendingCapsuleId);
       setSealConfirmVisible(false);
       setPendingCapsuleId(null);
-      loadData();
-      Taro.showToast({ title: '时光胶囊已封存 🔒', icon: 'success' });
+      await loadData();
+      Taro.showToast({ title: '时光胶囊已封存', icon: 'success' });
+    } catch (error) {
+      Taro.showToast({
+        title: error instanceof Error ? error.message : '封存失败',
+        icon: 'none',
+      });
     }
-  };
+  }
 
-  const handleOpenCapsule = async (id: string) => {
+  async function handleOpenCapsule(id: string) {
     try {
       await openTimeCapsule(id);
-      loadData();
-      Taro.showToast({ title: '时光胶囊已成功开启！✨', icon: 'success' });
-    } catch {
-      Taro.showToast({ title: '未能开启，请检查时间', icon: 'none' });
+      await loadData();
+      Taro.showToast({ title: '时光胶囊已开启', icon: 'success' });
+    } catch (error) {
+      Taro.showToast({
+        title: error instanceof Error ? error.message : '还没到开启时间',
+        icon: 'none',
+      });
     }
+  }
+
+  async function handleDeleteConfirm() {
+    if (!deleteRequest) return;
+    const request = deleteRequest;
+    try {
+      if (request.kind === 'photo') await deletePhotoMemory(request.id);
+      if (request.kind === 'quote') await deleteBabyQuote(request.id);
+      if (request.kind === 'audio') await deleteAudioMemory(request.id);
+      if (request.kind === 'first') await deleteFirstMoment(request.id);
+      if (request.kind === 'capsule') await deleteTimeCapsule(request.id);
+      setDeletedMemory(request);
+      setDeleteRequest(null);
+      await loadData();
+      Taro.showToast({ title: '已移入最近删除', icon: 'success' });
+    } catch (error) {
+      Taro.showToast({
+        title: error instanceof Error ? error.message : '删除失败',
+        icon: 'none',
+      });
+    }
+  }
+
+  async function handleRestore() {
+    if (!deletedMemory) return;
+    try {
+      if (deletedMemory.kind === 'photo') await restorePhotoMemory(deletedMemory.id);
+      if (deletedMemory.kind === 'quote') await restoreBabyQuote(deletedMemory.id);
+      if (deletedMemory.kind === 'audio') await restoreAudioMemory(deletedMemory.id);
+      if (deletedMemory.kind === 'first') await restoreFirstMoment(deletedMemory.id);
+      if (deletedMemory.kind === 'capsule') await restoreTimeCapsule(deletedMemory.id);
+      setDeletedMemory(null);
+      await loadData();
+      Taro.showToast({ title: '回忆已恢复', icon: 'success' });
+    } catch (error) {
+      Taro.showToast({
+        title: error instanceof Error ? error.message : '恢复失败',
+        icon: 'none',
+      });
+    }
+  }
+
+  const openAudioRecord = useCallback(
+    (purpose: 'audio' | 'quote' | 'first' | 'capsule') => {
+      setRecordingPurpose(purpose);
+      if (purpose === 'audio') {
+        setEditingAudioId(null);
+        setAudioTitle('');
+        setAudioCategory('OTHER');
+        setAudioDate(todayDateInput());
+        setAudioMediaId(null);
+        setAudioPendingMedia(null);
+        setAudioFavorite(false);
+      }
+      setAudioModalVisible(false);
+      setQuoteModalVisible(false);
+      setFirstModalVisible(false);
+      setCapsuleModalVisible(false);
+      setMicSheetVisible(true);
+    },
+    [],
+  );
+
+  function openAudioEdit(audio: AudioMemoryPublic) {
+    setRecordingPurpose('audio');
+    setEditingAudioId(audio.id);
+    setAudioTitle(audio.title);
+    setAudioCategory(audio.category);
+    setAudioDate(dateInputFromTimestamp(audio.happenedAt));
+    setAudioMediaId(audio.media?.id ?? null);
+    setAudioPendingMedia(null);
+    setAudioFavorite(audio.favorite);
+    setAudioModalVisible(true);
+  }
+
+  function handleAudioSheetClose() {
+    if (isRecording) {
+      void handleStopRecord();
+      return;
+    }
+    setAudioModalVisible(false);
+  }
+
+  async function handleRetryMedia(mediaId: string) {
+    try {
+      await retryMediaProcessing(mediaId);
+      await loadData();
+      Taro.showToast({ title: '已重新开始处理媒体', icon: 'success' });
+    } catch (error) {
+      Taro.showToast({
+        title: error instanceof Error ? error.message : '媒体处理仍未完成',
+        icon: 'none',
+      });
+    }
+  }
+
+  async function toggleMemoryFavorite(action: () => Promise<unknown>) {
+    try {
+      await action();
+      await loadData();
+      if (activeTab === 'favorites') await loadFavorites();
+    } catch (error) {
+      Taro.showToast({
+        title: error instanceof Error ? error.message : '珍藏状态更新失败',
+        icon: 'none',
+      });
+    }
+  }
+
+  function openRootTab(tab: 'today' | 'records' | 'memories' | 'family') {
+    setDrawerOpen(false);
+    setBottomNavActive(tab);
+    if (embedded || tab === 'memories') return;
+    void Taro.reLaunch({ url: rootTabUrl(tab) });
+  }
+
+  const handleMemoryQuickAction = useCallback(
+    (action: MemoryQuickAction) => {
+      setSheetOpen(false);
+      if (action === 'memory') {
+        setComposeSheetVisible(true);
+        return;
+      }
+      if (action === 'photo') {
+        openPhotoCreate();
+        return;
+      }
+      if (action === 'audio') {
+        openAudioRecord('audio');
+        return;
+      }
+      if (action === 'quote') {
+        openQuoteCreate();
+        return;
+      }
+      if (action === 'first') {
+        openFirstCreate();
+        return;
+      }
+      openCapsuleCreate();
+    },
+    [
+      openAudioRecord,
+      openCapsuleCreate,
+      openFirstCreate,
+      openPhotoCreate,
+      openQuoteCreate,
+      setSheetOpen,
+    ],
+  );
+
+  const handleMomentSelect = useCallback(
+    (actionId: string) => {
+      const memoryAction = memoryQuickAction(actionId);
+      if (memoryAction) {
+        handleMemoryQuickAction(memoryAction);
+        return;
+      }
+      setSheetOpen(false);
+      if (actionId === 'sleep' || actionId === 'diaper' || actionId === 'food') {
+        void Taro.navigateTo({ url: `/pages/records/compose/index?type=${actionId}` });
+        return;
+      }
+      if (actionId === 'growth') {
+        void Taro.navigateTo({ url: '/pages/growth/index?view=record' });
+        return;
+      }
+      const labels: Record<string, string> = {
+        feeding: '喂奶',
+        mood: '心情',
+        diary: '日记',
+      };
+      showToast(`${labels[actionId] ?? '这一刻'}请从对应模块记录`);
+    },
+    [handleMemoryQuickAction, setSheetOpen, showToast],
+  );
+
+  useEffect(() => {
+    if (!quickAction || handledQuickAction.current === quickAction) return;
+    handledQuickAction.current = quickAction;
+    handleMemoryQuickAction(quickAction);
+  }, [handleMemoryQuickAction, quickAction]);
+
+  useEffect(() => {
+    if (!babyId || !quoteModalVisible || editingQuoteId) return undefined;
+    const timer = setTimeout(() => {
+      void saveDraft(memoryDraftKey('quote', babyId), {
+        quoteText,
+        quoteDate,
+        quoteFavorite,
+        quoteAudioMediaId,
+        quotePendingAudioLocalId: quotePendingAudio?.localId ?? null,
+      }).catch(() => undefined);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [
+    babyId,
+    editingQuoteId,
+    quoteAudioMediaId,
+    quoteDate,
+    quoteFavorite,
+    quoteModalVisible,
+    quotePendingAudio,
+    quoteText,
+  ]);
+
+  useEffect(() => {
+    if (!babyId || !capsuleModalVisible || editingCapsuleId) return undefined;
+    const timer = setTimeout(() => {
+      void saveDraft(memoryDraftKey('capsule', babyId), {
+        capsuleRecipient,
+        capsuleTitle,
+        capsuleBody,
+        capsuleOpenDate,
+        capsuleMediaId,
+        capsuleMediaType,
+        capsulePendingMediaLocalId: capsulePendingMedia?.localId ?? null,
+        capsulePendingMediaType,
+      }).catch(() => undefined);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [
+    babyId,
+    capsuleBody,
+    capsuleMediaId,
+    capsuleMediaType,
+    capsuleModalVisible,
+    capsuleOpenDate,
+    capsulePendingMedia,
+    capsulePendingMediaType,
+    capsuleRecipient,
+    capsuleTitle,
+    editingCapsuleId,
+  ]);
+
+  const renderPhotoCard = (photo: PhotoMemoryPublic) => {
+    const media = photo.media[0];
+    return (
+      <View key={photo.id} className={styles.photoCard}>
+        <View className={styles.photoVisual}>
+          {media?.status === 'READY' ? (
+            <ProtectedMediaImage
+              className={styles.photoImage}
+              mediaId={media.id}
+              alt={photo.title}
+            />
+          ) : media?.status === 'FAILED' ? (
+            <View className={styles.photoPlaceholder}>
+              <Glyph name="shield" size="lg" />
+              <Text>原件已保留，处理失败</Text>
+              <TextAction
+                label="重新处理"
+                onClick={() => void handleRetryMedia(media.id)}
+              />
+            </View>
+          ) : (
+            <View className={styles.photoPlaceholder}>
+              <Glyph name="photo" size="lg" />
+              <Text>等待媒体上传</Text>
+            </View>
+          )}
+          <View className={styles.photoFavorite}>
+            <IconActionButton
+              label={photo.favorite ? '取消珍藏' : '珍藏照片'}
+              icon={<Glyph name="heart" size="sm" />}
+              onClick={() =>
+                void toggleMemoryFavorite(() =>
+                  updatePhotoMemory(photo.id, { favorite: !photo.favorite }),
+                )
+              }
+            />
+          </View>
+        </View>
+        <View className={styles.info}>
+          <Text className={styles.title}>{photo.title}</Text>
+          <Text className={styles.date}>{formatDate(photo.happenedAt)}</Text>
+          <View className={styles.inlineActions}>
+            <TextAction label="编辑" onClick={() => openPhotoEdit(photo)} />
+            <TextAction
+              label="删除"
+              onClick={() =>
+                setDeleteRequest({ kind: 'photo', id: photo.id, label: photo.title })
+              }
+            />
+          </View>
+        </View>
+      </View>
+    );
   };
 
+  const renderQuoteCard = (quote: BabyQuotePublic) => (
+    <View key={quote.id} className={styles.quoteCard}>
+      <Text className={styles.quoteText}>“{quote.quoteText}”</Text>
+      {quote.audioMedia?.status === 'READY' ? (
+        <InlineAudioPlayer
+          mediaId={quote.audioMedia.id}
+          title="这句话的声音"
+          durationMs={quote.audioMedia.durationMs ?? undefined}
+        />
+      ) : quote.audioMedia?.status === 'FAILED' ? (
+        <View className={styles.audioPending}>
+          <Text>语音原件已保留，处理失败</Text>
+          <TextAction
+            label="重新处理"
+            onClick={() => void handleRetryMedia(quote.audioMedia!.id)}
+          />
+        </View>
+      ) : quote.audioMedia ? (
+        <Text className={styles.audioPending}>语音原件正在准备中…</Text>
+      ) : null}
+      <View className={styles.cardFooter}>
+        <Text className={styles.date}>{formatDate(quote.happenedAt)}</Text>
+        <View className={styles.inlineActions}>
+          <IconActionButton
+            label={quote.favorite ? '取消珍藏' : '珍藏语录'}
+            icon={<Glyph name="heart" size="sm" />}
+            onClick={() =>
+              void toggleMemoryFavorite(() =>
+                updateBabyQuote(quote.id, { favorite: !quote.favorite }),
+              )
+            }
+          />
+          <TextAction label="编辑" onClick={() => openQuoteEdit(quote)} />
+          <TextAction
+            label="删除"
+            onClick={() =>
+              setDeleteRequest({ kind: 'quote', id: quote.id, label: quote.quoteText })
+            }
+          />
+        </View>
+      </View>
+    </View>
+  );
+
+  const renderAudioCard = (audio: AudioMemoryPublic) => (
+    <View key={audio.id} className={styles.memoryBlock}>
+      {audio.media?.status === 'READY' ? (
+        <InlineAudioPlayer
+          mediaId={audio.media.id}
+          title={audio.title}
+          category={audio.category}
+          durationMs={audio.media.durationMs ?? undefined}
+          favorite={audio.favorite}
+          onFavorite={() =>
+            void toggleMemoryFavorite(() =>
+              updateAudioMemory(audio.id, { favorite: !audio.favorite }),
+            )
+          }
+        />
+      ) : audio.media?.status === 'FAILED' ? (
+        <View className={styles.audioPending}>
+          <Text>声音原件已保留，处理失败</Text>
+          <TextAction
+            label="重新处理"
+            onClick={() => void handleRetryMedia(audio.media!.id)}
+          />
+        </View>
+      ) : (
+        <Text className={styles.emptyText}>声音原件正在准备中，完成后即可播放。</Text>
+      )}
+      <View className={styles.inlineActions}>
+        <TextAction label="编辑" onClick={() => openAudioEdit(audio)} />
+        <TextAction
+          label="删除"
+          onClick={() =>
+            setDeleteRequest({ kind: 'audio', id: audio.id, label: audio.title })
+          }
+        />
+      </View>
+    </View>
+  );
+
+  const renderFirstCard = (first: FirstMomentPublic) => (
+    <View key={first.id} className={styles.firstMomentCard}>
+      <View className={styles.firstIcon}>
+        <Glyph name="sparkle" size="md" />
+      </View>
+      <View className={styles.firstContent}>
+        <Text className={styles.title}>{first.title}</Text>
+        {first.description ? (
+          <Text className={styles.desc}>{first.description}</Text>
+        ) : null}
+        <MemoryMediaStrip media={first.media} />
+        <Text className={styles.date}>{formatDate(first.happenedAt)}</Text>
+        <View className={styles.inlineActions}>
+          <IconActionButton
+            label={first.favorite ? '取消珍藏' : '珍藏第一次'}
+            icon={<Glyph name="heart" size="sm" />}
+            onClick={() =>
+              void toggleMemoryFavorite(() =>
+                updateFirstMoment(first.id, { favorite: !first.favorite }),
+              )
+            }
+          />
+          <TextAction label="编辑" onClick={() => openFirstEdit(first)} />
+          <TextAction
+            label="删除"
+            onClick={() =>
+              setDeleteRequest({ kind: 'first', id: first.id, label: first.title })
+            }
+          />
+        </View>
+      </View>
+    </View>
+  );
+
+  const renderCapsuleCard = (capsule: TimeCapsulePublic) => (
+    <TimeCapsuleCard
+      key={capsule.id}
+      id={capsule.id}
+      title={capsule.title}
+      body={capsule.body}
+      recipientText={capsule.recipientText}
+      state={capsule.state}
+      openAt={capsule.openAt}
+      favorite={capsule.favorite}
+      media={capsule.media}
+      onFavorite={() =>
+        void toggleMemoryFavorite(() =>
+          favoriteTimeCapsule(capsule.id, !capsule.favorite),
+        )
+      }
+      onEditDraft={() => openCapsuleEdit(capsule)}
+      onSeal={() => {
+        setPendingCapsuleId(capsule.id);
+        setSealConfirmVisible(true);
+      }}
+      onOpen={() => void handleOpenCapsule(capsule.id)}
+      onDelete={() =>
+        setDeleteRequest({ kind: 'capsule', id: capsule.id, label: capsule.title })
+      }
+    />
+  );
+
+  const renderMemorySection = (
+    title: string,
+    icon: 'photo' | 'quote' | 'mic' | 'sparkle',
+    children: React.ReactNode,
+  ) => (
+    <View className={styles.section}>
+      <View className={styles.sectionHeading}>
+        <View className={styles.sectionIcon}>
+          <Glyph name={icon} size="md" />
+        </View>
+        <Text>{title}</Text>
+      </View>
+      {children}
+    </View>
+  );
+
+  const tabItems: Array<{ id: MemoriesTab; label: string }> = [
+    { id: 'summary', label: '全部回忆' },
+    { id: 'photos', label: `照片 ${stats.photos}` },
+    { id: 'quotes', label: `语录 ${stats.quotes}` },
+    { id: 'audios', label: `声音 ${stats.audios}` },
+    { id: 'firsts', label: `第一次 ${firsts.length}` },
+    { id: 'capsules', label: `胶囊 ${stats.capsules}` },
+    { id: 'favorites', label: '我的珍藏' },
+    { id: 'onThisDay', label: '那年今日' },
+    { id: 'annual', label: '年度回顾' },
+  ];
+
+  const onThisDayCount = summary?.onThisDayCount ?? 0;
+
   return (
-    <PageShell bottomNav>
+    <PageShell bottomNav={!sheetOpen}>
+      <AppTopBar
+        title="宝宝回忆"
+        subtitle={`${babyName} · 记忆博物馆`}
+        gemAmount={gemAmount}
+        onMenuClick={() => setDrawerOpen(true)}
+      />
       <View className={styles.memoriesPage}>
-        {/* Header Summary Banner */}
         <View className={styles.topSummaryBanner}>
-          <Text className={styles.museumTitle}>润润的家庭记忆博物馆 🏛️</Text>
-          <Text className={styles.museumSubtitle}>把润润长大的每一天，认真收藏起来。</Text>
+          <View className={styles.eyebrow}>
+            <Glyph name="grid" size="sm" />
+            <Text>RUNEW · MEMORY MUSEUM</Text>
+          </View>
+          <Text className={styles.museumTitle}>润润的家庭记忆博物馆</Text>
+          <Text className={styles.museumSubtitle}>
+            把润润长大的每一天，认真收藏起来。
+          </Text>
           <View className={styles.statsGrid}>
             <View className={styles.statBox}>
-              <Text className={styles.num}>{summary?.photosCount ?? photos.length}</Text>
+              <Text className={styles.num}>{stats.photos}</Text>
               <Text className={styles.label}>照片回忆</Text>
             </View>
             <View className={styles.statBox}>
-              <Text className={styles.num}>{summary?.quotesCount ?? quotes.length}</Text>
+              <Text className={styles.num}>{stats.quotes}</Text>
               <Text className={styles.label}>宝宝语录</Text>
             </View>
             <View className={styles.statBox}>
-              <Text className={styles.num}>{summary?.audiosCount ?? audios.length}</Text>
+              <Text className={styles.num}>{stats.audios}</Text>
               <Text className={styles.label}>声音记录</Text>
             </View>
             <View className={styles.statBox}>
-              <Text className={styles.num}>{summary?.capsulesCount ?? capsules.length}</Text>
+              <Text className={styles.num}>{stats.capsules}</Text>
               <Text className={styles.label}>时光胶囊</Text>
             </View>
           </View>
+          <View className={styles.memoryGuide}>
+            <View className={styles.memoryGuideIcon}>
+              <Glyph name="sparkle" size="sm" />
+            </View>
+            <View className={styles.memoryGuideCopy}>
+              <Text className={styles.memoryGuideTitle}>想留下一点什么？</Text>
+              <Text className={styles.memoryGuideText}>
+                点击底部中央 +，照片、声音和语录都会收进同一间回忆馆。
+              </Text>
+            </View>
+          </View>
         </View>
 
-        {/* Tab Switcher */}
-        <ScrollView scrollX className={styles.tabsBar}>
-          <View
-            className={`${styles.tabChip} ${activeTab === 'summary' ? styles.active : ''}`}
-            onClick={() => setActiveTab('summary')}
-          >
-            全部 Memory
-          </View>
-          <View
-            className={`${styles.tabChip} ${activeTab === 'photos' ? styles.active : ''}`}
-            onClick={() => setActiveTab('photos')}
-          >
-            照片回忆 ({photos.length})
-          </View>
-          <View
-            className={`${styles.tabChip} ${activeTab === 'quotes' ? styles.active : ''}`}
-            onClick={() => setActiveTab('quotes')}
-          >
-            宝宝语录 ({quotes.length})
-          </View>
-          <View
-            className={`${styles.tabChip} ${activeTab === 'audios' ? styles.active : ''}`}
-            onClick={() => setActiveTab('audios')}
-          >
-            宝宝声音 ({audios.length})
-          </View>
-          <View
-            className={`${styles.tabChip} ${activeTab === 'firsts' ? styles.active : ''}`}
-            onClick={() => setActiveTab('firsts')}
-          >
-            第一次 ({firsts.length})
-          </View>
-          <View
-            className={`${styles.tabChip} ${activeTab === 'capsules' ? styles.active : ''}`}
-            onClick={() => setActiveTab('capsules')}
-          >
-            时光胶囊 ({capsules.length})
-          </View>
+        <ScrollView scrollX className={styles.tabsBar} enhanced showScrollbar={false}>
+          {tabItems.map((tab) => (
+            <View
+              key={tab.id}
+              className={`${styles.tabChip} ${activeTab === tab.id ? styles.active : ''}`}
+              role="tab"
+              aria-selected={activeTab === tab.id}
+              onClick={() => setActiveTab(tab.id)}
+            >
+              <Text>{tab.label}</Text>
+            </View>
+          ))}
         </ScrollView>
 
         <View className={styles.contentArea}>
-          {/* On-This-Day Banner (06.23) */}
-          <View className={styles.onThisDayBanner}>
-            <View className={styles.left}>
-              <Text className={styles.title}>那年今日 🗓️</Text>
-              <Text className={styles.sub}>重温去年的今天，润润的点滴美好回忆</Text>
+          {uploadNotice ? (
+            <View className={styles.uploadNotice}>
+              <Glyph name="shield" size="sm" />
+              <Text>{uploadNotice}</Text>
             </View>
-            <View className={styles.viewBtn}>查看回顾</View>
-          </View>
+          ) : null}
+          {errorMessage ? (
+            <View className={styles.errorState}>
+              <Text>{errorMessage}</Text>
+              <TextAction label="重新加载" onClick={() => void loadData()} />
+            </View>
+          ) : null}
+          {loading ? (
+            <View className={styles.loadingState}>
+              <Text>正在把回忆轻轻放回展柜…</Text>
+            </View>
+          ) : null}
+          {deletedMemory ? (
+            <View className={styles.undoNotice}>
+              <Text>“{deletedMemory.label}”已移入最近删除</Text>
+              <TextAction label="撤销删除" onClick={() => void handleRestore()} />
+            </View>
+          ) : null}
 
-          {/* Photo Memories Grid (06.02 - 06.05) */}
-          {(activeTab === 'summary' || activeTab === 'photos') && (
-            <View>
-              <Text style={{ fontSize: '16px', fontWeight: 700, color: '#3d2b1f', marginBottom: '10px', display: 'block' }}>
-                📸 照片回忆
-              </Text>
-              <View className={styles.photoGrid}>
-                {photos.length > 0 ? (
-                  photos.map((p) => (
-                    <View key={p.id} className={styles.photoCard}>
-                      <View className={styles.photoPlaceholder}>📷</View>
-                      <View className={styles.info}>
-                        <Text className={styles.title}>{p.title}</Text>
-                        <Text className={styles.date}>{new Date(p.happenedAt).toLocaleDateString()}</Text>
-                      </View>
-                    </View>
-                  ))
-                ) : (
-                  <Text style={{ color: '#9c8a7c', fontSize: '13px' }}>暂无照片回忆，点击右下角添加</Text>
-                )}
+          {activeTab === 'summary' ? (
+            <>
+              <View
+                className={styles.onThisDayBanner}
+                onClick={() => setActiveTab('onThisDay')}
+                role="button"
+              >
+                <View className={styles.bannerIcon}>
+                  <Glyph name="calendar" size="md" />
+                </View>
+                <View className={styles.bannerCopy}>
+                  <Text className={styles.title}>那年今日</Text>
+                  <Text className={styles.sub}>
+                    {onThisDayCount
+                      ? `去年今天留下了 ${onThisDayCount} 份回忆`
+                      : '重温去年的今天，看看那时的小小闪光'}
+                  </Text>
+                </View>
+                <Glyph name="chevron" size="sm" />
               </View>
-            </View>
-          )}
+              {renderMemorySection(
+                '照片回忆',
+                'photo',
+                photos.length ? (
+                  <View className={styles.photoGrid}>
+                    {photos.slice(0, 6).map(renderPhotoCard)}
+                  </View>
+                ) : (
+                  <Text className={styles.emptyText}>还没有照片，给今天留一张吧。</Text>
+                ),
+              )}
+              {renderMemorySection(
+                '宝宝语录',
+                'quote',
+                quotes.length ? (
+                  quotes.slice(0, 3).map(renderQuoteCard)
+                ) : (
+                  <Text className={styles.emptyText}>把那句让你笑起来的话记下来。</Text>
+                ),
+              )}
+              {renderMemorySection(
+                '宝宝声音',
+                'mic',
+                audios.length ? (
+                  audios.slice(0, 3).map(renderAudioCard)
+                ) : (
+                  <Text className={styles.emptyText}>
+                    第一声笑、第一句咿呀，都值得好好保存。
+                  </Text>
+                ),
+              )}
+              {renderMemorySection(
+                '第一次',
+                'sparkle',
+                firsts.length ? (
+                  firsts.slice(0, 3).map(renderFirstCard)
+                ) : (
+                  <Text className={styles.emptyText}>
+                    每一个第一次，都是成长的小星星。
+                  </Text>
+                ),
+              )}
+              {renderMemorySection(
+                '时光胶囊',
+                'quote',
+                capsules.length ? (
+                  capsules.slice(0, 3).map(renderCapsuleCard)
+                ) : (
+                  <Text className={styles.emptyText}>写一封信给未来的润润。</Text>
+                ),
+              )}
+            </>
+          ) : null}
 
-          {/* Baby Quotes (06.06 - 06.08) */}
-          {(activeTab === 'summary' || activeTab === 'quotes') && (
-            <View style={{ marginTop: '16px' }}>
-              <Text style={{ fontSize: '16px', fontWeight: 700, color: '#3d2b1f', marginBottom: '10px', display: 'block' }}>
-                💬 宝宝语录
-              </Text>
-              {quotes.map((q) => (
-                <View key={q.id} className={styles.quoteCard}>
-                  <Text className={styles.text}>“{q.quoteText}”</Text>
-                  <Text className={styles.meta}>{new Date(q.happenedAt).toLocaleDateString()}</Text>
-                </View>
-              ))}
-            </View>
-          )}
+          {activeTab === 'photos'
+            ? renderMemorySection(
+                '照片回忆',
+                'photo',
+                photos.length ? (
+                  <View className={styles.photoGrid}>
+                    {photos.map(renderPhotoCard)}
+                  </View>
+                ) : (
+                  <Text className={styles.emptyText}>还没有照片回忆。</Text>
+                ),
+              )
+            : null}
+          {activeTab === 'quotes'
+            ? renderMemorySection(
+                '宝宝语录',
+                'quote',
+                quotes.length ? (
+                  quotes.map(renderQuoteCard)
+                ) : (
+                  <Text className={styles.emptyText}>还没有宝宝语录。</Text>
+                ),
+              )
+            : null}
+          {activeTab === 'audios'
+            ? renderMemorySection(
+                '宝宝声音',
+                'mic',
+                audios.length ? (
+                  audios.map(renderAudioCard)
+                ) : (
+                  <Text className={styles.emptyText}>还没有声音回忆。</Text>
+                ),
+              )
+            : null}
+          {activeTab === 'firsts'
+            ? renderMemorySection(
+                '第一次',
+                'sparkle',
+                firsts.length ? (
+                  firsts.map(renderFirstCard)
+                ) : (
+                  <Text className={styles.emptyText}>还没有第一次记录。</Text>
+                ),
+              )
+            : null}
+          {activeTab === 'capsules'
+            ? renderMemorySection(
+                '时光胶囊',
+                'quote',
+                capsules.length ? (
+                  capsules.map(renderCapsuleCard)
+                ) : (
+                  <Text className={styles.emptyText}>还没有时光胶囊。</Text>
+                ),
+              )
+            : null}
 
-          {/* Baby Audio Player (06.09 - 06.13) */}
-          {(activeTab === 'summary' || activeTab === 'audios') && (
-            <View style={{ marginTop: '16px' }}>
-              <Text style={{ fontSize: '16px', fontWeight: 700, color: '#3d2b1f', marginBottom: '10px', display: 'block' }}>
-                🎙️ 宝宝声音
+          {activeTab === 'favorites' && favorites ? (
+            <View className={styles.reviewCard}>
+              <Text className={styles.reviewTitle}>我的珍藏</Text>
+              <Text className={styles.reviewSubtitle}>
+                把最想反复打开的瞬间，放在一起。
               </Text>
-              {audios.map((a) => (
-                <InlineAudioPlayer
-                  key={a.id}
-                  mediaId={a.mediaId}
-                  title={a.title}
-                  category={a.category}
-                  durationMs={a.media?.durationMs}
-                />
-              ))}
+              <Text className={styles.reviewNumber}>{favorites.totalCount}</Text>
+              <Text className={styles.reviewLabel}>份珍藏</Text>
+              {favorites.photos.map(renderPhotoCard)}
+              {favorites.quotes.map(renderQuoteCard)}
+              {favorites.audios.map(renderAudioCard)}
+              {favorites.firsts.map(renderFirstCard)}
+              {favorites.capsules.map(renderCapsuleCard)}
             </View>
-          )}
+          ) : null}
 
-          {/* First Moments (06.14 - 06.15) */}
-          {(activeTab === 'summary' || activeTab === 'firsts') && (
-            <View style={{ marginTop: '16px' }}>
-              <Text style={{ fontSize: '16px', fontWeight: 700, color: '#3d2b1f', marginBottom: '10px', display: 'block' }}>
-                ✨ 第一次
+          {activeTab === 'onThisDay' && onThisDay ? (
+            <View className={styles.reviewCard}>
+              <Text className={styles.reviewTitle}>那年今日</Text>
+              <Text className={styles.reviewSubtitle}>
+                把去年的今天，再温柔地看一遍。
               </Text>
-              {firsts.map((f) => (
-                <View key={f.id} className={styles.firstMomentCard}>
-                  <Text className={styles.title}>🎉 {f.title}</Text>
-                  {f.description && <Text className={styles.desc}>{f.description}</Text>}
-                  <Text className={styles.date}>{new Date(f.happenedAt).toLocaleDateString()}</Text>
-                </View>
-              ))}
+              {onThisDay.photos.map(renderPhotoCard)}
+              {onThisDay.quotes.map(renderQuoteCard)}
+              {onThisDay.audios.map(renderAudioCard)}
+              {onThisDay.firsts.map(renderFirstCard)}
+              {onThisDay.capsules.map(renderCapsuleCard)}
+              {!onThisDay.photos.length &&
+              !onThisDay.quotes.length &&
+              !onThisDay.audios.length &&
+              !onThisDay.firsts.length &&
+              !onThisDay.capsules.length ? (
+                <Text className={styles.emptyText}>今天还没有找到去年的回忆。</Text>
+              ) : null}
             </View>
-          )}
+          ) : null}
 
-          {/* Time Capsules (06.19 - 06.21) */}
-          {(activeTab === 'summary' || activeTab === 'capsules') && (
-            <View style={{ marginTop: '16px' }}>
-              <Text style={{ fontSize: '16px', fontWeight: 700, color: '#3d2b1f', marginBottom: '10px', display: 'block' }}>
-                ✉️ 时光胶囊
+          {activeTab === 'annual' && annualReview ? (
+            <View className={styles.reviewCard}>
+              <Text className={styles.reviewTitle}>{annualReview.year} 年度回顾</Text>
+              <Text className={styles.reviewSubtitle}>
+                这一年，你们一起收藏了 {annualReview.totalCount} 个小小瞬间。
               </Text>
-              {capsules.map((c) => (
-                <TimeCapsuleCard
-                  key={c.id}
-                  id={c.id}
-                  title={c.title}
-                  body={c.body}
-                  recipientText={c.recipientText}
-                  state={c.state}
-                  openAt={c.openAt}
-                  onSeal={() => {
-                    setPendingCapsuleId(c.id);
-                    setSealConfirmVisible(true);
-                  }}
-                  onOpen={() => handleOpenCapsule(c.id)}
-                />
-              ))}
+              <View className={styles.reviewStats}>
+                <Text>{annualReview.photosCount} 张照片</Text>
+                <Text>{annualReview.quotesCount} 句语录</Text>
+                <Text>{annualReview.audiosCount} 段声音</Text>
+                <Text>{annualReview.firstsCount} 个第一次</Text>
+                <Text>{annualReview.capsulesCount} 个时光胶囊</Text>
+              </View>
+              {annualReview.photos.slice(0, 3).map(renderPhotoCard)}
+              {annualReview.quotes.slice(0, 3).map(renderQuoteCard)}
+              {annualReview.audios.slice(0, 3).map(renderAudioCard)}
+              {annualReview.firsts.slice(0, 3).map(renderFirstCard)}
+              {annualReview.capsules.slice(0, 3).map(renderCapsuleCard)}
             </View>
-          )}
+          ) : null}
         </View>
 
-        {/* Floating Add Action Button */}
-        <View className={styles.fabBtn} onClick={() => setComposeSheetVisible(true)}>
-          <Text>+</Text>
-          <Text>新增回忆</Text>
-        </View>
-
-        {/* Compose Choice Sheet */}
-        <BottomSheet open={composeSheetVisible} onClose={() => setComposeSheetVisible(false)} title="珍藏一份新回忆 🌱">
-          <View style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+        <BottomSheet
+          open={composeSheetVisible}
+          onClose={() => setComposeSheetVisible(false)}
+          title="珍藏一份新回忆"
+        >
+          <View className={styles.composeChoices}>
             <SecondaryGlassButton
-              label="📸 记录照片回忆"
+              label="记录照片回忆"
               onClick={() => {
                 setComposeSheetVisible(false);
-                setPhotoModalVisible(true);
+                openPhotoCreate();
               }}
             />
             <SecondaryGlassButton
-              label="💬 记录宝宝语录"
+              label="记录宝宝语录"
               onClick={() => {
                 setComposeSheetVisible(false);
-                setQuoteModalVisible(true);
+                openQuoteCreate();
               }}
             />
             <SecondaryGlassButton
-              label="🎙️ 录制宝宝声音"
+              label="录制宝宝声音"
               onClick={() => {
                 setComposeSheetVisible(false);
-                setMicSheetVisible(true);
+                openAudioRecord('audio');
               }}
             />
             <SecondaryGlassButton
-              label="✨ 记录第一次"
+              label="记录第一次"
               onClick={() => {
                 setComposeSheetVisible(false);
-                setFirstModalVisible(true);
+                openFirstCreate();
               }}
             />
             <SecondaryGlassButton
-              label="✉️ 封存时光胶囊"
+              label="写一封时光胶囊"
               onClick={() => {
                 setComposeSheetVisible(false);
-                setCapsuleModalVisible(true);
+                openCapsuleCreate();
               }}
             />
           </View>
         </BottomSheet>
 
-        {/* JIT Permission Sheet for Mic */}
         <JitMicrophonePermissionSheet
           visible={micSheetVisible}
-          onConfirm={handleStartRecord}
+          onConfirm={() => void handleStartRecord()}
           onCancel={() => setMicSheetVisible(false)}
         />
 
-        {/* Photo Compose Modal */}
-        <BottomSheet open={photoModalVisible} onClose={() => setPhotoModalVisible(false)} title="📸 新增照片回忆">
-          <View style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            <GlassInput value={photoTitle} onInput={(val) => setPhotoTitle(val)} placeholder="回忆标题（例如：宝宝第一次晒太阳）" />
-            <GlassTextArea value={photoStory} onInput={(val) => setPhotoStory(val)} placeholder="写下当时的故事或心情..." />
-            <PrimaryActionButton label="保存照片回忆" onClick={handleCreatePhoto} />
-          </View>
-        </BottomSheet>
-
-        {/* Quote Compose Modal */}
-        <BottomSheet open={quoteModalVisible} onClose={() => setQuoteModalVisible(false)} title="💬 记录宝宝语录">
-          <View style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            <GlassTextArea value={quoteText} onInput={(val) => setQuoteText(val)} placeholder="宝宝说了什么有趣的、治愈的话？..." />
-            <PrimaryActionButton label="保存宝宝语录" onClick={handleCreateQuote} />
-          </View>
-        </BottomSheet>
-
-        {/* Audio Record Modal */}
-        <BottomSheet open={audioModalVisible} onClose={() => setAudioModalVisible(false)} title="🎙️ 录制宝宝的声音">
-          <View style={{ padding: '20px', textAlign: 'center' }}>
-            {isRecording ? (
-              <View style={{ marginBottom: '20px' }}>
-                <Text style={{ fontSize: '40px', display: 'block', marginBottom: '8px' }}>🔴</Text>
-                <Text style={{ fontSize: '20px', fontWeight: 700, color: '#f27c38' }}>录音中 {recordSec} 秒</Text>
-                <SecondaryGlassButton label="停止录音" onClick={handleStopRecord} />
+        <BottomSheet
+          open={photoModalVisible}
+          onClose={() => setPhotoModalVisible(false)}
+          title={editingPhotoId ? '编辑照片回忆' : '新增照片回忆'}
+        >
+          <View className={styles.formStack}>
+            <View className={styles.mediaPickRow}>
+              <SecondaryGlassButton
+                label="从相册选择"
+                onClick={() => void pickImageFor('photo')}
+                fullWidth={false}
+              />
+              <SecondaryGlassButton
+                label="拍一张"
+                onClick={() => void pickImageFor('photo', true)}
+                fullWidth={false}
+              />
+            </View>
+            {photoPreviewUrl ? (
+              <Image
+                className={styles.selectedPreview}
+                src={photoPreviewUrl}
+                mode="aspectFill"
+                aria-label="已选择的照片"
+              />
+            ) : null}
+            {photoPendingMedia ? (
+              <View className={styles.uploadPendingRow}>
+                <Text>附件原件已安全保存在本机，等待上传。</Text>
+                <TextAction
+                  label="重试上传"
+                  onClick={() =>
+                    void retryLocalMedia(photoPendingMedia, 'IMAGE', (mediaId) => {
+                      setPhotoMediaId(mediaId);
+                      setPhotoPendingMedia(null);
+                    })
+                  }
+                />
               </View>
+            ) : null}
+            <GlassInput
+              value={photoTitle}
+              onInput={setPhotoTitle}
+              placeholder="回忆标题，例如：午后的第一束阳光"
+            />
+            <GlassDateField
+              label="发生日期"
+              value={photoDate}
+              onChange={setPhotoDate}
+            />
+            <GlassTextArea
+              value={photoStory}
+              onInput={setPhotoStory}
+              placeholder="写下当时的故事或心情…"
+            />
+            <SecondaryGlassButton
+              label={photoFavorite ? '已加入珍藏' : '加入我的珍藏'}
+              onClick={() => setPhotoFavorite((value) => !value)}
+            />
+            <PrimaryActionButton
+              label={editingPhotoId ? '保存修改' : '保存照片回忆'}
+              onClick={() => void handleSavePhoto()}
+            />
+          </View>
+        </BottomSheet>
+
+        <BottomSheet
+          open={quoteModalVisible}
+          onClose={() => setQuoteModalVisible(false)}
+          title={editingQuoteId ? '编辑宝宝语录' : '记录宝宝语录'}
+        >
+          <View className={styles.formStack}>
+            <GlassTextArea
+              value={quoteText}
+              onInput={setQuoteText}
+              placeholder="宝宝说了什么有趣又治愈的话？"
+            />
+            <GlassDateField
+              label="发生日期"
+              value={quoteDate}
+              onChange={setQuoteDate}
+            />
+            <SecondaryGlassButton
+              label={quoteAudioMediaId ? '声音已附加 · 重新录制' : '为这句话添加声音'}
+              onClick={() => openAudioRecord('quote')}
+            />
+            {quoteAudioMediaId ? (
+              <TextAction
+                label="移除声音"
+                onClick={() => {
+                  setQuoteAudioMediaId(null);
+                  setQuotePendingAudio(null);
+                }}
+              />
+            ) : null}
+            {quotePendingAudio ? (
+              <View className={styles.uploadPendingRow}>
+                <Text>语音原件已安全保存在本机，等待上传。</Text>
+                <TextAction
+                  label="重试上传"
+                  onClick={() =>
+                    void retryLocalMedia(quotePendingAudio, 'AUDIO', (mediaId) => {
+                      setQuoteAudioMediaId(mediaId);
+                      setQuotePendingAudio(null);
+                    })
+                  }
+                />
+              </View>
+            ) : null}
+            <SecondaryGlassButton
+              label={quoteFavorite ? '已加入珍藏' : '加入我的珍藏'}
+              onClick={() => setQuoteFavorite((value) => !value)}
+            />
+            <PrimaryActionButton
+              label={editingQuoteId ? '保存修改' : '保存宝宝语录'}
+              onClick={() => void handleSaveQuote()}
+            />
+          </View>
+        </BottomSheet>
+
+        <BottomSheet
+          open={audioModalVisible}
+          onClose={handleAudioSheetClose}
+          title={editingAudioId ? '编辑声音信息' : '录制宝宝的声音'}
+        >
+          <View className={styles.audioRecordPanel}>
+            {isRecording ? (
+              <>
+                <View className={styles.recordPulse}>
+                  <Glyph name="mic" size="lg" />
+                </View>
+                <Text className={styles.recordingTime}>录音中 {recordSec} 秒</Text>
+                <Text className={styles.recordingHint}>
+                  可以放心停留，离开页面前会先保存到本机。
+                </Text>
+                <SecondaryGlassButton
+                  label="停止并安全保存"
+                  onClick={() => void handleStopRecord()}
+                />
+              </>
+            ) : recordingPurpose === 'quote' && quoteAudioMediaId ? (
+              <>
+                <Text className={styles.savedHint}>
+                  这句话的声音已安全保存，回到语录继续编辑。
+                </Text>
+                <PrimaryActionButton
+                  label="返回宝宝语录"
+                  onClick={() => {
+                    setAudioModalVisible(false);
+                    setQuoteModalVisible(true);
+                  }}
+                />
+              </>
             ) : (
-              <View style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                <GlassInput value={audioTitle} onInput={(val) => setAudioTitle(val)} placeholder="声音标题（例如：咯咯大笑声）" />
-                <PrimaryActionButton label="保存声音记录" onClick={handleSaveAudio} />
+              <>
+                <Text className={styles.savedHint}>
+                  {audioMediaId
+                    ? '声音原件已保存，可以给它起个名字了。'
+                    : audioPendingMedia
+                      ? '声音原件已安全保存在本机，等待上传。'
+                      : '录音会先保存到本机，再加入上传队列。'}
+                </Text>
+                {audioPendingMedia ? (
+                  <TextAction
+                    label="重试上传"
+                    onClick={() =>
+                      void retryLocalMedia(audioPendingMedia, 'AUDIO', (mediaId) => {
+                        setAudioMediaId(mediaId);
+                        setAudioPendingMedia(null);
+                      })
+                    }
+                  />
+                ) : null}
+                <GlassInput
+                  value={audioTitle}
+                  onInput={setAudioTitle}
+                  placeholder="声音标题，例如：咯咯大笑声"
+                />
+                <GlassDateField
+                  label="发生日期"
+                  value={audioDate}
+                  onChange={setAudioDate}
+                />
+                <View className={styles.categoryGroup}>
+                  <Text className={styles.fieldLabel}>声音分类</Text>
+                  <View className={styles.categoryGrid}>
+                    {AUDIO_CATEGORY_OPTIONS.map((option) => (
+                      <FilterChip
+                        key={option.value}
+                        label={option.label}
+                        selected={audioCategory === option.value}
+                        onClick={() => setAudioCategory(option.value)}
+                      />
+                    ))}
+                  </View>
+                </View>
+                <SecondaryGlassButton
+                  label={audioFavorite ? '已加入珍藏' : '加入我的珍藏'}
+                  onClick={() => setAudioFavorite((value) => !value)}
+                />
+                <PrimaryActionButton
+                  label={editingAudioId ? '保存声音修改' : '保存声音记录'}
+                  onClick={() => void handleSaveAudio()}
+                />
+              </>
+            )}
+          </View>
+        </BottomSheet>
+
+        <BottomSheet
+          open={firstModalVisible}
+          onClose={() => setFirstModalVisible(false)}
+          title={editingFirstId ? '编辑第一次' : '记录第一次'}
+        >
+          <View className={styles.formStack}>
+            <View className={styles.mediaPickRow}>
+              <SecondaryGlassButton
+                label={
+                  firstMediaId && firstMediaType === 'IMAGE'
+                    ? '照片已附加'
+                    : '附加一张照片'
+                }
+                onClick={() => void pickImageFor('first')}
+                fullWidth={false}
+              />
+              <SecondaryGlassButton
+                label={
+                  firstMediaId && firstMediaType === 'AUDIO' ? '声音已附加' : '附加声音'
+                }
+                onClick={() => openAudioRecord('first')}
+                fullWidth={false}
+              />
+              <SecondaryGlassButton
+                label={
+                  firstMediaId && firstMediaType === 'VIDEO' ? '视频已附加' : '附加视频'
+                }
+                onClick={() => void pickMediaFor('first', 'VIDEO')}
+                fullWidth={false}
+              />
+            </View>
+            <GlassInput
+              value={firstTitle}
+              onInput={setFirstTitle}
+              placeholder="第一次做什么，例如：第一次会坐"
+            />
+            <GlassDateField
+              label="发生日期"
+              value={firstDate}
+              onChange={setFirstDate}
+            />
+            <GlassTextArea
+              value={firstDesc}
+              onInput={setFirstDesc}
+              placeholder="记下这个难忘瞬间的细节…"
+            />
+            {firstPendingMedia ? (
+              <View className={styles.uploadPendingRow}>
+                <Text>附件原件已安全保存在本机，等待上传。</Text>
+                <TextAction
+                  label="重试上传"
+                  onClick={() =>
+                    void retryLocalMedia(
+                      firstPendingMedia,
+                      firstPendingMediaType,
+                      (mediaId) => {
+                        setFirstMediaId(mediaId);
+                        setFirstPendingMedia(null);
+                      },
+                    )
+                  }
+                />
+              </View>
+            ) : null}
+            <SecondaryGlassButton
+              label={firstFavorite ? '已加入珍藏' : '加入我的珍藏'}
+              onClick={() => setFirstFavorite((value) => !value)}
+            />
+            <PrimaryActionButton
+              label={editingFirstId ? '保存修改' : '珍藏第一次'}
+              onClick={() => void handleSaveFirst()}
+            />
+          </View>
+        </BottomSheet>
+
+        <BottomSheet
+          open={capsuleModalVisible}
+          onClose={() => setCapsuleModalVisible(false)}
+          title={editingCapsuleId ? '编辑胶囊草稿' : '写一封时光胶囊'}
+        >
+          <View className={styles.formStack}>
+            <View className={styles.mediaPickRow}>
+              <SecondaryGlassButton
+                label={
+                  capsuleMediaId && capsuleMediaType === 'IMAGE'
+                    ? '照片已附加'
+                    : '附加一张照片'
+                }
+                onClick={() => void pickImageFor('capsule')}
+                fullWidth={false}
+              />
+              <SecondaryGlassButton
+                label={
+                  capsuleMediaId && capsuleMediaType === 'AUDIO'
+                    ? '声音已附加'
+                    : '附加声音'
+                }
+                onClick={() => openAudioRecord('capsule')}
+                fullWidth={false}
+              />
+              <SecondaryGlassButton
+                label={
+                  capsuleMediaId && capsuleMediaType === 'VIDEO'
+                    ? '视频已附加'
+                    : '附加视频'
+                }
+                onClick={() => void pickMediaFor('capsule', 'VIDEO')}
+                fullWidth={false}
+              />
+            </View>
+            <GlassInput
+              value={capsuleRecipient}
+              onInput={setCapsuleRecipient}
+              placeholder="收件人，例如：十八岁的润润"
+            />
+            <GlassInput
+              value={capsuleTitle}
+              onInput={setCapsuleTitle}
+              placeholder="胶囊标题"
+            />
+            <GlassDateField
+              label="开启日期"
+              value={capsuleOpenDate}
+              end="2100-12-31"
+              onChange={setCapsuleOpenDate}
+            />
+            <GlassTextArea
+              value={capsuleBody}
+              onInput={setCapsuleBody}
+              placeholder="写给未来的一封信…"
+            />
+            {capsulePendingMedia ? (
+              <View className={styles.uploadPendingRow}>
+                <Text>附件原件已安全保存在本机，等待上传。</Text>
+                <TextAction
+                  label="重试上传"
+                  onClick={() =>
+                    void retryLocalMedia(
+                      capsulePendingMedia,
+                      capsulePendingMediaType,
+                      (mediaId) => {
+                        setCapsuleMediaId(mediaId);
+                        setCapsulePendingMedia(null);
+                      },
+                    )
+                  }
+                />
+              </View>
+            ) : null}
+            {editingCapsuleId ? (
+              <PrimaryActionButton
+                label="保存草稿修改"
+                onClick={() => void handleSaveCapsule(false)}
+              />
+            ) : (
+              <View className={styles.mediaPickRow}>
+                <SecondaryGlassButton
+                  label="存为草稿"
+                  onClick={() => void handleSaveCapsule(false)}
+                  fullWidth={false}
+                />
+                <PrimaryActionButton
+                  label="立即封存"
+                  onClick={() => void handleSaveCapsule(true)}
+                  fullWidth={false}
+                />
               </View>
             )}
           </View>
         </BottomSheet>
 
-        {/* First Moment Modal */}
-        <BottomSheet open={firstModalVisible} onClose={() => setFirstModalVisible(false)} title="✨ 记录第一次">
-          <View style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            <GlassInput value={firstTitle} onInput={(val) => setFirstTitle(val)} placeholder="第一次做什么（例如：第一次会坐）" />
-            <GlassTextArea value={firstDesc} onInput={(val) => setFirstDesc(val)} placeholder="记录下这个难忘瞬间的细节..." />
-            <PrimaryActionButton label="珍藏第一次" onClick={handleCreateFirst} />
-          </View>
-        </BottomSheet>
-
-        {/* Time Capsule Modal */}
-        <BottomSheet open={capsuleModalVisible} onClose={() => setCapsuleModalVisible(false)} title="✉️ 封存时光胶囊">
-          <View style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            <GlassInput value={capsuleRecipient} onInput={(val) => setCapsuleRecipient(val)} placeholder="收件人（例如：十八岁的润润）" />
-            <GlassInput value={capsuleTitle} onInput={(val) => setCapsuleTitle(val)} placeholder="胶囊标题" />
-            <GlassTextArea value={capsuleBody} onInput={(val) => setCapsuleBody(val)} placeholder="写给未来的一封信..." />
-            <View style={{ display: 'flex', gap: '12px' }}>
-              <SecondaryGlassButton label="存为草稿" onClick={() => handleCreateCapsule(false)} />
-              <PrimaryActionButton label="立即封存 🔒" onClick={() => handleCreateCapsule(true)} />
-            </View>
-          </View>
-        </BottomSheet>
-
-        {/* Seal Confirmation Dialog */}
         <ConfirmDialog
           open={sealConfirmVisible}
-          title="确认封存时光胶囊？🔒"
-          message="封存后将无法直接修改胶囊正文，直到到达指定开启日期。确定现在封存吗？"
+          title="确认封存这封信？"
+          message="封存后将无法直接修改正文，直到到达指定的开启日期。"
           confirmLabel="确认封存"
           cancelLabel="稍后再说"
-          onConfirm={handleSealConfirm}
+          onConfirm={() => void handleSealConfirm()}
           onCancel={() => setSealConfirmVisible(false)}
         />
+        <ConfirmDialog
+          open={Boolean(deleteRequest)}
+          title="移入最近删除？"
+          message={`“${deleteRequest?.label ?? ''}”会从当前展柜移出，但可以在本次操作后立即撤销。`}
+          confirmLabel="移入最近删除"
+          cancelLabel="保留这份回忆"
+          danger
+          onConfirm={() => void handleDeleteConfirm()}
+          onCancel={() => setDeleteRequest(null)}
+        />
       </View>
+      {!sheetOpen ? (
+        <BottomNav
+          active="memories"
+          onSelect={(key) => {
+            if (key === 'today' || key === 'records' || key === 'family') {
+              openRootTab(key);
+            }
+          }}
+          onAddClick={() => setSheetOpen(true)}
+        />
+      ) : null}
+      <AppDrawer
+        open={drawerOpen}
+        babyName={babyName}
+        babyAgeLabel={babyAgeLabel}
+        gemAmount={gemAmount}
+        items={DEFAULT_DRAWER_ITEMS.map((item) => ({
+          ...item,
+          active: item.id === 'memories',
+          onClick: () => {
+            if (item.id === 'memories') {
+              setDrawerOpen(false);
+              return;
+            }
+            if (
+              item.id === 'today' ||
+              item.id === 'records' ||
+              item.id === 'family'
+            ) {
+              openRootTab(item.id);
+              return;
+            }
+            setDrawerOpen(false);
+            if (item.id === 'growth') {
+              void Taro.navigateTo({ url: '/pages/growth/index' });
+            } else if (item.id === 'knowledge') {
+              void Taro.navigateTo({ url: '/pages/knowledge/index' });
+            } else if (item.id === 'health') {
+              void Taro.navigateTo({ url: '/pages/health/index' });
+            } else if (item.id === 'settings') {
+              void Taro.navigateTo({ url: '/pages/settings/index' });
+            } else {
+              showToast(`${item.title}正在布置，先逛逛回忆馆`);
+            }
+          },
+        }))}
+        onClose={() => setDrawerOpen(false)}
+        onSearchClick={() => showToast('搜索正在布置')}
+        onNotificationClick={() => {
+          setDrawerOpen(false);
+          void Taro.navigateTo({ url: '/pages/notifications/index' });
+        }}
+        onAdminClick={() => showToast('管理模式正在布置')}
+      />
+      <AddMomentOverlay
+        open={sheetOpen}
+        gemAmount={gemAmount}
+        onClose={() => setSheetOpen(false)}
+        onSelect={handleMomentSelect}
+      />
     </PageShell>
   );
 }

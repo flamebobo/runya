@@ -1,8 +1,4 @@
-import {
-  healthEvents,
-  healthReminders,
-  scheduledNotifications,
-} from '@runew/db';
+import { healthEvents, healthReminders, scheduledNotifications } from '@runew/db';
 import type { schema } from '@runew/db';
 import type {
   CreateHealthEventBody,
@@ -72,13 +68,14 @@ async function getEventRow(db: Database, id: string, includeDeleted = false) {
   return row;
 }
 
-async function reminderRowsFor(db: Database, eventId: string) {
+async function reminderRowsFor(db: Database, eventId: string, userId: string) {
   return db
     .select()
     .from(healthReminders)
     .where(
       and(
         eq(healthReminders.healthEventId, eventId),
+        eq(healthReminders.userId, userId),
         eq(healthReminders.status, 'SCHEDULED'),
       ),
     )
@@ -91,6 +88,31 @@ async function reminderIdsOf(db: Database, eventId: string) {
     .from(healthReminders)
     .where(eq(healthReminders.healthEventId, eventId));
   return rows.map((row) => row.id);
+}
+
+async function cancelRemindersForEvent(db: Database, eventId: string, now: number) {
+  const reminderIds = await reminderIdsOf(db, eventId);
+  if (reminderIds.length > 0) {
+    await db
+      .update(scheduledNotifications)
+      .set({ status: 'CANCELED', updatedAt: now })
+      .where(
+        and(
+          eq(scheduledNotifications.sourceType, 'HEALTH_REMINDER'),
+          inArray(scheduledNotifications.sourceId, reminderIds),
+          eq(scheduledNotifications.status, 'SCHEDULED'),
+        ),
+      );
+  }
+  await db
+    .update(healthReminders)
+    .set({ status: 'CANCELED', updatedAt: now })
+    .where(
+      and(
+        eq(healthReminders.healthEventId, eventId),
+        eq(healthReminders.status, 'SCHEDULED'),
+      ),
+    );
 }
 
 export async function listEvents(
@@ -106,7 +128,7 @@ export async function listEvents(
     .orderBy(asc(healthEvents.scheduledAt));
   const items: HealthEventPublic[] = [];
   for (const row of rows) {
-    const reminders = await reminderRowsFor(db, row.id);
+    const reminders = await reminderRowsFor(db, row.id, userId);
     items.push(mapEvent(row, reminders));
   }
   return { items };
@@ -115,7 +137,7 @@ export async function listEvents(
 export async function getEvent(db: Database, userId: string, id: string) {
   const row = await getEventRow(db, id);
   await requireBabyInFamily(db, userId, row.babyId);
-  const reminders = await reminderRowsFor(db, row.id);
+  const reminders = await reminderRowsFor(db, row.id, userId);
   return mapEvent(row, reminders);
 }
 
@@ -176,7 +198,9 @@ async function materializeScheduledNotifications(
   }
 }
 
-function reminderBodyOf(body: HealthReminderBody | null | undefined): HealthReminderBody | null {
+function reminderBodyOf(
+  body: HealthReminderBody | null | undefined,
+): HealthReminderBody | null {
   if (!body) return null;
   return { offsets: body.offsets };
 }
@@ -247,7 +271,12 @@ export async function createEvent(
 
 async function replaceReminders(
   db: Database,
-  input: { eventId: string; userId: string; now: number; planned: ReturnType<typeof planReminders> },
+  input: {
+    eventId: string;
+    userId: string;
+    now: number;
+    planned: ReturnType<typeof planReminders>;
+  },
 ) {
   // 提醒按用户独立：PUT 语义 = 该用户在这个事件上的旧提醒全部 CANCELED，再插入新计划。
   await db
@@ -261,20 +290,82 @@ async function replaceReminders(
       ),
     );
   for (const planned of input.planned) {
-    await db
-      .insert(healthReminders)
-      .values({
-        id: planned.id,
-        healthEventId: input.eventId,
-        userId: input.userId,
-        offsetKind: planned.offsetKind,
-        customOffsetMinutes: planned.customOffsetMinutes,
-        fireAt: planned.fireAt,
-        allowDndOverride: planned.allowDndOverride,
-        status: 'SCHEDULED',
-        createdAt: input.now,
-        updatedAt: input.now,
-      });
+    await db.insert(healthReminders).values({
+      id: planned.id,
+      healthEventId: input.eventId,
+      userId: input.userId,
+      offsetKind: planned.offsetKind,
+      customOffsetMinutes: planned.customOffsetMinutes,
+      fireAt: planned.fireAt,
+      allowDndOverride: planned.allowDndOverride,
+      status: 'SCHEDULED',
+      createdAt: input.now,
+      updatedAt: input.now,
+    });
+  }
+}
+
+export async function restoreDeletedReminders(
+  db: Database,
+  input: {
+    eventId: string;
+    familyId: string;
+    eventTitle: string;
+    scheduledAt: number;
+    deletedAt: number;
+    status: HealthEventPublic['status'];
+    now: number;
+  },
+) {
+  if (input.status !== 'UPCOMING') return;
+
+  // 删除会把当时仍在生效的提醒统一写成同一个 updatedAt；只恢复这批，
+  // 避免把更早被用户主动取消或替换的提醒重新带回来。
+  const rows = await db
+    .select()
+    .from(healthReminders)
+    .where(
+      and(
+        eq(healthReminders.healthEventId, input.eventId),
+        eq(healthReminders.status, 'CANCELED'),
+        eq(healthReminders.updatedAt, input.deletedAt),
+      ),
+    )
+    .orderBy(asc(healthReminders.fireAt));
+  if (rows.length === 0) return;
+
+  const rowsByUser = new Map<string, HealthReminderRow[]>();
+  for (const row of rows) {
+    const userRows = rowsByUser.get(row.userId) ?? [];
+    userRows.push(row);
+    rowsByUser.set(row.userId, userRows);
+  }
+  for (const [userId, userRows] of rowsByUser) {
+    const planned = planReminders(
+      input.scheduledAt,
+      {
+        offsets: userRows.map((row) => ({
+          kind: row.offsetKind as HealthReminderOffset,
+          customOffsetMinutes: row.customOffsetMinutes ?? undefined,
+          allowDndOverride: row.allowDndOverride,
+        })),
+      },
+      input.now,
+    );
+    await replaceReminders(db, {
+      eventId: input.eventId,
+      userId,
+      now: input.now,
+      planned,
+    });
+    await materializeScheduledNotifications(db, {
+      userId,
+      familyId: input.familyId,
+      eventId: input.eventId,
+      eventTitle: input.eventTitle,
+      planned,
+      now: input.now,
+    });
   }
 }
 
@@ -295,14 +386,14 @@ export async function updateEvent(
 
   const now = utcNowMs();
   const scheduledAt = body.scheduledAt ?? current.scheduledAt;
+  // 未携带 status 的编辑不能把已完成/已过期事项意外重开；只有明确的状态变更才推进状态机。
   const status =
-    body.status === 'COMPLETED'
+    body.status ??
+    (current.status === 'COMPLETED'
       ? 'COMPLETED'
-      : body.status === 'CANCELED'
-        ? 'CANCELED'
-        : current.status === 'EXPIRED'
-          ? 'EXPIRED'
-          : 'UPCOMING';
+      : current.status === 'EXPIRED'
+        ? 'EXPIRED'
+        : 'UPCOMING');
   const planned =
     body.reminder === null
       ? []
@@ -329,9 +420,12 @@ export async function updateEvent(
       scheduledAt,
       status,
       completedAt: status === 'COMPLETED' ? (current.completedAt ?? now) : null,
-      locationName: body.locationName === undefined ? current.locationName : body.locationName,
+      locationName:
+        body.locationName === undefined ? current.locationName : body.locationName,
       locationAddress:
-        body.locationAddress === undefined ? current.locationAddress : body.locationAddress,
+        body.locationAddress === undefined
+          ? current.locationAddress
+          : body.locationAddress,
       doctorName: body.doctorName === undefined ? current.doctorName : body.doctorName,
       note: body.note === undefined ? current.note : body.note,
       timezoneName: body.timezoneName ?? current.timezoneName,
@@ -350,8 +444,11 @@ export async function updateEvent(
     throw new AppError('ENTITY_VERSION_CONFLICT', '这个事项已在别处更新', 409);
   }
 
-  // 时间或提醒任一变化都重排提醒 + 通知物化（PUT 语义：旧 SCHEDULED 全部 CANCELED 再插入）。
-  if (body.reminder !== undefined || body.scheduledAt !== undefined) {
+  // 完成/取消是终态：保留历史提醒，但停止所有未发送通知。
+  if (status === 'COMPLETED' || status === 'CANCELED') {
+    await cancelRemindersForEvent(db, id, now);
+  } else if (body.reminder !== undefined || body.scheduledAt !== undefined) {
+    // 时间或提醒任一变化都重排提醒 + 通知物化（PUT 语义：旧 SCHEDULED 全部 CANCELED 再插入）。
     await replaceReminders(db, { eventId: id, userId, now, planned });
     await materializeScheduledNotifications(db, {
       userId,
@@ -399,28 +496,7 @@ export async function deleteEvent(db: Database, userId: string, id: string) {
     .where(eq(healthEvents.id, id));
 
   // Technical Design §75：取消源实体必须同时取消未发送的 scheduled notifications。
-  const reminderIds = await reminderIdsOf(db, id);
-  if (reminderIds.length > 0) {
-    await db
-      .update(scheduledNotifications)
-      .set({ status: 'CANCELED', updatedAt: now })
-      .where(
-        and(
-          eq(scheduledNotifications.sourceType, 'HEALTH_REMINDER'),
-          inArray(scheduledNotifications.sourceId, reminderIds),
-          eq(scheduledNotifications.status, 'SCHEDULED'),
-        ),
-      );
-  }
-  await db
-    .update(healthReminders)
-    .set({ status: 'CANCELED', updatedAt: now })
-    .where(
-      and(
-        eq(healthReminders.healthEventId, id),
-        eq(healthReminders.status, 'SCHEDULED'),
-      ),
-    );
+  await cancelRemindersForEvent(db, id, now);
 
   await appendSyncLog(
     db,
@@ -443,22 +519,38 @@ export async function restoreEvent(db: Database, userId: string, id: string) {
   const row = await getEventRow(db, id, true);
   await requireBabyInFamily(db, userId, row.babyId);
   if (row.deletedAt == null) {
-    const reminders = await reminderRowsFor(db, row.id);
+    const reminders = await reminderRowsFor(db, row.id, userId);
     return mapEvent(row, reminders);
   }
   const now = utcNowMs();
-  const nextStatus = row.scheduledAt <= now ? 'EXPIRED' : 'UPCOMING';
+  const nextStatus =
+    row.status === 'COMPLETED'
+      ? 'COMPLETED'
+      : row.status === 'CANCELED'
+        ? 'CANCELED'
+        : row.scheduledAt <= now
+          ? 'EXPIRED'
+          : 'UPCOMING';
   await db
     .update(healthEvents)
     .set({
       deletedAt: null,
       deletedBy: null,
-      status: row.status === 'CANCELED' ? 'CANCELED' : nextStatus,
+      status: nextStatus,
       updatedBy: userId,
       updatedAt: now,
       version: row.version + 1,
     })
     .where(eq(healthEvents.id, id));
+  await restoreDeletedReminders(db, {
+    eventId: id,
+    familyId: row.familyId,
+    eventTitle: row.title,
+    scheduledAt: row.scheduledAt,
+    deletedAt: row.updatedAt,
+    status: nextStatus,
+    now,
+  });
   const restored = await getEvent(db, userId, id);
   await appendSyncLog(
     db,

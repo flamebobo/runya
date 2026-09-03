@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { PendingOperation } from '@runew/contracts';
 import { pullChanges, pushOperations } from '@/api/sync';
 import { getEntity, putEntity } from './entityStore';
 import { loadPendingOperations, savePendingOperations } from './pendingStore';
@@ -112,6 +113,68 @@ describe('sync engine durable decisions', () => {
       deleted: false,
       pendingOpId: null,
       payload: { heightCm: 72, weightKg: null },
+    });
+  });
+
+  it('keeps health reminders and local attachment metadata after sync snapshot convergence', async () => {
+    const operation: PendingOperation = {
+      operationId: '01JDEM3HEALTHOPERATION000000',
+      deviceId: 'health-sync-device',
+      familyId: FAMILY_ID,
+      entityType: 'HEALTH_EVENT',
+      entityId: '01JDEM3HEALTHENTITY00000000',
+      op: 'CREATE',
+      fullPayload: {
+        babyId: BABY_ID,
+        eventType: 'CHECKUP',
+        title: '儿保',
+        scheduledAt: Date.UTC(2026, 8, 20, 2),
+        reminderOffsets: [
+          { kind: 'D1', customOffsetMinutes: null, allowDndOverride: false },
+        ],
+        pendingAttachment: {
+          mediaId: '01JDEM3HEALTHMEDIA00000000',
+          localPath: 'idb://media/01JDEM3HEALTHMEDIA00000000',
+          role: 'HEALTH_ATTACHMENT',
+          status: 'PENDING',
+        },
+      } as PendingOperation['fullPayload'],
+      clientCreatedAt: Date.UTC(2026, 8, 1),
+      retryCount: 0,
+    };
+    await savePendingOperations([operation]);
+    vi.mocked(pushOperations).mockResolvedValue({
+      results: [
+        {
+          operationId: operation.operationId,
+          status: 'APPLIED',
+          entityId: operation.entityId,
+          version: 1,
+          // Server sync snapshot intentionally只返回健康事项基础字段。
+          serverSnapshot: {
+            babyId: BABY_ID,
+            eventType: 'CHECKUP',
+            title: '儿保',
+            scheduledAt: Date.UTC(2026, 8, 20, 2),
+            status: 'UPCOMING',
+          },
+        },
+      ],
+      serverCursor: 0,
+      serverEpoch: 1,
+    });
+
+    await runSyncCycle(FAMILY_ID);
+
+    await expect(getEntity('HEALTH_EVENT', operation.entityId)).resolves.toMatchObject({
+      pendingOpId: null,
+      payload: {
+        reminderOffsets: [{ kind: 'D1' }],
+        pendingAttachment: {
+          mediaId: '01JDEM3HEALTHMEDIA00000000',
+          localPath: 'idb://media/01JDEM3HEALTHMEDIA00000000',
+        },
+      },
     });
   });
 

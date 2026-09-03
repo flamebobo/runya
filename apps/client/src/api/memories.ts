@@ -1,254 +1,311 @@
-import Taro from '@tarojs/taro';
 import type {
-  CreatePhotoMemoryBody,
-  UpdatePhotoMemoryBody,
-  CreateBabyQuoteBody,
-  UpdateBabyQuoteBody,
+  AnnualReviewResponse,
   CreateAudioMemoryBody,
-  UpdateAudioMemoryBody,
+  CreateBabyQuoteBody,
   CreateFirstMomentBody,
-  UpdateFirstMomentBody,
+  CreatePhotoMemoryBody,
   CreateTimeCapsuleBody,
+  AudioMemoryPublic,
+  BabyQuotePublic,
+  FirstMomentPublic,
+  MemoriesFavorites,
+  MemoriesHomeSummary,
+  OnThisDayResponse,
+  PhotoMemoryPublic,
+  TimeCapsulePublic,
+  UpdateAudioMemoryBody,
+  UpdateBabyQuoteBody,
+  UpdateFirstMomentBody,
+  UpdatePhotoMemoryBody,
   UpdateTimeCapsuleBody,
 } from '@runew/contracts';
+import { createUlid } from '@runew/shared-utils';
+import { apiRequest } from './client';
 
-const API_BASE =
+export const API_BASE =
   typeof process !== 'undefined' && process.env.TARO_APP_API_BASE
     ? process.env.TARO_APP_API_BASE
     : '/api/v1';
 
-function getHeaders(token?: string) {
-  const isWeapp = Taro.getEnv() === Taro.ENV_TYPE.WEAPP;
-  return {
-    'content-type': 'application/json',
-    ...(token ? { authorization: `Bearer ${token}` } : {}),
-    'x-client-platform': isWeapp ? 'WEAPP' : 'H5',
-  };
+function options(
+  authToken?: string,
+  method?: 'POST' | 'PATCH' | 'DELETE',
+  idempotencyKey?: string,
+) {
+  return { method, authToken, idempotencyKey } as const;
 }
 
-// --- Summary & On-this-day ---
-export async function fetchMemoriesSummary(babyId: string, token?: string) {
-  const res = await Taro.request({
-    url: `${API_BASE}/babies/${babyId}/memories/summary`,
-    method: 'GET',
-    header: getHeaders(token),
-  });
-  return res.data?.data;
+export function getMediaContentUrl(mediaId: string) {
+  return `${API_BASE}/media/${mediaId}/content`;
 }
 
-export async function fetchOnThisDay(babyId: string, token?: string) {
-  const res = await Taro.request({
-    url: `${API_BASE}/babies/${babyId}/memories/on-this-day`,
-    method: 'GET',
-    header: getHeaders(token),
+export function getMediaThumbnailUrl(mediaId: string) {
+  return `${API_BASE}/media/${mediaId}/thumbnail`;
+}
+
+export function retryMediaProcessing(mediaId: string, token?: string) {
+  return apiRequest<{ mediaId: string; status: 'READY' | 'PROCESSING' }>(
+    `/media/${mediaId}/retry`,
+    options(token, 'POST'),
+  );
+}
+
+// --- Summary & Reviews ---
+export function fetchMemoriesSummary(babyId: string, token?: string) {
+  return apiRequest<MemoriesHomeSummary>(`/babies/${babyId}/memories/summary`, {
+    authToken: token,
   });
-  return res.data?.data;
+}
+
+export function fetchOnThisDay(babyId: string, token?: string) {
+  return apiRequest<OnThisDayResponse>(`/babies/${babyId}/memories/on-this-day`, {
+    authToken: token,
+  });
+}
+
+export function fetchFavoriteMemories(babyId: string, token?: string) {
+  return apiRequest<MemoriesFavorites>(`/babies/${babyId}/memories/favorites`, {
+    authToken: token,
+  });
+}
+
+export function fetchAnnualReview(babyId: string, year: number, token?: string) {
+  return apiRequest<AnnualReviewResponse>(
+    `/babies/${babyId}/memories/annual-review?year=${year}`,
+    {
+      authToken: token,
+    },
+  );
 }
 
 // --- Photo Memories ---
-export async function fetchPhotoMemories(babyId: string, token?: string) {
-  const res = await Taro.request({
-    url: `${API_BASE}/babies/${babyId}/memories/photos`,
-    method: 'GET',
-    header: getHeaders(token),
+export function fetchPhotoMemories(babyId: string, token?: string) {
+  return apiRequest<PhotoMemoryPublic[]>(`/babies/${babyId}/memories/photos`, {
+    authToken: token,
   });
-  return res.data?.data || [];
 }
 
-export async function createPhotoMemory(babyId: string, body: CreatePhotoMemoryBody, token?: string) {
-  const res = await Taro.request({
-    url: `${API_BASE}/babies/${babyId}/memories/photos`,
-    method: 'POST',
-    header: getHeaders(token),
-    data: body,
+export function createPhotoMemory(
+  babyId: string,
+  body: CreatePhotoMemoryBody,
+  token?: string,
+) {
+  return apiRequest<PhotoMemoryPublic>(`/babies/${babyId}/memories/photos`, {
+    ...options(token, 'POST', createUlid()),
+    body,
   });
-  return res.data?.data;
 }
 
-export async function updatePhotoMemory(id: string, body: UpdatePhotoMemoryBody, token?: string) {
-  const res = await Taro.request({
-    url: `${API_BASE}/memories/photos/${id}`,
-    method: 'PATCH',
-    header: getHeaders(token),
-    data: body,
+export function updatePhotoMemory(
+  id: string,
+  body: UpdatePhotoMemoryBody,
+  token?: string,
+) {
+  return apiRequest<PhotoMemoryPublic>(`/memories/photos/${id}`, {
+    ...options(token, 'PATCH'),
+    body,
   });
-  return res.data?.data;
 }
 
-export async function deletePhotoMemory(id: string, token?: string) {
-  await Taro.request({
-    url: `${API_BASE}/memories/photos/${id}`,
-    method: 'DELETE',
-    header: getHeaders(token),
-  });
+export function deletePhotoMemory(id: string, token?: string) {
+  return apiRequest<{ id: string; deleted: boolean }>(
+    `/memories/photos/${id}`,
+    options(token, 'DELETE'),
+  );
+}
+
+export function restorePhotoMemory(id: string, token?: string) {
+  return apiRequest<PhotoMemoryPublic>(
+    `/memories/photos/${id}/restore`,
+    options(token, 'POST'),
+  );
 }
 
 // --- Baby Quotes ---
-export async function fetchBabyQuotes(babyId: string, token?: string) {
-  const res = await Taro.request({
-    url: `${API_BASE}/babies/${babyId}/memories/quotes`,
-    method: 'GET',
-    header: getHeaders(token),
+export function fetchBabyQuotes(babyId: string, token?: string) {
+  return apiRequest<BabyQuotePublic[]>(`/babies/${babyId}/memories/quotes`, {
+    authToken: token,
   });
-  return res.data?.data || [];
 }
 
-export async function createBabyQuote(babyId: string, body: CreateBabyQuoteBody, token?: string) {
-  const res = await Taro.request({
-    url: `${API_BASE}/babies/${babyId}/memories/quotes`,
-    method: 'POST',
-    header: getHeaders(token),
-    data: body,
+export function createBabyQuote(
+  babyId: string,
+  body: CreateBabyQuoteBody,
+  token?: string,
+) {
+  return apiRequest<BabyQuotePublic>(`/babies/${babyId}/memories/quotes`, {
+    ...options(token, 'POST', createUlid()),
+    body,
   });
-  return res.data?.data;
 }
 
-export async function updateBabyQuote(id: string, body: UpdateBabyQuoteBody, token?: string) {
-  const res = await Taro.request({
-    url: `${API_BASE}/memories/quotes/${id}`,
-    method: 'PATCH',
-    header: getHeaders(token),
-    data: body,
+export function updateBabyQuote(id: string, body: UpdateBabyQuoteBody, token?: string) {
+  return apiRequest<BabyQuotePublic>(`/memories/quotes/${id}`, {
+    ...options(token, 'PATCH'),
+    body,
   });
-  return res.data?.data;
 }
 
-export async function deleteBabyQuote(id: string, token?: string) {
-  await Taro.request({
-    url: `${API_BASE}/memories/quotes/${id}`,
-    method: 'DELETE',
-    header: getHeaders(token),
-  });
+export function deleteBabyQuote(id: string, token?: string) {
+  return apiRequest<{ id: string; deleted: boolean }>(
+    `/memories/quotes/${id}`,
+    options(token, 'DELETE'),
+  );
+}
+
+export function restoreBabyQuote(id: string, token?: string) {
+  return apiRequest<BabyQuotePublic>(
+    `/memories/quotes/${id}/restore`,
+    options(token, 'POST'),
+  );
 }
 
 // --- Audio Memories ---
-export async function fetchAudioMemories(babyId: string, token?: string) {
-  const res = await Taro.request({
-    url: `${API_BASE}/babies/${babyId}/memories/audios`,
-    method: 'GET',
-    header: getHeaders(token),
+export function fetchAudioMemories(babyId: string, token?: string) {
+  return apiRequest<AudioMemoryPublic[]>(`/babies/${babyId}/memories/audios`, {
+    authToken: token,
   });
-  return res.data?.data || [];
 }
 
-export async function createAudioMemory(babyId: string, body: CreateAudioMemoryBody, token?: string) {
-  const res = await Taro.request({
-    url: `${API_BASE}/babies/${babyId}/memories/audios`,
-    method: 'POST',
-    header: getHeaders(token),
-    data: body,
+export function createAudioMemory(
+  babyId: string,
+  body: CreateAudioMemoryBody,
+  token?: string,
+) {
+  return apiRequest<AudioMemoryPublic>(`/babies/${babyId}/memories/audios`, {
+    ...options(token, 'POST', createUlid()),
+    body,
   });
-  return res.data?.data;
 }
 
-export async function updateAudioMemory(id: string, body: UpdateAudioMemoryBody, token?: string) {
-  const res = await Taro.request({
-    url: `${API_BASE}/memories/audios/${id}`,
-    method: 'PATCH',
-    header: getHeaders(token),
-    data: body,
+export function updateAudioMemory(
+  id: string,
+  body: UpdateAudioMemoryBody,
+  token?: string,
+) {
+  return apiRequest<AudioMemoryPublic>(`/memories/audios/${id}`, {
+    ...options(token, 'PATCH'),
+    body,
   });
-  return res.data?.data;
 }
 
-export async function deleteAudioMemory(id: string, token?: string) {
-  await Taro.request({
-    url: `${API_BASE}/memories/audios/${id}`,
-    method: 'DELETE',
-    header: getHeaders(token),
-  });
+export function deleteAudioMemory(id: string, token?: string) {
+  return apiRequest<{ id: string; deleted: boolean }>(
+    `/memories/audios/${id}`,
+    options(token, 'DELETE'),
+  );
+}
+
+export function restoreAudioMemory(id: string, token?: string) {
+  return apiRequest<AudioMemoryPublic>(
+    `/memories/audios/${id}/restore`,
+    options(token, 'POST'),
+  );
 }
 
 // --- First Moments ---
-export async function fetchFirstMoments(babyId: string, token?: string) {
-  const res = await Taro.request({
-    url: `${API_BASE}/babies/${babyId}/memories/firsts`,
-    method: 'GET',
-    header: getHeaders(token),
+export function fetchFirstMoments(babyId: string, token?: string) {
+  return apiRequest<FirstMomentPublic[]>(`/babies/${babyId}/memories/firsts`, {
+    authToken: token,
   });
-  return res.data?.data || [];
 }
 
-export async function createFirstMoment(babyId: string, body: CreateFirstMomentBody, token?: string) {
-  const res = await Taro.request({
-    url: `${API_BASE}/babies/${babyId}/memories/firsts`,
-    method: 'POST',
-    header: getHeaders(token),
-    data: body,
+export function createFirstMoment(
+  babyId: string,
+  body: CreateFirstMomentBody,
+  token?: string,
+) {
+  return apiRequest<FirstMomentPublic>(`/babies/${babyId}/memories/firsts`, {
+    ...options(token, 'POST', createUlid()),
+    body,
   });
-  return res.data?.data;
 }
 
-export async function updateFirstMoment(id: string, body: UpdateFirstMomentBody, token?: string) {
-  const res = await Taro.request({
-    url: `${API_BASE}/memories/firsts/${id}`,
-    method: 'PATCH',
-    header: getHeaders(token),
-    data: body,
+export function updateFirstMoment(
+  id: string,
+  body: UpdateFirstMomentBody,
+  token?: string,
+) {
+  return apiRequest<FirstMomentPublic>(`/memories/firsts/${id}`, {
+    ...options(token, 'PATCH'),
+    body,
   });
-  return res.data?.data;
 }
 
-export async function deleteFirstMoment(id: string, token?: string) {
-  await Taro.request({
-    url: `${API_BASE}/memories/firsts/${id}`,
-    method: 'DELETE',
-    header: getHeaders(token),
-  });
+export function deleteFirstMoment(id: string, token?: string) {
+  return apiRequest<{ id: string; deleted: boolean }>(
+    `/memories/firsts/${id}`,
+    options(token, 'DELETE'),
+  );
+}
+
+export function restoreFirstMoment(id: string, token?: string) {
+  return apiRequest<FirstMomentPublic>(
+    `/memories/firsts/${id}/restore`,
+    options(token, 'POST'),
+  );
 }
 
 // --- Time Capsules ---
-export async function fetchTimeCapsules(babyId: string, token?: string) {
-  const res = await Taro.request({
-    url: `${API_BASE}/babies/${babyId}/memories/capsules`,
-    method: 'GET',
-    header: getHeaders(token),
+export function fetchTimeCapsules(babyId: string, token?: string) {
+  return apiRequest<TimeCapsulePublic[]>(`/babies/${babyId}/memories/capsules`, {
+    authToken: token,
   });
-  return res.data?.data || [];
 }
 
-export async function createTimeCapsule(babyId: string, body: CreateTimeCapsuleBody, token?: string) {
-  const res = await Taro.request({
-    url: `${API_BASE}/babies/${babyId}/memories/capsules`,
-    method: 'POST',
-    header: getHeaders(token),
-    data: body,
+export function createTimeCapsule(
+  babyId: string,
+  body: CreateTimeCapsuleBody,
+  token?: string,
+) {
+  return apiRequest<TimeCapsulePublic>(`/babies/${babyId}/memories/capsules`, {
+    ...options(token, 'POST', createUlid()),
+    body,
   });
-  return res.data?.data;
 }
 
-export async function updateTimeCapsule(id: string, body: UpdateTimeCapsuleBody, token?: string) {
-  const res = await Taro.request({
-    url: `${API_BASE}/memories/capsules/${id}`,
-    method: 'PATCH',
-    header: getHeaders(token),
-    data: body,
+export function updateTimeCapsule(
+  id: string,
+  body: UpdateTimeCapsuleBody,
+  token?: string,
+) {
+  return apiRequest<TimeCapsulePublic>(`/memories/capsules/${id}`, {
+    ...options(token, 'PATCH'),
+    body,
   });
-  return res.data?.data;
 }
 
-export async function sealTimeCapsule(id: string, token?: string) {
-  const res = await Taro.request({
-    url: `${API_BASE}/memories/capsules/${id}/seal`,
-    method: 'POST',
-    header: getHeaders(token),
+export function favoriteTimeCapsule(id: string, favorite: boolean, token?: string) {
+  return apiRequest<TimeCapsulePublic>(`/memories/capsules/${id}/favorite`, {
+    ...options(token, 'PATCH', createUlid()),
+    body: { favorite },
   });
-  return res.data?.data;
 }
 
-export async function openTimeCapsule(id: string, token?: string) {
-  const res = await Taro.request({
-    url: `${API_BASE}/memories/capsules/${id}/open`,
-    method: 'POST',
-    header: getHeaders(token),
-  });
-  return res.data?.data;
+export function sealTimeCapsule(id: string, token?: string) {
+  return apiRequest<TimeCapsulePublic>(
+    `/memories/capsules/${id}/seal`,
+    options(token, 'POST'),
+  );
 }
 
-export async function deleteTimeCapsule(id: string, token?: string) {
-  await Taro.request({
-    url: `${API_BASE}/memories/capsules/${id}`,
-    method: 'DELETE',
-    header: getHeaders(token),
-  });
+export function openTimeCapsule(id: string, token?: string) {
+  return apiRequest<TimeCapsulePublic>(
+    `/memories/capsules/${id}/open`,
+    options(token, 'POST'),
+  );
+}
+
+export function deleteTimeCapsule(id: string, token?: string) {
+  return apiRequest<{ id: string; deleted: boolean }>(
+    `/memories/capsules/${id}`,
+    options(token, 'DELETE'),
+  );
+}
+
+export function restoreTimeCapsule(id: string, token?: string) {
+  return apiRequest<TimeCapsulePublic>(
+    `/memories/capsules/${id}/restore`,
+    options(token, 'POST'),
+  );
 }

@@ -1,6 +1,7 @@
 import { Image, Text, View } from '@tarojs/components';
-import Taro from '@tarojs/taro';
-import { useState } from 'react';
+import type { BottomNavKey } from '@runew/domain-types';
+import Taro, { useRouter } from '@tarojs/taro';
+import { useEffect, useState } from 'react';
 import { stickerSmile, stickerStar } from '@/assets/figma';
 import {
   AppDrawer,
@@ -14,6 +15,7 @@ import {
   SectionHeader,
 } from '@/components';
 import { AddMomentOverlay } from '@/components/overlay/AddMomentOverlay';
+import { HealthNextUpCard } from '@/components/health/HealthViews';
 import { AppBootstrapGate } from '@/components/shell/AppBootstrapGate';
 import { BabyHeroCard } from '@/components/shell/BabyHeroCard';
 import { ChoiceCard } from '@/components/shell/ChoiceCard';
@@ -36,10 +38,12 @@ import {
 } from '@/api/records';
 import { useBootstrapQuery } from '@/hooks/useBootstrap';
 import { useGrowthQuery, useMilestonesQuery } from '@/hooks/useGrowth';
+import { useHealthEventsQuery } from '@/hooks/useHealth';
 import { useInvalidateCare, useTimelineQuery } from '@/hooks/useRecords';
 import { useUiOverlayStore } from '@/stores/runtime';
 import { formatBabyAgeLabel, todayIsoDate } from '@/utils/babyAge';
 import { localDayRange } from '@/utils/recordTime';
+import MemoriesPage from '@/pages/memories';
 import styles from './index.module.scss';
 
 const TAB_COPY: Record<
@@ -92,15 +96,27 @@ function homeGreeting() {
   return { title: '晚上好，妈妈', subtitle: '今天也要照顾好自己和润润' };
 }
 
+function rootTab(value: string | undefined): BottomNavKey | null {
+  return value === 'today' ||
+    value === 'records' ||
+    value === 'memories' ||
+    value === 'family'
+    ? value
+    : null;
+}
+
 export default function IndexPage() {
+  const router = useRouter();
+  const initialTab = rootTab(router.params.tab);
+
   return (
     <AppBootstrapGate>
-      <TodayShell />
+      <TodayShell initialTab={initialTab} />
     </AppBootstrapGate>
   );
 }
 
-function TodayShell() {
+function TodayShell({ initialTab }: { initialTab: BottomNavKey | null }) {
   const bootstrap = useBootstrapQuery(false);
   const baby = bootstrap.data?.currentBaby;
   const gemAmount = bootstrap.data?.gemBalance ?? 0;
@@ -110,6 +126,7 @@ function TodayShell() {
   const timeline = useTimelineQuery(babyId, { ...todayRange, kind: 'all' });
   const growth = useGrowthQuery(babyId);
   const milestones = useMilestonesQuery(babyId);
+  const healthEvents = useHealthEventsQuery(babyId);
   const running = timeline.data?.running ?? bootstrap.data?.running;
   const [finished, setFinished] = useState<{
     title: string;
@@ -125,9 +142,17 @@ function TodayShell() {
     setSheetOpen,
     showToast,
   } = useUiOverlayStore();
+  const [routeTab, setRouteTab] = useState<BottomNavKey | null>(initialTab);
+  const activeTab = routeTab ?? bottomNavActive ?? 'today';
   const greeting = homeGreeting();
   const babyName = baby?.nickname ?? baby?.name ?? '宝宝';
   const babyAgeLabel = baby ? formatBabyAgeLabel(baby.birthday) : '成长中';
+
+  useEffect(() => {
+    if (!routeTab) return;
+    setBottomNavActive(routeTab);
+    setRouteTab(null);
+  }, [routeTab, setBottomNavActive]);
 
   const comingSoon = (label: string) => {
     showToast(`${label}正在布置，先把今天收好`);
@@ -177,6 +202,16 @@ function TodayShell() {
       void Taro.navigateTo({ url: '/pages/growth/index?view=record' });
       return;
     }
+    if (
+      actionId === 'memory' ||
+      actionId === 'photo' ||
+      actionId === 'audio' ||
+      actionId === 'quote'
+    ) {
+      setSheetOpen(false);
+      setBottomNavActive('memories');
+      return;
+    }
     setSheetOpen(false);
     comingSoon(
       { photo: '照片', audio: '声音', quote: '宝宝语录', mood: '心情', diary: '日记' }[
@@ -185,9 +220,13 @@ function TodayShell() {
     );
   }
 
+  if (activeTab === 'memories') {
+    return <MemoriesPage embedded />;
+  }
+
   return (
     <PageShell bottomNav={!sheetOpen}>
-      {bottomNavActive === 'today' || bottomNavActive === null ? (
+      {activeTab === 'today' ? (
         <>
           <AppTopBar
             title={greeting.title}
@@ -252,13 +291,13 @@ function TodayShell() {
                 label="健康"
                 glyph="heart"
                 tone="sage"
-                onClick={() => comingSoon('健康')}
+                onClick={() => void Taro.navigateTo({ url: '/pages/health/index' })}
               />
               <QuickTile
                 label="宝宝回忆"
                 glyph="photo"
                 tone="sky"
-                onClick={() => void Taro.navigateTo({ url: '/pages/memories/index' })}
+                onClick={() => setBottomNavActive('memories')}
               />
             </View>
             <SectionHeader
@@ -328,18 +367,27 @@ function TodayShell() {
             </View>
             <SectionHeader
               title="接下来事项"
-              caption="健康提醒会在之后轻轻出现"
+              caption="提醒会在你设置的时间轻轻到来"
               variant="guide"
               glyph="bell"
               tone="sage"
             />
-            <GlassSurface level="tinted" tone="sage" radius="card">
-              <View className={styles.memoryHit}>
-                <Text className={styles.memoryCaption}>
-                  今天没有需要提前准备的事，先好好过这一天。
-                </Text>
-              </View>
-            </GlassSurface>
+            {healthEvents.data ? (
+              <HealthNextUpCard
+                event={
+                  healthEvents.data.items
+                    .filter((item) => item.status === 'UPCOMING')
+                    .sort((a, b) => a.scheduledAt - b.scheduledAt)[0] ?? null
+                }
+                onClick={() => void Taro.navigateTo({ url: '/pages/health/index' })}
+              />
+            ) : (
+              <GlassSurface level="tinted" tone="sage" radius="card">
+                <View className={styles.memoryHit}>
+                  <Text className={styles.memoryCaption}>正在整理健康小日历…</Text>
+                </View>
+              </GlassSurface>
+            )}
             <SectionHeader
               title="今日时间线"
               actionLabel="全部"
@@ -370,7 +418,7 @@ function TodayShell() {
             ) : null}
           </View>
         </>
-      ) : bottomNavActive === 'records' && babyId ? (
+      ) : activeTab === 'records' && babyId ? (
         <>
           <AppTopBar
             title={TAB_COPY.records.title}
@@ -412,15 +460,15 @@ function TodayShell() {
       ) : (
         <>
           <AppTopBar
-            title={TAB_COPY[bottomNavActive].title}
-            subtitle={TAB_COPY[bottomNavActive].subtitle}
+            title={TAB_COPY[activeTab].title}
+            subtitle={TAB_COPY[activeTab].subtitle}
             gemAmount={gemAmount}
             onMenuClick={() => setDrawerOpen(true)}
           />
           <View className="page-content">
             <EmptyState
-              title={TAB_COPY[bottomNavActive].emptyTitle}
-              description={TAB_COPY[bottomNavActive].emptyDescription}
+              title={TAB_COPY[activeTab].emptyTitle}
+              description={TAB_COPY[activeTab].emptyDescription}
               actionLabel="回到今天"
               onAction={() => setBottomNavActive('today')}
             />
@@ -429,13 +477,9 @@ function TodayShell() {
       )}
       {!sheetOpen ? (
         <BottomNav
-          active={bottomNavActive}
+          active={activeTab}
           onSelect={(key) => {
-            if (key === 'memories') {
-              void Taro.navigateTo({ url: '/pages/memories/index' });
-            } else {
-              setBottomNavActive(key);
-            }
+            setBottomNavActive(key);
           }}
           onAddClick={() => setSheetOpen(true)}
         />
@@ -449,25 +493,30 @@ function TodayShell() {
           ...item,
           active:
             item.id === 'today'
-              ? bottomNavActive === 'today' || bottomNavActive === null
-              : item.id === bottomNavActive,
+              ? activeTab === 'today'
+              : item.id === activeTab,
           onClick: () => {
             setDrawerOpen(false);
             if (item.id === 'today') setBottomNavActive('today');
             else if (item.id === 'records') setBottomNavActive('records');
-            else if (item.id === 'memories') {
-              void Taro.navigateTo({ url: '/pages/memories/index' });
-            } else if (item.id === 'family') setBottomNavActive('family');
+            else if (item.id === 'memories') setBottomNavActive('memories');
+            else if (item.id === 'family') setBottomNavActive('family');
             else if (item.id === 'growth') {
               void Taro.navigateTo({ url: '/pages/growth/index' });
             } else if (item.id === 'knowledge') {
               void Taro.navigateTo({ url: '/pages/knowledge/index' });
+            } else if (item.id === 'health') {
+              void Taro.navigateTo({ url: '/pages/health/index' });
+            } else if (item.id === 'settings') {
+              void Taro.navigateTo({ url: '/pages/settings/index' });
             } else comingSoon(item.title);
           },
         }))}
         onClose={() => setDrawerOpen(false)}
         onSearchClick={() => comingSoon('搜索')}
-        onNotificationClick={() => comingSoon('通知')}
+        onNotificationClick={() =>
+          void Taro.navigateTo({ url: '/pages/notifications/index' })
+        }
         onAdminClick={() => comingSoon('管理模式')}
       />
       <AddMomentOverlay

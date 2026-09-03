@@ -1,7 +1,4 @@
-import {
-  notificationPreferences,
-  notifications,
-} from '@runew/db';
+import { notificationPreferences, notifications } from '@runew/db';
 import type { schema } from '@runew/db';
 import type {
   NotificationListResponse,
@@ -12,19 +9,12 @@ import { createUlid, utcNowMs } from '@runew/shared-utils';
 import { and, desc, eq, isNull } from 'drizzle-orm';
 import type { LibSQLDatabase } from 'drizzle-orm/libsql';
 import { AppError } from '../../lib/errors.js';
-import {
-  DEFAULT_DND_END_MINUTE,
-  DEFAULT_DND_START_MINUTE,
-} from '@runew/db';
+import { DEFAULT_DND_END_MINUTE, DEFAULT_DND_START_MINUTE } from '@runew/db';
 
 type Database = LibSQLDatabase<typeof schema>;
 
 // DND 判定需要用户时区偏移；P0 只支持固定偏移（Asia/Shanghai = +8）。
 // 未来多时区用户在 preferences 加偏移列即可，不需要改调用方。
-function timezoneOffsetMinutesOf(_timezoneName: string): number {
-  return 480;
-}
-
 export async function getPreferences(
   db: Database,
   userId: string,
@@ -47,7 +37,8 @@ export async function getPreferences(
     dndStartMinute: DEFAULT_DND_START_MINUTE,
     dndEndMinute: DEFAULT_DND_END_MINUTE,
     timezoneName: 'Asia/Shanghai',
-    updatedAt: 0,
+    // 这是尚未落库的默认视图，也必须满足共享契约的正时间戳约束。
+    updatedAt: utcNowMs(),
   };
 }
 
@@ -144,7 +135,13 @@ export async function markRead(db: Database, userId: string, id: string) {
   const result = await db
     .update(notifications)
     .set({ readAt: now })
-    .where(and(eq(notifications.id, id), eq(notifications.userId, userId), isNull(notifications.readAt)));
+    .where(
+      and(
+        eq(notifications.id, id),
+        eq(notifications.userId, userId),
+        isNull(notifications.readAt),
+      ),
+    );
   if (result.rowsAffected === 0) {
     // 已读或不存在都不报错：读操作幂等，前端只关心「这一条不再显示未读」。
     const rows = await db

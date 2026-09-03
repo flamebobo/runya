@@ -1,12 +1,5 @@
-import { createUlid, utcNowMs } from '@runew/shared-utils';
-import { and, eq } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
-import {
-  effectiveFireAt,
-  isInDnd,
-  minuteOfDayOf,
-  type DndWindow,
-} from './dnd.js';
+import { effectiveFireAt, isInDnd, minuteOfDayOf, type DndWindow } from './dnd.js';
 
 const CROSSING_WINDOW: DndWindow = {
   enabled: true,
@@ -31,7 +24,9 @@ describe('dnd window', () => {
 
   it('does nothing when disabled or zero-length', () => {
     expect(isInDnd({ ...CROSSING_WINDOW, enabled: false }, 23 * 60)).toBe(false);
-    expect(isInDnd({ enabled: true, startMinute: 600, endMinute: 600 }, 600)).toBe(false);
+    expect(isInDnd({ enabled: true, startMinute: 600, endMinute: 600 }, 600)).toBe(
+      false,
+    );
   });
 
   it('defers regular reminders inside DND to window end', () => {
@@ -66,7 +61,11 @@ describe('dnd window', () => {
   });
 
   it('handles same-day windows like 12:00-14:00', () => {
-    const window: DndWindow = { enabled: true, startMinute: 12 * 60, endMinute: 14 * 60 };
+    const window: DndWindow = {
+      enabled: true,
+      startMinute: 12 * 60,
+      endMinute: 14 * 60,
+    };
     const tz = 480;
     const fireAt = Date.UTC(2026, 8, 3, 13, 0) - tz * 60_000; // 本地 13:00
     const effective = effectiveFireAt(window, fireAt, false, tz);

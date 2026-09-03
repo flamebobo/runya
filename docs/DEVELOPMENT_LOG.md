@@ -638,6 +638,56 @@ Ready for next task
 
 Ready for next task（M5 READY：Version-aware Knowledge State 完整）
 
+## M6 — 健康 / 通知基础闭环（Health / Notification Foundation）
+
+**日期：** 2026-09-03
+
+### Changed
+
+- 健康事项真实 CRUD、完成/取消/过期状态、周/月日历、当天筛选、下一事项、时间线、详情与编辑。
+- 提醒整体替换、单条取消、时间重排、终态取消；Notification Center 支持单条已读、全部已读与健康事项深链。
+- 通知偏好、21:00–08:00 默认 DND、跨午夜延迟及显式健康提醒 override；Scheduler 60 秒扫描、SQLite job lock、幂等通知、失败记录与重启接管。
+- 离线健康编辑通过本地 pending queue 同步，保留提醒和本机附件元数据；附件只接 Media Adapter Contract，UI 明示“本机待上传”，未伪造上传完成。
+- 健康文案只记录与提醒，不提供诊断，也不发送“今天没记录”或“连续打卡要断”等压力型通知。
+
+### Database
+
+- Migration: `db/migrations/0006_m6_health_notifications.sql`
+- Tables: `health_events`、`health_reminders`、`health_event_media`、`notification_preferences`、`notifications`、`scheduled_notifications`、`job_locks`
+
+### API / Contract
+
+- Health CRUD、提醒替换/删除、恢复路由与共享运行时 Request/Response Schema。
+- Notification Center 列表、单条已读、全部已读、偏好读取/更新与共享运行时 Response Schema。
+- Offline sync 保留 `payload: null` 的删除/普通同步日志，并保留完成/取消等健康事项终态。
+
+### UI / States
+
+- 健康事项首页、周/月日历、类型筛选、下一事项、时间线、详情、编辑、新增、删除确认与完成状态。
+- 通知中心、通知设置、DND 设置、空态/加载态/错误态、深链回到健康详情。
+- 复用 R6.2 Warm Glass + Cute Accent 视觉体系，实际检查 375×812、390×844、430×932 截图。
+
+### Verification
+
+- `pnpm test`：35 个测试文件、178 个测试全部通过。
+- `pnpm lint`：通过。
+- `pnpm db:check`：通过。
+- `pnpm build:packages`：通过。
+- `pnpm --filter @runew/server typecheck`：通过。
+- `pnpm --filter @runew/client typecheck`：通过。
+- `pnpm --filter @runew/client build:h5`：Compiled successfully；存在既有 bundle size warning。
+- `pnpm --filter @runew/client build:weapp`：Compiled successfully；存在 Taro CSS ordering / `rpx` minimizer warning。
+
+### Known Issues
+
+- M7 媒体/回忆的真实上传与 `health_event_media` 关联仍按阶段边界保留；M6 附件只保证本地持久化元数据，不展示上传完成。
+- Taro bundle/CSS warnings 为现有构建警告，不构成 M6 编译失败。
+- 工作树中原有的 `apps/client/src/pages/memories/index.module.scss` 删除状态已保留；全量客户端构建若不临时恢复该 M7 文件，会被该范围外缺失文件阻断。
+
+### Status
+
+M6 READY。
+
 ## M7 — 媒体平台与回忆（Media Platform / Memories）
 
 **日期：** 2026-09-03
@@ -645,7 +695,7 @@ Ready for next task（M5 READY：Version-aware Knowledge State 完整）
 ### Changed
 
 - M7 Media Platform & Memories 垂直切片完整交付。
-- 本地可靠保存（Local-first Media Preservation）：小程序端在用户选择/拍摄/录制后，先复制至 `USER_DATA_PATH/media/` 目录下持久化，成功后再写 Local Metadata；H5 端使用 OPFS (`navigator.storage.getDirectory`) 存储 Blob（Fallback 至 IndexedDB Blob / Object URL）。只有持久化本地文件成功后，UI 才展示“已保存”状态（遵从 AGENTS.md §30, §31, §32）。
+- 本地可靠保存（Local-first Media Preservation）：小程序端在用户选择/拍摄/录制后，先复制至 `USER_DATA_PATH/media/` 目录下持久化，成功后再写 Local Metadata；H5 端优先使用 OPFS (`navigator.storage.getDirectory`)，Fallback 至 IndexedDB Blob，`blob:` URL 仅用于临时预览。只有持久化本地文件成功后，UI 才展示“已保存”状态（遵从 AGENTS.md §30, §31, §32）。
 - 分块断点续传（Resumable Chunked Upload Engine）：服务器端实现 4 MiB 分块接收（`POST /media/uploads` 初始化会话、`PUT /media/uploads/:uploadId/parts/:partNo` 分块上传、`GET /media/uploads/:uploadId` 状态与已完成分块查询、`POST /media/uploads/:uploadId/complete` 合并与 SHA256 校验）。相同 Part 重试具备幂等性；分块合并校验 SHA256 与文件大小，不匹配拒绝合并。
 - 媒体处理与原件保留（Media Processing & Safety）：图片校验 Magic Bytes/Decode，异步生成 Display 与 Thumbnail 缩略图；音频提取 AAC/Opus 时长。处理失败保留原始 Binary 文件（遵从 AGENTS.md §33）。
 - 鉴权流媒体播放（Authenticated Media Delivery with HTTP 206 Range）：`GET /media/:id/content` 强制用户家庭鉴权（防 IDOR），支持 `Range: bytes=start-end` 分段请求，响应 `206 Partial Content`，供音频播放器与媒体播放平滑 Seek。
@@ -659,7 +709,7 @@ Ready for next task（M5 READY：Version-aware Knowledge State 完整）
 
 ### Database
 
-- Migration: `db/migrations/0007_m7_media_memories.sql`
+- Migrations: `db/migrations/0007_m7_media_memories.sql`、`db/migrations/0008_m7_capsule_favorites.sql`
 - 表：`media_files`、`media_uploads`、`media_upload_parts`、`photo_memories`、`photo_memory_media`、`baby_quotes`、`audio_memories`、`first_moments`、`first_moment_media`、`time_capsules`、`time_capsule_media`。
 
 ### API / Contract
@@ -667,6 +717,7 @@ Ready for next task（M5 READY：Version-aware Knowledge State 完整）
 - Media API：`POST /media/uploads`、`PUT /media/uploads/:uploadId/parts/:partNo`、`GET /media/uploads/:uploadId`、`POST /media/uploads/:uploadId/complete`、`GET /media/:id/content`、`GET /media/:id/thumbnail`。
 - Memories API：
   - `GET /babies/:babyId/memories/summary`、`GET /babies/:babyId/memories/on-this-day`
+  - `GET /babies/:babyId/memories/favorites`、`GET /babies/:babyId/memories/annual-review`
   - Photos: `GET/POST /babies/:babyId/memories/photos`、`GET/PATCH/DELETE /memories/photos/:id`
   - Quotes: `GET/POST /babies/:babyId/memories/quotes`、`GET/PATCH/DELETE /memories/quotes/:id`
   - Audios: `GET/POST /babies/:babyId/memories/audios`、`GET/PATCH/DELETE /memories/audios/:id`
@@ -675,16 +726,22 @@ Ready for next task（M5 READY：Version-aware Knowledge State 完整）
 
 ### UI / States
 
+- 06.01 回忆博物馆首页已接入统一 AppShell：AppTopBar（菜单/钻石）、AppDrawer、BottomNav（回忆高亮）与全局“留下这一刻”入口，不再渲染为脱离应用上下文的孤立页面。
+- 底部 `+` 的照片、声音、宝宝语录会直接进入回忆模块对应的照片表单、录音流程和语录表单；从今天页触发时通过 `action` 深链进入同一模块。
 - 06.01 回忆博物馆首页：暖奶油记忆墙、分类统计、Tab 切换、那年今日。
 - 06.09–06.13 Inline 音频播放器组件：声音卡片、分类 Tag、自定义 Seek、JIT 麦克风权限说明。
 - 06.19–06.21 时光胶囊：`DRAFT` 草稿、`SEALED` 封存锁与倒计时、封存确认 ConfirmDialog、`OPENED` 金色光芒展开卡片。
 
 ### Verification
 
-- `pnpm build`：工作区全量编译成功（`@runew/db`、`@runew/shared-utils`、`@runew/domain-types`、`@runew/validation`、`@runew/contracts`、`@runew/server`、`@runew/client` H5 & WeChat Mini Program）。
-- `pnpm test`：工作区 35 个测试文件、178 个测试用例 100% 运行通过！
+- `pnpm run build:packages`、server `typecheck`/`build`、client `typecheck`：通过。
+- `pnpm test`：工作区 36 个测试文件、180 个测试用例全部通过。
   - `media.test.ts`：覆盖分块断点续传、分块合并、Part 校验、SHA256 校验、Range 播放。
   - `memories.test.ts`：覆盖 Photo Memories CRUD、时光胶囊状态机严格转换 (`DRAFT` → `SEALED` → `OPENED`)、`SEALED` 正文修改拒绝。
+  - `apps/client/src/api/client.test.ts`：覆盖无 Body 的封存/开启/恢复请求不发送 JSON Content-Type，避免空 JSON 请求被 Fastify 拒绝。
+- `pnpm db:check`、`pnpm lint`、`git diff --check`：通过。
+- `pnpm --filter @runew/client run build:h5`、`build:weapp`：均 Compiled successfully；保留既有 bundle size、Taro CSS ordering 和 `rpx` minimizer warnings。
+- H5 本地真实浏览器验收：在 `375×812`、`390×844`、`430×932` 检查接入 AppShell 后的回忆首页；确认顶部菜单/钻石、左侧抽屉、回忆高亮底部导航、底部 `+` 入口与照片/声音/宝宝语录深链，实际操作 Tab、创建语录、珍藏筛选、胶囊草稿、封存确认与用户主动开启流程，页面层级、暖奶油 Warm Glass、底部操作区和横向筛选均可用。微信开发者工具真机/模拟器截图未纳入本次环境证据。
 
 ### Documentation
 
@@ -692,6 +749,36 @@ Ready for next task（M5 READY：Version-aware Knowledge State 完整）
 
 ### Status
 
-Ready for next task (M7 READY: Media Platform & Memories 阶段交付完成)
+M7 READY：Media Platform / Memories 代码、API、数据库、可靠保存、上传恢复、媒体鉴权、回忆状态和 H5 视觉验收完成；微信小程序以构建产物完成编译验证。
 
+## M7 UX 收口与应用壳一致性复核
 
+**日期：** 2026-09-04
+
+### Changed
+
+- 回忆模块继续复用应用主壳：顶部菜单、钻石徽标、左侧抽屉和底部导航均保留；移除页面内第二个“新增回忆”入口，改为由底部中央 `+` 进入。
+- 底部 `+` 的照片、声音、宝宝语录合并为一个“回忆”入口，再在回忆模块内选择具体记录类型，减少入口认知负担。
+- 今天 / 记录 / 回忆 / 小家在根壳内切换；外部主模块回到根壳时使用统一 `?tab=` URL，避免再次打开一个脱离应用上下文的回忆页。
+- `AppTopBar` 统一提供吸顶、玻璃材质、滚动收缩和副标题渐隐；修正 `PageShell` 的第二滚动容器，确保标题在页面滚动时仍可见。
+- 根壳内嵌回忆页改用页面默认导出，避免微信小程序构建将页面模块误识别为只有 default export，保证 H5 / Weapp 共用同一入口实现。
+
+### UI / States
+
+- 回忆首页改为暖奶油 Warm Glass 记忆墙：统计、引导、横向分类、那年今日、照片 / 语录 / 声音 / 第一次 / 时光胶囊分区和底部中央添加入口保持同一视觉层级。
+- 复核抽屉打开、钻石展示、底部 `+` 八项记录入口、回忆类型选择和根壳底部导航切换。
+
+### Verification
+
+- H5 本地真实浏览器 `m7fix`：实际检查 `375×812`、`390×844`、`430×932`；三个尺寸均确认回忆首页、底部导航、中央 `+` 和滚动后收缩标题可用，页面底部内容未被导航遮挡。
+- H5 真实交互：回忆 → 今天保持根路由；健康 → 回忆进入根壳 `?tab=memories`；抽屉可打开并显示钻石；中央 `+` 只出现 8 个入口且照片 / 声音 / 宝宝语录只有一个“回忆”入口。
+- H5 视觉证据：`.playwright-cli/m7-375-top.png`、`.playwright-cli/m7-375-sticky.png`、`.playwright-cli/m7-390-top.png`、`.playwright-cli/m7-390-sticky.png`、`.playwright-cli/m7-430-top.png`、`.playwright-cli/m7-430-sticky.png`；共享 `AppTopBar` 同时在成长、健康、知识页复核。
+- `pnpm test -- --reporter=dot`：37 个测试文件、182 个测试全部通过。
+- `pnpm lint`、`pnpm db:check`、`pnpm run build:packages`、server typecheck / build、client typecheck：通过。
+- client `build:h5`、`build:weapp`：均 Compiled successfully；保留既有 bundle size、Taro CSS ordering、CSS Modules 和 `rpx` minimizer warnings。
+- `git diff --check`：通过。
+
+### Known Issues
+
+- 本次环境没有微信开发者工具真机 / 模拟器运行证据；Weapp 已完成编译验证，媒体设备权限与真实文件系统链路仍需设备验收。
+- 构建警告属于当前 Taro / CSS Modules / `rpx` 基线警告，不影响本次编译退出码。

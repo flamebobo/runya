@@ -721,5 +721,72 @@ describe('sync api', () => {
       [...changes.map((change) => change.seq)].sort((a, b) => a - b),
     );
     expect(changes[0]!.entityId).toBe(entityId);
+
+    const healthCreate = await app.inject({
+      method: 'POST',
+      url: `/api/v1/babies/${family.babyId}/health/events`,
+      headers: { ...family.headers, 'idempotency-key': createUlid() },
+      payload: {
+        eventType: 'CHECKUP',
+        title: '同步协议回归检查',
+        scheduledAt: Date.now() + 14 * 24 * 60 * 60 * 1000,
+      },
+    });
+    expect(healthCreate.statusCode).toBe(201);
+    const healthId = healthCreate.json().data.id as string;
+    const healthPull = await app.inject({
+      method: 'GET',
+      url: `/api/v1/sync/pull?familyId=${family.familyId}&cursor=0&limit=500`,
+      headers: family.headers,
+    });
+    const healthChange = [
+      ...(healthPull.json().data.changes as Array<{
+        entityId: string;
+        payload: unknown;
+      }>),
+    ]
+      .reverse()
+      .find((change) => change.entityId === healthId);
+    expect(healthChange).toMatchObject({ entityId: healthId, payload: null });
+
+    const deleted = await app.inject({
+      method: 'POST',
+      url: '/api/v1/sync/push',
+      headers: family.headers,
+      payload: {
+        deviceId: 'device-a',
+        familyId: family.familyId,
+        operations: [
+          {
+            operationId: createUlid(),
+            deviceId: 'device-a',
+            familyId: family.familyId,
+            entityType: DIAPER,
+            entityId,
+            op: 'DELETE',
+            clientCreatedAt: Date.UTC(2026, 8, 1, 10, 10, 0),
+          },
+        ],
+      },
+    });
+    expect(deleted.statusCode).toBe(200);
+
+    const afterDelete = await app.inject({
+      method: 'GET',
+      url: `/api/v1/sync/pull?familyId=${family.familyId}&cursor=0`,
+      headers: family.headers,
+    });
+    expect(afterDelete.statusCode).toBe(200);
+    const deleteChange = [
+      ...(afterDelete.json().data.changes as Array<{
+        entityId: string;
+        payload: unknown;
+        deleted?: boolean;
+      }>),
+    ]
+      .reverse()
+      .find((change) => change.entityId === entityId && change.deleted);
+    expect(deleteChange).toMatchObject({ entityId, deleted: true });
+    expect(deleteChange?.payload).toMatchObject({ babyId: family.babyId });
   });
 });

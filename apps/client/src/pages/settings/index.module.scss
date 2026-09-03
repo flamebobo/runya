@@ -1,0 +1,97 @@
+.page {
+  padding-bottom: calc(32px + var(--safe-bottom));
+}
+
+.content {
+  padding-bottom: calc(24px + var(--safe-bottom));
+}
+
+.homeStack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.homeHero {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 18px 16px;
+}
+
+.homeArt {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 54px;
+  height: 54px;
+  flex: 0 0 54px;
+  border-radius: 20px;
+  color: var(--color-apricot-strong);
+  background: var(--color-apricot-soft);
+}
+
+.homeCopy,
+.homeCardCopy {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.homeTitle,
+.homeCardTitle {
+  font-weight: 800;
+  color: var(--color-text-primary);
+}
+
+.homeTitle {
+  font-size: var(--font-card-title);
+  text-shadow: var(--text-emboss);
+}
+
+.homeCaption,
+.homeCardCaption {
+  font-size: var(--font-caption);
+  line-height: 1.5;
+  color: var(--color-text-secondary);
+}
+
+.homeCard {
+  overflow: hidden;
+}
+
+.homeCardHit {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 76px;
+  padding: 12px 16px;
+  cursor: pointer;
+}
+
+.homeCardIcon,
+.homeCardIconLavender {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  flex: 0 0 42px;
+  border-radius: 50%;
+}
+
+.homeCardIcon {
+  color: var(--color-sky-strong);
+  background: var(--color-sky-soft);
+}
+
+.homeCardIconLavender {
+  color: var(--color-lavender-strong);
+  background: var(--color-lavender-soft);
+}
+
+.homeCardTitle {
+  font-size: var(--font-body);
+}

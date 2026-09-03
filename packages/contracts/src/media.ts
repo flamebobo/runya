@@ -54,6 +54,7 @@ export const uploadStateResponseSchema = z.object({
   chunkSize: z.number().int().positive(),
   completedParts: z.array(z.number().int().positive()),
   status: uploadStatusSchema,
+  expiresAt: timestampSchema,
 });
 
 export const completeUploadBodySchema = z.object({

@@ -1,12 +1,16 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { eq } from 'drizzle-orm';
-import { mediaFiles, familyMembers } from '@runew/db';
+import { mediaFiles } from '@runew/db';
 import { getMediaStorageDir } from './upload.service.js';
 import { AppError } from '../../lib/errors.js';
 import type { Database } from '../../plugins/db.js';
 
-export async function checkMediaAccessPermission(db: Database, userId: string, mediaId: string) {
+export async function checkMediaAccessPermission(
+  db: Database,
+  userId: string,
+  mediaId: string,
+) {
   const media = await db.query.mediaFiles.findFirst({
     where: eq(mediaFiles.id, mediaId),
   });
@@ -27,6 +31,22 @@ export async function checkMediaAccessPermission(db: Database, userId: string, m
 
   if (!membership) {
     throw new AppError('FAMILY_ACCESS_DENIED', '无权访问此小家媒体资源', 403);
+  }
+
+  const sealedCapsuleLink = await db.query.timeCapsuleMedia.findFirst({
+    where: (link, { eq }) => eq(link.mediaId, mediaId),
+  });
+  if (sealedCapsuleLink) {
+    const capsule = await db.query.timeCapsules.findFirst({
+      where: (timeCapsule, { and, eq, isNull }) =>
+        and(
+          eq(timeCapsule.id, sealedCapsuleLink.timeCapsuleId),
+          isNull(timeCapsule.deletedAt),
+        ),
+    });
+    if (capsule?.state === 'SEALED') {
+      throw new AppError('CAPSULE_SEALED', '时光胶囊尚未到开启时间', 403);
+    }
   }
 
   return media;

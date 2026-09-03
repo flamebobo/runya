@@ -21,9 +21,7 @@ const ACTIONS: Array<{ id: string; label: string; glyph: GlyphName; tone: Semant
   { id: 'diaper', label: '尿布', glyph: 'diaper', tone: 'sage' },
   { id: 'food', label: '辅食', glyph: 'bowl', tone: 'blush' },
   { id: 'growth', label: '成长', glyph: 'growth', tone: 'sage' },
-  { id: 'photo', label: '照片', glyph: 'photo', tone: 'sky' },
-  { id: 'audio', label: '声音', glyph: 'mic', tone: 'lavender' },
-  { id: 'quote', label: '宝宝语录', glyph: 'quote', tone: 'blush' },
+  { id: 'memory', label: '回忆', glyph: 'photo', tone: 'sky' },
   { id: 'mood', label: '心情', glyph: 'smile', tone: 'blush' },
   { id: 'diary', label: '日记', glyph: 'diary', tone: 'apricot' },
 ];
@@ -72,7 +70,9 @@ export function AddMomentOverlay({
           </View>
         ))}
       </View>
-      <Text className={styles.hint}>先选一件想留下的小事，我们会好好接住。</Text>
+      <Text className={styles.hint}>
+        先选一件想留下的小事，我们会好好接住。照片、声音和语录，都收进同一间回忆馆。
+      </Text>
     </View>
   );
 }

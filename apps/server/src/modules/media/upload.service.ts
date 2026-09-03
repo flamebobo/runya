@@ -8,8 +8,48 @@ import { createUlid } from '@runew/shared-utils';
 import { AppError } from '../../lib/errors.js';
 import type { Database } from '../../plugins/db.js';
 
-const DEFAULT_CHUNK_SIZE = 4 * 1024 * 1024; // 4 MiB
+export const DEFAULT_CHUNK_SIZE = 4 * 1024 * 1024; // 4 MiB
 const UPLOAD_EXPIRY_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+const SUPPORTED_IMAGE_MIME_TYPES = new Set([
+  'image/jpeg',
+  'image/jpg',
+  'image/png',
+  'image/webp',
+]);
+const SUPPORTED_AUDIO_MIME_TYPES = new Set([
+  'audio/aac',
+  'audio/ogg',
+  'audio/opus',
+  'audio/webm',
+  'audio/mp4',
+  'audio/m4a',
+]);
+const SUPPORTED_VIDEO_MIME_TYPES = new Set([
+  'video/mp4',
+  'video/webm',
+  'video/quicktime',
+]);
+
+export function normalizeUploadMimeType(mimeType: string) {
+  return mimeType.toLowerCase().split(';', 1)[0]!.trim();
+}
+
+export function assertSupportedMediaDeclaration(
+  mediaType: InitUploadBody['mediaType'],
+  mimeType: string,
+) {
+  const normalizedMimeType = normalizeUploadMimeType(mimeType);
+  if (mediaType === 'IMAGE' && !SUPPORTED_IMAGE_MIME_TYPES.has(normalizedMimeType)) {
+    throw new AppError('VALIDATION_ERROR', '图片格式不受支持', 400);
+  }
+  if (mediaType === 'AUDIO' && !SUPPORTED_AUDIO_MIME_TYPES.has(normalizedMimeType)) {
+    throw new AppError('VALIDATION_ERROR', '声音格式不受支持，请使用 AAC 或 Opus', 400);
+  }
+  if (mediaType === 'VIDEO' && !SUPPORTED_VIDEO_MIME_TYPES.has(normalizedMimeType)) {
+    throw new AppError('VALIDATION_ERROR', '视频格式不受支持，请使用 MP4 或 WebM', 400);
+  }
+}
 
 export function getMediaStorageDir(): string {
   const customPath = process.env.RUNEW_DATA_DIR;
@@ -29,6 +69,7 @@ export async function initUploadSession(
   familyId: string,
   body: InitUploadBody,
 ) {
+  assertSupportedMediaDeclaration(body.mediaType, body.mimeType);
   const now = Date.now();
   const mediaId = createUlid();
   const uploadId = createUlid();
@@ -127,6 +168,18 @@ export async function assertUploadActorPermission(
     throw new AppError('FAMILY_ACCESS_DENIED', '無權完成這個上傳會話', 403);
   }
 
+  const membership = await db.query.familyMembers.findFirst({
+    where: (familyMember, { and: whereAnd, eq: whereEq }) =>
+      whereAnd(
+        whereEq(familyMember.userId, actorUserId),
+        whereEq(familyMember.familyId, media.familyId),
+        whereEq(familyMember.status, 'ACTIVE'),
+      ),
+  });
+  if (!membership) {
+    throw new AppError('FAMILY_ACCESS_DENIED', '无权操作这个家庭的上传会话', 403);
+  }
+
   return { upload, media };
 }
 
@@ -135,6 +188,7 @@ export async function saveUploadPart(
   uploadId: string,
   partNo: number,
   buffer: Buffer,
+  expectedSha256?: string,
 ) {
   const upload = await db.query.mediaUploads.findFirst({
     where: eq(mediaUploads.id, uploadId),
@@ -154,6 +208,9 @@ export async function saveUploadPart(
 
   const sha256 = crypto.createHash('sha256').update(buffer).digest('hex');
   const sizeBytes = buffer.length;
+  if (expectedSha256 && expectedSha256.toLowerCase() !== sha256) {
+    throw new AppError('VALIDATION_ERROR', '分块 Hash 校验失败', 400);
+  }
 
   // Check if part already exists (Idempotent Part Retry)
   const existingPart = await db.query.mediaUploadParts.findFirst({
@@ -185,7 +242,9 @@ export async function saveUploadPart(
   const tmpDir = getTmpUploadsDir(uploadId);
   await fs.mkdir(tmpDir, { recursive: true });
   const partPath = path.join(tmpDir, `part_${partNo}`);
-  await fs.writeFile(partPath, buffer);
+  const tempPartPath = `${partPath}.uploading`;
+  await fs.writeFile(tempPartPath, buffer);
+  await fs.rename(tempPartPath, partPath);
 
   const now = Date.now();
   await db.insert(mediaUploadParts).values({
@@ -249,16 +308,34 @@ export async function getUploadSessionState(db: Database, uploadId: string) {
     chunkSize: upload.chunkSize,
     completedParts,
     status: upload.status as 'INIT' | 'UPLOADING' | 'COMPLETE' | 'EXPIRED',
+    expiresAt: upload.expiresAt,
   };
 }
 
-export async function assembleCompletedUpload(db: Database, uploadId: string, finalSha256?: string) {
+export async function assembleCompletedUpload(
+  db: Database,
+  uploadId: string,
+  finalSha256?: string,
+) {
   const upload = await db.query.mediaUploads.findFirst({
     where: eq(mediaUploads.id, uploadId),
   });
 
   if (!upload) {
     throw new AppError('NOT_FOUND', '上传会话不存在', 404);
+  }
+
+  const existingMedia = await db.query.mediaFiles.findFirst({
+    where: eq(mediaFiles.id, upload.mediaId),
+  });
+  if (upload.status === 'COMPLETE' && existingMedia?.status === 'READY') {
+    return {
+      mediaId: upload.mediaId,
+      assembledPath: '',
+      sha256: existingMedia.sha256 ?? '',
+      sizeBytes: existingMedia.sizeBytes ?? 0,
+      alreadyProcessed: true,
+    };
   }
 
   const parts = await db.query.mediaUploadParts.findMany({
@@ -290,6 +367,14 @@ export async function assembleCompletedUpload(db: Database, uploadId: string, fi
   try {
     for (const part of parts) {
       const partBuffer = await fs.readFile(part.tempPath);
+      const partHash = crypto.createHash('sha256').update(partBuffer).digest('hex');
+      if (partBuffer.length !== part.sizeBytes || partHash !== part.sha256) {
+        throw new AppError(
+          'VALIDATION_ERROR',
+          `分块 ${part.partNo} 校验失败，请重新上传`,
+          400,
+        );
+      }
       hasher.update(partBuffer);
       await fileHandle.write(partBuffer);
     }
@@ -302,6 +387,7 @@ export async function assembleCompletedUpload(db: Database, uploadId: string, fi
   // Check expectedSha256 if provided
   const targetSha256 = finalSha256 || upload.expectedSha256;
   if (targetSha256 && targetSha256.toLowerCase() !== computedHash.toLowerCase()) {
+    await fs.rm(assembledPath, { force: true });
     throw new AppError(
       'VALIDATION_ERROR',
       `文件完整性校验失败 (期望: ${targetSha256}, 实际: ${computedHash})`,
@@ -334,5 +420,6 @@ export async function assembleCompletedUpload(db: Database, uploadId: string, fi
     assembledPath,
     sha256: computedHash,
     sizeBytes: totalBytes,
+    alreadyProcessed: false,
   };
 }

@@ -23,9 +23,14 @@ export const apiErrorEnvelopeSchema = z.object({
   meta: apiMetaSchema,
 });
 
+export const apiOkResponseSchema = z.object({
+  ok: z.literal(true),
+});
+
 export type ApiMeta = z.infer<typeof apiMetaSchema>;
 export type ApiErrorBody = z.infer<typeof apiErrorBodySchema>;
 export type ApiErrorEnvelope = z.infer<typeof apiErrorEnvelopeSchema>;
+export type ApiOkResponse = z.infer<typeof apiOkResponseSchema>;
 
 export interface ApiSuccessEnvelope<T> {
   data: T;
@@ -83,4 +88,3 @@ export * from './notifications.js';
 export * from './sync.js';
 export * from './media.js';
 export * from './memories.js';
-

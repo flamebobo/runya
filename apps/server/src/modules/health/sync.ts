@@ -1,4 +1,9 @@
-import { healthEvents, healthReminders, scheduledNotifications, syncOperations } from '@runew/db';
+import {
+  healthEvents,
+  healthReminders,
+  scheduledNotifications,
+  syncOperations,
+} from '@runew/db';
 import type { schema } from '@runew/db';
 import type {
   HealthEventType,
@@ -14,6 +19,7 @@ import { AppError } from '../../lib/errors.js';
 import { requireBabyInFamily, requireFamilyMembership } from '../identity/service.js';
 import { appendSyncLog } from '../sync/log.js';
 import { planReminders } from './schedule.js';
+import { restoreDeletedReminders } from './service.js';
 
 type Database = LibSQLDatabase<typeof schema>;
 type HealthEventRow = typeof healthEvents.$inferSelect;
@@ -33,7 +39,14 @@ const HEALTH_FIELDS = [
 
 type HealthField = (typeof HEALTH_FIELDS)[number];
 
-const EVENT_TYPES: HealthEventType[] = ['CHECKUP', 'VACCINE', 'VISIT', 'DENTAL', 'MEDICATION', 'OTHER'];
+const EVENT_TYPES: HealthEventType[] = [
+  'CHECKUP',
+  'VACCINE',
+  'VISIT',
+  'DENTAL',
+  'MEDICATION',
+  'OTHER',
+];
 
 function stripUndefined(payload: RecordPayload): RecordPayload {
   return Object.fromEntries(
@@ -42,7 +55,9 @@ function stripUndefined(payload: RecordPayload): RecordPayload {
 }
 
 // 只挑 HEALTH_FIELDS 内的键；客户端多带的字段忽略。
-function pickHealthFields(payload: RecordPayload): Partial<Record<HealthField, unknown>> {
+function pickHealthFields(
+  payload: RecordPayload,
+): Partial<Record<HealthField, unknown>> {
   const source = stripUndefined(payload);
   const result: Partial<Record<HealthField, unknown>> = {};
   for (const field of HEALTH_FIELDS) {
@@ -67,14 +82,24 @@ function payloadOf(row: HealthEventRow): RecordPayload {
   };
 }
 
-function normalizeStatus(incoming: unknown, current: string, scheduledAt: number, now: number): string {
+function normalizeStatus(
+  incoming: unknown,
+  current: string,
+  scheduledAt: number,
+  now: number,
+): string {
   if (incoming === 'COMPLETED' || incoming === 'CANCELED') return incoming;
+  if (current === 'COMPLETED' || current === 'CANCELED') return current;
   if (current === 'EXPIRED') return 'EXPIRED';
   return scheduledAt <= now ? 'EXPIRED' : 'UPCOMING';
 }
 
 async function findRow(db: Database, entityId: string): Promise<HealthEventRow | null> {
-  const rows = await db.select().from(healthEvents).where(eq(healthEvents.id, entityId)).limit(1);
+  const rows = await db
+    .select()
+    .from(healthEvents)
+    .where(eq(healthEvents.id, entityId))
+    .limit(1);
   return rows[0] ?? null;
 }
 
@@ -98,7 +123,8 @@ function resolveThreeWay(
     const clientValue = patch[field];
     const serverMatchesBase = JSON.stringify(serverValue) === JSON.stringify(baseValue);
     const clientMatchesBase = JSON.stringify(clientValue) === JSON.stringify(baseValue);
-    const serverMatchesClient = JSON.stringify(serverValue) === JSON.stringify(clientValue);
+    const serverMatchesClient =
+      JSON.stringify(serverValue) === JSON.stringify(clientValue);
     if (clientMatchesBase) continue;
     if (serverMatchesBase || serverMatchesClient) {
       merged[field] = clientValue;
@@ -117,9 +143,69 @@ type ReminderOffsetInput = {
 };
 
 function reminderOffsetsOf(payload: unknown): ReminderOffsetInput[] {
-  const offsets = (payload as { reminderOffsets?: ReminderOffsetInput[] } | undefined)
-    ?.reminderOffsets;
-  return Array.isArray(offsets) ? offsets : [];
+  const source = payload as
+    | {
+        reminderOffsets?: unknown;
+        reminder?: { offsets?: unknown } | null;
+      }
+    | undefined;
+  const offsets = Array.isArray(source?.reminderOffsets)
+    ? source.reminderOffsets
+    : source?.reminder && Array.isArray(source.reminder.offsets)
+      ? source.reminder.offsets
+      : [];
+  return offsets.flatMap((value) => {
+    if (!value || typeof value !== 'object') return [];
+    const candidate = value as {
+      kind?: unknown;
+      customOffsetMinutes?: unknown;
+      allowDndOverride?: unknown;
+    };
+    if (typeof candidate.kind !== 'string') return [];
+    return [
+      {
+        kind: candidate.kind,
+        customOffsetMinutes:
+          typeof candidate.customOffsetMinutes === 'number'
+            ? candidate.customOffsetMinutes
+            : null,
+        allowDndOverride: candidate.allowDndOverride === true,
+      },
+    ];
+  });
+}
+
+function hasReminderOffsets(payload: unknown): boolean {
+  const source = payload as
+    | {
+        reminderOffsets?: unknown;
+        reminder?: { offsets?: unknown } | null;
+      }
+    | undefined;
+  return (
+    Array.isArray(source?.reminderOffsets) ||
+    Boolean(source?.reminder && Array.isArray(source.reminder.offsets))
+  );
+}
+
+async function scheduledReminderOffsetsFor(
+  db: Database,
+  eventId: string,
+): Promise<ReminderOffsetInput[]> {
+  const rows = await db
+    .select()
+    .from(healthReminders)
+    .where(
+      and(
+        eq(healthReminders.healthEventId, eventId),
+        eq(healthReminders.status, 'SCHEDULED'),
+      ),
+    );
+  return rows.map((row) => ({
+    kind: row.offsetKind,
+    customOffsetMinutes: row.customOffsetMinutes,
+    allowDndOverride: row.allowDndOverride,
+  }));
 }
 
 async function materializeReminders(
@@ -128,7 +214,11 @@ async function materializeReminders(
   userId: string,
   familyId: string,
   scheduledAt: number,
-  offsets: Array<{ kind: string; customOffsetMinutes: number | null; allowDndOverride: boolean }>,
+  offsets: Array<{
+    kind: string;
+    customOffsetMinutes: number | null;
+    allowDndOverride: boolean;
+  }>,
   now: number,
 ) {
   const oldIds = await db
@@ -242,16 +332,23 @@ async function replayOperation(
     existing.entityId !== operation.entityId ||
     existing.op !== operation.op
   ) {
-    throw new AppError('ENTITY_ID_REUSED', '这次同步的操作编号已被占用，请重新提交', 409);
+    throw new AppError(
+      'ENTITY_ID_REUSED',
+      '这次同步的操作编号已被占用，请重新提交',
+      409,
+    );
   }
   const stored = existing.resultJson
-    ? (JSON.parse(existing.resultJson) as { payload?: RecordPayload; deleted?: boolean })
+    ? (JSON.parse(existing.resultJson) as {
+        payload?: RecordPayload;
+        deleted?: boolean;
+      })
     : {};
   return {
     operationId: operation.operationId,
     status: 'APPLIED',
     entityId: existing.entityId,
-    version: stored.payload?.version as number | undefined ?? 1,
+    version: (stored.payload?.version as number | undefined) ?? 1,
     serverSnapshot: stored.payload,
   };
 }
@@ -337,7 +434,8 @@ export async function applyHealthPendingOperation(
       );
     }
     const created = await findRow(db, operation.entityId);
-    if (!created) throw new AppError('INTERNAL_ERROR', '内容还没安全保存，请再试一次', 500);
+    if (!created)
+      throw new AppError('INTERNAL_ERROR', '内容还没安全保存，请再试一次', 500);
     const payload = payloadOf(created);
     await writeLog(db, operation, userId, created.version, payload, false, now);
     return {
@@ -399,11 +497,13 @@ export async function applyHealthPendingOperation(
     }
     const nextVersion = existing.version + 1;
     const nextStatus =
-      existing.status === 'CANCELED'
-        ? 'CANCELED'
-        : existing.scheduledAt <= now
-          ? 'EXPIRED'
-          : 'UPCOMING';
+      existing.status === 'COMPLETED'
+        ? 'COMPLETED'
+        : existing.status === 'CANCELED'
+          ? 'CANCELED'
+          : existing.scheduledAt <= now
+            ? 'EXPIRED'
+            : 'UPCOMING';
     await db
       .update(healthEvents)
       .set({
@@ -415,6 +515,15 @@ export async function applyHealthPendingOperation(
         version: nextVersion,
       })
       .where(eq(healthEvents.id, existing.id));
+    await restoreDeletedReminders(db, {
+      eventId: existing.id,
+      familyId: existing.familyId,
+      eventTitle: existing.title,
+      scheduledAt: existing.scheduledAt,
+      deletedAt: existing.updatedAt,
+      status: nextStatus,
+      now,
+    });
     await writeLog(db, operation, userId, nextVersion, payloadOf(existing), false, now);
     return {
       ...base,
@@ -457,7 +566,8 @@ export async function applyHealthPendingOperation(
   }
 
   const mergedHealth = pickHealthFields(merged);
-  const scheduledAt = (mergedHealth.scheduledAt as number | undefined) ?? existing.scheduledAt;
+  const scheduledAt =
+    (mergedHealth.scheduledAt as number | undefined) ?? existing.scheduledAt;
   const nextStatus = normalizeStatus(
     mergedHealth.status,
     existing.status,
@@ -468,12 +578,12 @@ export async function applyHealthPendingOperation(
   await db
     .update(healthEvents)
     .set({
-      eventType: (mergedHealth.eventType as HealthEventType | undefined) ?? existing.eventType,
+      eventType:
+        (mergedHealth.eventType as HealthEventType | undefined) ?? existing.eventType,
       title: (mergedHealth.title as string | undefined) ?? existing.title,
       scheduledAt,
       status: nextStatus,
-      completedAt:
-        nextStatus === 'COMPLETED' ? (existing.completedAt ?? now) : null,
+      completedAt: nextStatus === 'COMPLETED' ? (existing.completedAt ?? now) : null,
       locationName:
         mergedHealth.locationName === undefined
           ? existing.locationName
@@ -487,8 +597,11 @@ export async function applyHealthPendingOperation(
           ? existing.doctorName
           : (mergedHealth.doctorName as string | null),
       note:
-        mergedHealth.note === undefined ? existing.note : (mergedHealth.note as string | null),
-      timezoneName: (mergedHealth.timezoneName as string | undefined) ?? existing.timezoneName,
+        mergedHealth.note === undefined
+          ? existing.note
+          : (mergedHealth.note as string | null),
+      timezoneName:
+        (mergedHealth.timezoneName as string | undefined) ?? existing.timezoneName,
       updatedBy: userId,
       updatedAt: now,
       version: nextVersion,
@@ -501,17 +614,22 @@ export async function applyHealthPendingOperation(
     babyId: existing.babyId,
   } as RecordPayload;
 
-  // scheduledAt 变化时重排提醒（使用 patch 中带出的 reminderOffsets）。
+  // 时间变化时沿用已有提醒；显式传 reminderOffsets（包括空数组）时整体替换。
   const patchOffsets = reminderOffsetsOf(operation.patch);
   const scheduledAtChanged = scheduledAt !== existing.scheduledAt;
-  if (scheduledAtChanged && patchOffsets.length > 0) {
+  const reminderChanged = hasReminderOffsets(operation.patch);
+  if (nextStatus === 'COMPLETED' || nextStatus === 'CANCELED') {
+    await cancelAllRemindersForEvent(db, existing.id, now);
+  } else if (scheduledAtChanged || reminderChanged) {
     await materializeReminders(
       db,
       existing.id,
       userId,
       existing.familyId,
       scheduledAt,
-      patchOffsets,
+      reminderChanged
+        ? patchOffsets
+        : await scheduledReminderOffsetsFor(db, existing.id),
       now,
     );
   }
@@ -543,4 +661,17 @@ async function cancelScheduledForEvent(db: Database, eventId: string, now: numbe
         ),
       );
   }
+}
+
+async function cancelAllRemindersForEvent(db: Database, eventId: string, now: number) {
+  await cancelScheduledForEvent(db, eventId, now);
+  await db
+    .update(healthReminders)
+    .set({ status: 'CANCELED', updatedAt: now })
+    .where(
+      and(
+        eq(healthReminders.healthEventId, eventId),
+        eq(healthReminders.status, 'SCHEDULED'),
+      ),
+    );
 }

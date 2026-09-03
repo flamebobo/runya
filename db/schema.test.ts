@@ -37,6 +37,16 @@ describe('database foundation', () => {
       expect(await tableExists(databasePath, 'health_reminders')).toBe(true);
       expect(await tableExists(databasePath, 'health_event_media')).toBe(true);
       expect(await tableExists(databasePath, 'media_files')).toBe(true);
+      expect(await tableExists(databasePath, 'media_uploads')).toBe(true);
+      expect(await tableExists(databasePath, 'media_upload_parts')).toBe(true);
+      expect(await tableExists(databasePath, 'photo_memories')).toBe(true);
+      expect(await tableExists(databasePath, 'photo_memory_media')).toBe(true);
+      expect(await tableExists(databasePath, 'baby_quotes')).toBe(true);
+      expect(await tableExists(databasePath, 'audio_memories')).toBe(true);
+      expect(await tableExists(databasePath, 'first_moments')).toBe(true);
+      expect(await tableExists(databasePath, 'first_moment_media')).toBe(true);
+      expect(await tableExists(databasePath, 'time_capsules')).toBe(true);
+      expect(await tableExists(databasePath, 'time_capsule_media')).toBe(true);
       expect(await tableExists(databasePath, 'notification_preferences')).toBe(true);
       expect(await tableExists(databasePath, 'notifications')).toBe(true);
       expect(await tableExists(databasePath, 'scheduled_notifications')).toBe(true);

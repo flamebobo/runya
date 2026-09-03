@@ -28,7 +28,13 @@ export type GlyphName =
   | 'dash'
   | 'minus'
   | 'bell'
+  | 'calendar'
   | 'mic'
+  | 'play'
+  | 'pause'
+  | 'lock'
+  | 'video'
+  | 'file'
   | 'bowl'
   | 'diaper'
   | 'sparkle'
@@ -45,7 +51,10 @@ export interface GlyphProps {
 
 export function Glyph({ name, size = 'md', className }: GlyphProps) {
   return (
-    <View className={classNames(styles.root, styles[`size-${size}`], className)} aria-hidden>
+    <View
+      className={classNames(styles.root, styles[`size-${size}`], className)}
+      aria-hidden
+    >
       {createElement(
         'svg',
         {
@@ -105,13 +114,20 @@ function renderPaths(name: GlyphName): ReactNode {
         ),
       ];
     case 'search':
-      return [p('M11.4 16.2a4.8 4.8 0 1 0 0-9.6 4.8 4.8 0 0 0 0 9.6z'), p('M14.8 14.8 18.6 18.6')];
+      return [
+        p('M11.4 16.2a4.8 4.8 0 1 0 0-9.6 4.8 4.8 0 0 0 0 9.6z'),
+        p('M14.8 14.8 18.6 18.6'),
+      ];
     case 'close':
       return [p('M7 7l10 10'), p('M17 7 7 17')];
     case 'chevron':
       return [p('M9.2 6.6 15 12l-5.8 5.4')];
     case 'gem':
-      return [p('M12 4.8 18.6 10.2 12 19.4 5.4 10.2z'), p('M5.4 10.2h13.2'), p('M9.1 10.2 12 4.8l2.9 5.4')];
+      return [
+        p('M12 4.8 18.6 10.2 12 19.4 5.4 10.2z'),
+        p('M5.4 10.2h13.2'),
+        p('M9.1 10.2 12 4.8l2.9 5.4'),
+      ];
     case 'growth':
       return [
         p('M12 19.2V10.4'),
@@ -128,7 +144,9 @@ function renderPaths(name: GlyphName): ReactNode {
       ];
     case 'photo':
       return [
-        p('M5.4 8.2h13.2a1.2 1.2 0 0 1 1.2 1.2v8a1.2 1.2 0 0 1-1.2 1.2H5.4a1.2 1.2 0 0 1-1.2-1.2v-8a1.2 1.2 0 0 1 1.2-1.2z'),
+        p(
+          'M5.4 8.2h13.2a1.2 1.2 0 0 1 1.2 1.2v8a1.2 1.2 0 0 1-1.2 1.2H5.4a1.2 1.2 0 0 1-1.2-1.2v-8a1.2 1.2 0 0 1 1.2-1.2z',
+        ),
         p('M8.2 15.8 10.8 12.6l2.4 2.4 1.7-1.6 3.3 3.6'),
       ];
     case 'family':
@@ -186,7 +204,11 @@ function renderPaths(name: GlyphName): ReactNode {
         p('M9.6 12.6h5.4'),
       ];
     case 'dash':
-      return [p('M12 19.2a7.2 7.2 0 1 0 0-14.4 7.2 7.2 0 0 0 0 14.4z', { strokeDasharray: '2.4 2.6' })];
+      return [
+        p('M12 19.2a7.2 7.2 0 1 0 0-14.4 7.2 7.2 0 0 0 0 14.4z', {
+          strokeDasharray: '2.4 2.6',
+        }),
+      ];
     case 'minus':
       return [p('M6.2 12h11.6')];
     case 'bell':
@@ -196,11 +218,41 @@ function renderPaths(name: GlyphName): ReactNode {
         p('M10.8 17a1.2 1.2 0 0 0 2.4 0'),
         p('M12 6.8V5.8'),
       ];
+    case 'calendar':
+      return [
+        p(
+          'M6.4 7.2h11.2a1.2 1.2 0 0 1 1.2 1.2v9.2a1.2 1.2 0 0 1-1.2 1.2H6.4a1.2 1.2 0 0 1-1.2-1.2V8.4a1.2 1.2 0 0 1 1.2-1.2z',
+        ),
+        p('M8.2 5.4v3.2M15.8 5.4v3.2M5.2 10.4h13.6'),
+        p('M8.4 13.4h.01M12 13.4h.01M15.6 13.4h.01M8.4 16.2h.01M12 16.2h.01', {
+          strokeWidth: 2.1,
+        }),
+      ];
     case 'mic':
       return [
-        p('M12 14.2a2.4 2.4 0 0 0 2.4-2.4V8.2a2.4 2.4 0 0 0-4.8 0v3.6A2.4 2.4 0 0 0 12 14.2z'),
+        p(
+          'M12 14.2a2.4 2.4 0 0 0 2.4-2.4V8.2a2.4 2.4 0 0 0-4.8 0v3.6A2.4 2.4 0 0 0 12 14.2z',
+        ),
         p('M8.2 11.4v.4A3.8 3.8 0 0 0 12 15.6 3.8 3.8 0 0 0 15.8 11.8v-.4'),
         p('M12 15.6V18.4M9.6 18.4h4.8'),
+      ];
+    case 'play':
+      return [p('M8.4 5.9 18.2 12l-9.8 6.1z')];
+    case 'pause':
+      return [p('M8.5 6.2v11.6M15.5 6.2v11.6')];
+    case 'lock':
+      return [p('M7.2 10.4h9.6v8.2H7.2z'), p('M9.2 10.4V8.6a2.8 2.8 0 0 1 5.6 0v1.8')];
+    case 'video':
+      return [
+        p(
+          'M5.6 7.2h9.1a1.4 1.4 0 0 1 1.4 1.4v6.8a1.4 1.4 0 0 1-1.4 1.4H5.6a1.4 1.4 0 0 1-1.4-1.4V8.6a1.4 1.4 0 0 1 1.4-1.4z',
+        ),
+        p('M16.1 10.2 20 8.1v7.8l-3.9-2.1z'),
+      ];
+    case 'file':
+      return [
+        p('M7.2 4.8h6l3.6 3.6v10.8H7.2z'),
+        p('M13.2 4.8v3.6h3.6M9.4 12h5.2M9.4 15.2h5.2'),
       ];
     case 'bowl':
       return [
@@ -229,11 +281,15 @@ function renderPaths(name: GlyphName): ReactNode {
       ];
     case 'tooth':
       return [
-        p('M8 5.2c2-.9 6-.9 8 0 1.4.7 1.6 2.4 1 4.4-.4 1.4-.6 2.6-.8 4.4-.2 1.6-.4 4.4-1.6 4.4-1 0-1-2.4-1.4-4.2-.2-.9-.8-1.4-1.2-1.4s-1 .5-1.2 1.4c-.4 1.8-.4 4.2-1.4 4.2-1.2 0-1.4-2.8-1.6-4.4-.2-1.8-.4-3-.8-4.4-.6-2-.4-3.7 1-4.4z'),
+        p(
+          'M8 5.2c2-.9 6-.9 8 0 1.4.7 1.6 2.4 1 4.4-.4 1.4-.6 2.6-.8 4.4-.2 1.6-.4 4.4-1.6 4.4-1 0-1-2.4-1.4-4.2-.2-.9-.8-1.4-1.2-1.4s-1 .5-1.2 1.4c-.4 1.8-.4 4.2-1.4 4.2-1.2 0-1.4-2.8-1.6-4.4-.2-1.8-.4-3-.8-4.4-.6-2-.4-3.7 1-4.4z',
+        ),
       ];
     case 'pill':
       return [
-        p('M14.6 6.2a4.6 4.6 0 0 1 3.2 7.8l-3.8 3.8a4.6 4.6 0 0 1-6.5-6.5l3.8-3.8a4.6 4.6 0 0 1 3.3-1.3z'),
+        p(
+          'M14.6 6.2a4.6 4.6 0 0 1 3.2 7.8l-3.8 3.8a4.6 4.6 0 0 1-6.5-6.5l3.8-3.8a4.6 4.6 0 0 1 3.3-1.3z',
+        ),
         p('M9 9.4l5.6 5.6'),
       ];
     default:

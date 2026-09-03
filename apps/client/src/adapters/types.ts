@@ -23,10 +23,24 @@ export interface NetworkAdapter {
 }
 
 export interface MediaPickerAdapter {
-  pickImage(): Promise<{ localPath: string } | null>;
-  pickVideo(): Promise<{ localPath: string } | null>;
-  capturePhoto(): Promise<{ localPath: string } | null>;
-  recordAudio(): Promise<{ localPath: string } | null>;
+  pickImage(): Promise<PickedMedia | null>;
+  pickVideo(): Promise<PickedMedia | null>;
+  capturePhoto(): Promise<PickedMedia | null>;
+  startAudioRecording(): Promise<AudioRecordingSession>;
+  recordAudio(): Promise<PickedMedia | null>;
+}
+
+export interface PickedMedia {
+  localPath?: string;
+  file?: File | Blob;
+  mimeType?: string;
+  originalFilename?: string;
+  durationMs?: number;
+}
+
+export interface AudioRecordingSession {
+  stop(): Promise<PickedMedia>;
+  cancel(): void;
 }
 
 export interface ShareAdapter {

@@ -13,6 +13,29 @@ import {
 } from './syncCursorStore';
 import { getSyncRuntimeStore } from './syncRuntime';
 
+const HEALTH_LOCAL_METADATA_KEYS = [
+  'reminder',
+  'reminderOffsets',
+  'pendingAttachment',
+] as const;
+
+// Sync snapshots只包含健康事项的基础字段；提醒和本机附件仍是客户端在等待
+// 下一次业务 API 回读前需要展示的本地元数据，不能在 push/pull 后凭空消失。
+function mergeLocalHealthMetadata(
+  entityType: string,
+  localPayload: Record<string, unknown> | undefined,
+  serverPayload: Record<string, unknown>,
+) {
+  if (entityType !== 'HEALTH_EVENT' || !localPayload) return serverPayload;
+  const merged = { ...serverPayload };
+  for (const key of HEALTH_LOCAL_METADATA_KEYS) {
+    if (localPayload[key] !== undefined && merged[key] === undefined) {
+      merged[key] = localPayload[key];
+    }
+  }
+  return merged;
+}
+
 // sync_epoch 变化（Restore 等）→ cursor 失效 → full resync。
 // full resync 禁止清空 pending queue：先快照 pending，重建本地后原样回放。
 export async function fullResync(familyId: string) {
@@ -25,6 +48,7 @@ export async function fullResync(familyId: string) {
     'FOOD_RECORD',
     'GROWTH_RECORD',
     'MILESTONE',
+    'HEALTH_EVENT',
   ]) {
     for (const entity of await listEntities(entityType)) {
       if (entity.pendingOpId == null && !pendingEntityIds.has(entity.entityId)) {
@@ -41,7 +65,11 @@ export async function fullResync(familyId: string) {
       entityId: entity.entityId,
       version: entity.version,
       deleted: entity.deleted,
-      payload: entity.payload as Record<string, unknown>,
+      payload: mergeLocalHealthMetadata(
+        entity.entityType,
+        local?.payload,
+        entity.payload as Record<string, unknown>,
+      ),
       pendingOpId: null,
     });
   }
@@ -61,12 +89,16 @@ async function applyServerChange(change: {
 }) {
   const local = await getEntity(change.entityType, change.entityId);
   if (local?.pendingOpId) return; // 本地有 pending 意图，等 push 后再收敛
+  const serverPayload = (change.payload ?? local?.payload ?? {}) as Record<
+    string,
+    unknown
+  >;
   await putEntity({
     entityType: change.entityType,
     entityId: change.entityId,
     version: change.version,
     deleted: change.deleted ?? false,
-    payload: (change.payload ?? local?.payload ?? {}) as Record<string, unknown>,
+    payload: mergeLocalHealthMetadata(change.entityType, local?.payload, serverPayload),
     pendingOpId: null,
   });
 }
@@ -106,7 +138,13 @@ async function pushPending(familyId: string): Promise<number> {
           entityId: operation.entityId,
           version: result.version ?? local?.version ?? 1,
           deleted: operation.op === 'DELETE',
-          payload: result.serverSnapshot as Record<string, unknown>,
+          payload: mergeLocalHealthMetadata(
+            operation.entityType,
+            local?.payload ??
+              (operation.fullPayload as Record<string, unknown> | undefined) ??
+              (operation.patch as Record<string, unknown> | undefined),
+            result.serverSnapshot as Record<string, unknown>,
+          ),
           pendingOpId: null,
         });
       } else if (isLatestIntent && local) {
@@ -171,12 +209,20 @@ async function runPull(familyId: string, startCursor: number) {
       if (change.op === 'DELETE' || change.deleted) {
         const local = await getEntity(change.entityType, change.entityId);
         if (local?.pendingOpId) continue;
+        const serverPayload = (change.payload ?? local?.payload ?? {}) as Record<
+          string,
+          unknown
+        >;
         await putEntity({
           entityType: change.entityType,
           entityId: change.entityId,
           version: change.version,
           deleted: true,
-          payload: (change.payload ?? local?.payload ?? {}) as Record<string, unknown>,
+          payload: mergeLocalHealthMetadata(
+            change.entityType,
+            local?.payload,
+            serverPayload,
+          ),
           pendingOpId: null,
         });
       } else {

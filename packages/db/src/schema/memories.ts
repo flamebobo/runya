@@ -150,6 +150,7 @@ export const timeCapsules = sqliteTable('time_capsules', {
   title: text('title').notNull(),
   body: text('body').notNull(),
   openAt: integer('open_at').notNull(),
+  favorite: integer('favorite', { mode: 'boolean' }).notNull().default(false),
   state: text('state').notNull().default('DRAFT'),
   sealedAt: integer('sealed_at'),
   openedAt: integer('opened_at'),

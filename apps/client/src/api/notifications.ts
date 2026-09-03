@@ -1,31 +1,41 @@
-import type {
-  NotificationListResponse,
-  NotificationPreferences,
-  UpdateNotificationPreferencesBody,
+import {
+  apiOkResponseSchema,
+  notificationListResponseSchema,
+  notificationPreferencesSchema,
 } from '@runew/contracts';
+import type { UpdateNotificationPreferencesBody } from '@runew/contracts';
 import { apiRequest } from './client';
 
-export function fetchNotifications() {
-  return apiRequest<NotificationListResponse>('/notifications');
+export async function fetchNotifications() {
+  const response = await apiRequest<unknown>('/notifications');
+  return notificationListResponseSchema.parse(response);
 }
 
-export function markNotificationRead(id: string) {
-  return apiRequest<{ ok: boolean }>(`/notifications/${id}/read`, { method: 'POST' });
+export async function markNotificationRead(id: string) {
+  const response = await apiRequest<unknown>(`/notifications/${id}/read`, {
+    method: 'POST',
+  });
+  return apiOkResponseSchema.parse(response);
 }
 
-export function markAllNotificationsRead() {
-  return apiRequest<{ ok: boolean }>('/notifications/read-all', { method: 'POST' });
+export async function markAllNotificationsRead() {
+  const response = await apiRequest<unknown>('/notifications/read-all', {
+    method: 'POST',
+  });
+  return apiOkResponseSchema.parse(response);
 }
 
-export function fetchNotificationPreferences() {
-  return apiRequest<NotificationPreferences>('/notification-preferences');
+export async function fetchNotificationPreferences() {
+  const response = await apiRequest<unknown>('/notification-preferences');
+  return notificationPreferencesSchema.parse(response);
 }
 
-export function updateNotificationPreferences(
+export async function updateNotificationPreferences(
   body: UpdateNotificationPreferencesBody,
 ) {
-  return apiRequest<NotificationPreferences>('/notification-preferences', {
+  const response = await apiRequest<unknown>('/notification-preferences', {
     method: 'PUT',
     body,
   });
+  return notificationPreferencesSchema.parse(response);
 }

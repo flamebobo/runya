@@ -1,56 +1,70 @@
+import {
+  apiOkResponseSchema,
+  healthEventListResponseSchema,
+  healthEventPublicSchema,
+} from '@runew/contracts';
 import type {
   CreateHealthEventBody,
-  HealthEventListResponse,
-  HealthEventPublic,
   HealthReminderBody,
   UpdateHealthEventBody,
 } from '@runew/contracts';
 import { apiRequest } from './client';
 
-export function fetchHealthEvents(babyId: string) {
-  return apiRequest<HealthEventListResponse>(`/babies/${babyId}/health/events`);
+export async function fetchHealthEvents(babyId: string) {
+  const response = await apiRequest<unknown>(`/babies/${babyId}/health/events`);
+  return healthEventListResponseSchema.parse(response);
 }
 
-export function fetchHealthEventDetail(id: string) {
-  return apiRequest<HealthEventPublic>(`/health/events/${id}`);
+export async function fetchHealthEventDetail(id: string) {
+  const response = await apiRequest<unknown>(`/health/events/${id}`);
+  return healthEventPublicSchema.parse(response);
 }
 
-export function createHealthEvent(babyId: string, body: CreateHealthEventBody) {
-  return apiRequest<HealthEventPublic>(`/babies/${babyId}/health/events`, {
+export async function createHealthEvent(babyId: string, body: CreateHealthEventBody) {
+  const response = await apiRequest<unknown>(`/babies/${babyId}/health/events`, {
     method: 'POST',
     body,
   });
+  return healthEventPublicSchema.parse(response);
 }
 
-export function updateHealthEvent(
+export async function updateHealthEvent(
   id: string,
   body: UpdateHealthEventBody,
   options?: { ifMatch?: string },
 ) {
-  return apiRequest<HealthEventPublic>(`/health/events/${id}`, {
+  const response = await apiRequest<unknown>(`/health/events/${id}`, {
     method: 'PATCH',
     body,
     ifMatch: options?.ifMatch,
   });
+  return healthEventPublicSchema.parse(response);
 }
 
-export function deleteHealthEvent(id: string) {
-  return apiRequest<{ ok: boolean }>(`/health/events/${id}`, { method: 'DELETE' });
+export async function deleteHealthEvent(id: string) {
+  const response = await apiRequest<unknown>(`/health/events/${id}`, {
+    method: 'DELETE',
+  });
+  return apiOkResponseSchema.parse(response);
 }
 
 // PUT 语义整体替换：offsets 为空数组 = 取消全部提醒。
-export function replaceHealthReminders(
+export async function replaceHealthReminders(
   eventId: string,
   body: HealthReminderBody,
   options?: { ifMatch?: string },
 ) {
-  return apiRequest<HealthEventPublic>(`/health/events/${eventId}/reminders`, {
+  const response = await apiRequest<unknown>(`/health/events/${eventId}/reminders`, {
     method: 'PUT',
     body,
     ifMatch: options?.ifMatch,
   });
+  return healthEventPublicSchema.parse(response);
 }
 
-export function deleteHealthReminder(id: string) {
-  return apiRequest<{ ok: boolean }>(`/health/reminders/${id}`, { method: 'DELETE' });
+export async function deleteHealthReminder(id: string) {
+  const response = await apiRequest<unknown>(`/health/reminders/${id}`, {
+    method: 'DELETE',
+  });
+  return apiOkResponseSchema.parse(response);
 }
