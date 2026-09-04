@@ -33,6 +33,7 @@ import { createUlid, utcNowMs } from '@runew/shared-utils';
 import { and, eq, isNull } from 'drizzle-orm';
 import type { LibSQLDatabase } from 'drizzle-orm/libsql';
 import type { schema } from '@runew/db';
+import { createDefaultRewards } from '../gems/defaults.js';
 import { AppError } from '../../lib/errors.js';
 import { generateInviteToken, generateSessionToken, hashClientMetadata, hashInviteToken, hashToken } from '../../lib/crypto.js';
 import { hashPassword, verifyPassword } from '../../lib/password.js';
@@ -370,6 +371,7 @@ export async function createFamily(
     createdAt: now,
     updatedAt: now,
   });
+  await createDefaultRewards(db, familyId, userId, now);
 
   const familyRows = await db.select().from(families).where(eq(families.id, familyId)).limit(1);
   return mapFamily(familyRows[0]!);

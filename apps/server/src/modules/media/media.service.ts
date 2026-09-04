@@ -49,6 +49,20 @@ export async function checkMediaAccessPermission(
     }
   }
 
+  // M8：PRIVATE 日记的附件继承日记可见性（AGENTS §35 Media Direct → Denied）。
+  const diaryLink = await db.query.diaryMedia.findFirst({
+    where: (link, { eq }) => eq(link.mediaId, mediaId),
+  });
+  if (diaryLink) {
+    const diary = await db.query.diaries.findFirst({
+      where: (d, { and, eq, isNull }) =>
+        and(eq(d.id, diaryLink.diaryId), isNull(d.deletedAt)),
+    });
+    if (diary && diary.visibility === 'PRIVATE' && diary.ownerUserId !== userId) {
+      throw new AppError('NOT_FOUND', '媒体文件不存在', 404);
+    }
+  }
+
   return media;
 }
 

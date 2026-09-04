@@ -64,6 +64,20 @@
       "when": 1788739200000,
       "tag": "0008_m7_capsule_favorites",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1788825600000,
+      "tag": "0009_m8_mom_private",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1788912000000,
+      "tag": "0010_m9_gems",
+      "breakpoints": true
     }
   ]
 }

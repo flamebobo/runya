@@ -49,6 +49,7 @@ import { and, asc, desc, eq, gte, isNull, lt, lte, or } from 'drizzle-orm';
 import type { LibSQLDatabase } from 'drizzle-orm/libsql';
 import { AppError } from '../../lib/errors.js';
 import { appendSyncLog } from '../sync/log.js';
+import { awardRecordGem } from '../gems/service.js';
 import { requireBabyInFamily } from '../identity/service.js';
 
 type Database = LibSQLDatabase<typeof schema>;
@@ -304,24 +305,41 @@ export async function createBottleFeeding(
   const recordedAt = body.recordedAt ?? now;
   const id = createUlid();
 
-  await db.insert(feedingRecords).values({
-    id,
-    familyId: baby.familyId,
-    babyId,
-    feedingType: FeedingType.BOTTLE,
-    milkType: body.milkType ?? null,
-    amountMl: body.amountMl,
-    status: FeedingStatus.COMPLETED,
-    startedAt: recordedAt,
-    endedAt: recordedAt,
-    durationSeconds: 0,
-    recordedAt,
-    timezoneName: body.timezoneName ?? DEFAULT_TZ,
-    note: body.note ?? null,
-    createdBy: userId,
-    createdAt: now,
-    updatedBy: userId,
-    updatedAt: now,
+  await db.transaction(async (tx) => {
+    await tx.insert(feedingRecords).values({
+      id,
+      familyId: baby.familyId,
+      babyId,
+      feedingType: FeedingType.BOTTLE,
+      milkType: body.milkType ?? null,
+      amountMl: body.amountMl,
+      status: FeedingStatus.COMPLETED,
+      startedAt: recordedAt,
+      endedAt: recordedAt,
+      durationSeconds: 0,
+      recordedAt,
+      timezoneName: body.timezoneName ?? DEFAULT_TZ,
+      note: body.note ?? null,
+      createdBy: userId,
+      createdAt: now,
+      updatedBy: userId,
+      updatedAt: now,
+    });
+    await awardRecordGem(tx, baby.familyId, userId, 'FEEDING_RECORD', id, now);
+    await appendSyncLog(
+      tx,
+      {
+        operationId: createUlid(),
+        familyId: baby.familyId,
+        actorUserId: userId,
+        deviceId: null,
+        entityType: 'FEEDING_RECORD',
+        entityId: id,
+        op: 'CREATE',
+        entityVersion: 1,
+      },
+      now,
+    );
   });
 
   return mapFeeding(await getFeedingRow(db, id), []);
@@ -375,6 +393,21 @@ export async function startBreastFeeding(
       sequenceNo: 1,
       createdAt: now,
     });
+    await awardRecordGem(tx, baby.familyId, userId, 'FEEDING_RECORD', feedingId, now);
+    await appendSyncLog(
+      tx,
+      {
+        operationId: createUlid(),
+        familyId: baby.familyId,
+        actorUserId: userId,
+        deviceId: null,
+        entityType: 'FEEDING_RECORD',
+        entityId: feedingId,
+        op: 'CREATE',
+        entityVersion: 1,
+      },
+      now,
+    );
   });
 
   const { row, segments } = await requireFeedingAccess(db, userId, feedingId);
@@ -620,21 +653,38 @@ export async function startSleep(
   const id = createUlid();
 
   try {
-    await db.insert(sleepRecords).values({
-      id,
-      familyId: baby.familyId,
-      babyId,
-      status: SleepStatus.RUNNING,
-      startedAt,
-      endedAt: null,
-      durationSeconds: null,
-      startTimezone: body.timezoneName ?? DEFAULT_TZ,
-      endTimezone: null,
-      note: body.note ?? null,
-      createdBy: userId,
-      createdAt: now,
-      updatedBy: userId,
-      updatedAt: now,
+    await db.transaction(async (tx) => {
+      await tx.insert(sleepRecords).values({
+        id,
+        familyId: baby.familyId,
+        babyId,
+        status: SleepStatus.RUNNING,
+        startedAt,
+        endedAt: null,
+        durationSeconds: null,
+        startTimezone: body.timezoneName ?? DEFAULT_TZ,
+        endTimezone: null,
+        note: body.note ?? null,
+        createdBy: userId,
+        createdAt: now,
+        updatedBy: userId,
+        updatedAt: now,
+      });
+      await awardRecordGem(tx, baby.familyId, userId, 'SLEEP_RECORD', id, now);
+      await appendSyncLog(
+        tx,
+        {
+          operationId: createUlid(),
+          familyId: baby.familyId,
+          actorUserId: userId,
+          deviceId: null,
+          entityType: 'SLEEP_RECORD',
+          entityId: id,
+          op: 'CREATE',
+          entityVersion: 1,
+        },
+        now,
+      );
     });
   } catch (error) {
     if (isUniqueFailure(error)) {

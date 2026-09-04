@@ -1,0 +1,707 @@
+// M8 妈妈空间：Warm Glass 基线（R6.2 / UI Spec §0.5）。
+// 只用既有 token，不新增颜色 / 圆角 / blur。
+
+.page {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  padding-bottom: calc(36px + var(--safe-bottom));
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+
+// --- 07.01 hero ---
+
+.heroCard {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 24px 20px 22px;
+  overflow: hidden;
+}
+
+.heroFlower {
+  position: absolute;
+  top: 14px;
+  right: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  color: var(--color-blush-strong);
+  opacity: 0.9;
+}
+
+.heroTitle {
+  font-size: var(--font-page-title);
+  font-weight: 800;
+  line-height: 1.3;
+  color: var(--color-text-primary);
+  text-shadow: var(--text-emboss);
+}
+
+.heroCaption {
+  font-size: var(--font-caption);
+  line-height: 1.5;
+  color: var(--color-text-secondary);
+}
+
+// --- 心情快捷 chips（07.01 下半区）---
+
+.moodRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.moodChip {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 48px;
+  padding: 10px 14px;
+  border-radius: var(--radius-chip);
+  font-size: var(--font-caption);
+  font-weight: 700;
+  color: var(--color-text-primary);
+}
+
+.moodChip-apricot {
+  color: var(--color-apricot-strong);
+  background: var(--color-apricot-soft);
+}
+
+.moodChip-sage {
+  color: var(--color-sage-strong);
+  background: var(--color-sage-soft);
+}
+
+.moodChip-sky {
+  color: var(--color-sky-strong);
+  background: var(--color-sky-soft);
+}
+
+.moodChip-lavender {
+  color: var(--color-lavender-strong);
+  background: var(--color-lavender-soft);
+}
+
+.moodChip-blush {
+  color: var(--color-blush-strong);
+  background: var(--color-blush-soft);
+}
+
+// --- 入口行 ---
+
+.entryList {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.entryRow {
+  padding: 0;
+}
+
+.entryHit {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 64px;
+  padding: 12px 14px;
+  box-sizing: border-box;
+}
+
+.entryIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-chip);
+}
+
+.entryIcon-apricot {
+  color: var(--color-apricot-strong);
+  background: var(--color-apricot-soft);
+}
+
+.entryIcon-sage {
+  color: var(--color-sage-strong);
+  background: var(--color-sage-soft);
+}
+
+.entryIcon-lavender {
+  color: var(--color-lavender-strong);
+  background: var(--color-lavender-soft);
+}
+
+.entryIcon-blush {
+  color: var(--color-blush-strong);
+  background: var(--color-blush-soft);
+}
+
+.entryText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.entryTitle {
+  font-size: var(--font-body);
+  font-weight: 700;
+  color: var(--color-text-primary);
+}
+
+.entryCaption {
+  font-size: var(--font-caption);
+  line-height: 1.4;
+  color: var(--color-text-secondary);
+}
+
+.entryChevron {
+  flex-shrink: 0;
+  color: var(--color-text-tertiary);
+}
+
+// --- 最近心情 / 日记 teaser ---
+
+.latestMoodCard {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px;
+}
+
+.latestMoodIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-chip);
+}
+
+.latestMoodText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.latestMoodTitle {
+  font-size: var(--font-body);
+  font-weight: 700;
+  color: var(--color-text-primary);
+}
+
+.latestMoodCaption {
+  font-size: var(--font-caption);
+  color: var(--color-text-secondary);
+}
+
+.diaryTeaserCard {
+  padding: 0;
+}
+
+.diaryTeaserHit {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 16px 40px 16px 16px;
+}
+
+.diaryTeaserTitle {
+  font-size: var(--font-body);
+  font-weight: 800;
+  color: var(--color-text-primary);
+}
+
+.diaryTeaserCaption {
+  font-size: var(--font-caption);
+  line-height: 1.5;
+  color: var(--color-text-secondary);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+
+.diaryTeaserChevron {
+  position: absolute;
+  top: 16px;
+  right: 14px;
+  color: var(--color-text-tertiary);
+}
+
+// --- 07.02 心情选项 ---
+
+.moodOptionList {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.moodOption {
+  padding: 0;
+}
+
+.moodOptionSelected {
+  border: 1.5px solid var(--color-apricot-strong);
+}
+
+.moodOptionHit {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 60px;
+  padding: 12px 14px;
+  box-sizing: border-box;
+}
+
+.moodOptionIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-chip);
+}
+
+.moodOptionLabel {
+  flex: 1;
+  font-size: var(--font-body);
+  font-weight: 700;
+  color: var(--color-text-primary);
+}
+
+// --- 07.03 完成页 ---
+
+.doneHero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 32px 20px 26px;
+  text-align: center;
+}
+
+.doneIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  margin-bottom: 4px;
+  border-radius: var(--radius-card);
+}
+
+.doneTitle {
+  font-size: var(--font-page-title);
+  font-weight: 800;
+  color: var(--color-text-primary);
+  text-shadow: var(--text-emboss);
+}
+
+.doneCaption {
+  font-size: var(--font-caption);
+  color: var(--color-text-secondary);
+}
+
+.doneNote {
+  margin-top: 6px;
+  font-size: var(--font-caption);
+  line-height: 1.5;
+  color: var(--color-text-secondary);
+}
+
+.doneLinks {
+  padding: 4px;
+}
+
+.doneLink {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 60px;
+  padding: 12px;
+}
+
+.doneLinkGlyph {
+  color: var(--color-lavender-strong);
+}
+
+.doneLinkCaption {
+  flex: 1;
+  font-size: var(--font-caption);
+  color: var(--color-text-tertiary);
+  text-align: right;
+}
+
+.doneLinkChevron {
+  color: var(--color-text-tertiary);
+}
+
+// --- 07.09 心情日历 ---
+
+.calendarCard {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px 14px 14px;
+}
+
+.calendarNav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.calendarNavButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-chip);
+  color: var(--color-text-secondary);
+  background: rgba(255, 252, 247, 0.42);
+}
+
+.calendarNavFlip {
+  transform: rotate(180deg);
+}
+
+.calendarTitle {
+  font-size: var(--font-body);
+  font-weight: 800;
+  color: var(--color-text-primary);
+}
+
+.calendarWeek {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.calendarWeekLabel {
+  text-align: center;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--color-text-tertiary);
+}
+
+.calendarGrid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.calendarCell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 1;
+  min-height: 40px;
+  border-radius: var(--radius-chip);
+  color: var(--color-text-secondary);
+  font-size: var(--font-caption);
+}
+
+.calendarCellFilled {
+  background: var(--color-apricot-soft);
+  color: var(--color-apricot-strong);
+}
+
+.calendarCellToday {
+  border: 1.5px solid var(--color-apricot-strong);
+}
+
+.calendarDayText {
+  font-size: var(--font-caption);
+  color: var(--color-text-secondary);
+}
+
+// --- 07.05 日记列表 ---
+
+.diaryListCard {
+  padding: 0;
+}
+
+.diaryListHit {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 72px;
+  padding: 14px;
+  box-sizing: border-box;
+}
+
+.diaryListIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-chip);
+  color: var(--color-lavender-strong);
+  background: var(--color-lavender-soft);
+}
+
+.diaryListText {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex: 1;
+  min-width: 0;
+}
+
+.diaryListTitle {
+  font-size: var(--font-body);
+  font-weight: 700;
+  color: var(--color-text-primary);
+}
+
+.diaryListCaption {
+  font-size: var(--font-caption);
+  color: var(--color-text-secondary);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.diaryListDate {
+  font-size: 11px;
+  color: var(--color-text-tertiary);
+}
+
+.diaryListChevron {
+  flex-shrink: 0;
+  color: var(--color-text-tertiary);
+}
+
+// --- 07.06 写日记 ---
+
+.composePanel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px 14px 14px;
+}
+
+.composeLabel {
+  font-size: var(--font-body);
+  font-weight: 800;
+  color: var(--color-text-primary);
+}
+
+.composeHint {
+  font-size: var(--font-caption);
+  line-height: 1.5;
+  color: var(--color-text-secondary);
+}
+
+.draftBanner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+}
+
+.draftBannerAction {
+  margin-left: auto;
+  flex: 0 0 auto;
+}
+
+.draftBannerGlyph {
+  color: var(--color-sky-strong);
+}
+
+.draftBannerText {
+  font-size: var(--font-caption);
+  color: var(--color-text-secondary);
+}
+
+.errorText {
+  padding: 0 4px;
+  font-size: var(--font-caption);
+  color: var(--color-danger-text);
+}
+
+// --- 07.07 详情 ---
+
+.detailHero {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 22px 20px;
+}
+
+.detailHeroTitle {
+  font-size: var(--font-page-title);
+  font-weight: 800;
+  line-height: 1.3;
+  color: var(--color-text-primary);
+  text-shadow: var(--text-emboss);
+}
+
+.detailBodyCard {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 18px 16px;
+}
+
+.detailParagraph {
+  font-size: var(--font-body);
+  line-height: 1.7;
+  color: var(--color-text-primary);
+}
+
+.tagRow {
+  display: flex;
+  gap: 8px;
+}
+
+.tagChip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 6px 12px;
+  border-radius: var(--radius-chip);
+  font-size: var(--font-caption);
+  font-weight: 700;
+  color: var(--color-apricot-strong);
+  background: var(--color-apricot-soft);
+}
+
+.detailActions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.detailActionCard {
+  padding: 0;
+}
+
+.detailActionHit {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 64px;
+  padding: 12px 14px;
+  box-sizing: border-box;
+}
+
+.detailActionIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-chip);
+}
+
+.detailActionText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.detailActionTitle {
+  font-size: var(--font-body);
+  font-weight: 700;
+  color: var(--color-text-primary);
+}
+
+.detailActionCaption {
+  font-size: var(--font-caption);
+  color: var(--color-text-secondary);
+}
+
+// --- 07.08 可见范围 ---
+
+.visibilityOption {
+  padding: 0;
+}
+
+.visibilityOptionSelected {
+  border: 1.5px solid var(--color-blush-strong);
+}
+
+.visibilityHit {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 64px;
+  padding: 12px 14px;
+  box-sizing: border-box;
+}
+
+.visibilityIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-chip);
+}
+
+.visibilityText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.visibilityTitle {
+  font-size: var(--font-body);
+  font-weight: 700;
+  color: var(--color-text-primary);
+}
+
+.visibilityCaption {
+  font-size: var(--font-caption);
+  color: var(--color-text-secondary);
+}
+
+.visibilityCheck {
+  flex-shrink: 0;
+  color: var(--color-blush-strong);
+}
+
+// --- 编辑表单（BottomSheet 内）---
+
+.editForm {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}

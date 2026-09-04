@@ -22,6 +22,7 @@ import { recordsRoutes } from './modules/records/routes.js';
 import { syncRoutes } from './modules/sync/routes.js';
 import { mediaRoutes } from './modules/media/media.routes.js';
 import { memoriesRoutes } from './modules/memories/memories.routes.js';
+import { momRoutes } from './modules/mom/mom.routes.js';
 import Fastify from 'fastify';
 
 export async function buildApp() {
@@ -35,6 +36,10 @@ export async function buildApp() {
         'req.headers.cookie',
         'req.body.password',
         'req.body.adminPassword',
+        // M8（AGENTS §61）：PRIVATE 正文永不进日志。
+        'req.body.body',
+        'req.body.note',
+        'req.body.title',
       ],
     },
     genReqId: () => crypto.randomUUID(),
@@ -99,6 +104,7 @@ export async function buildApp() {
   await app.register(syncRoutes, { prefix: '/api/v1' });
   await app.register(mediaRoutes, { prefix: '/api/v1' });
   await app.register(memoriesRoutes, { prefix: '/api/v1' });
+  await app.register(momRoutes, { prefix: '/api/v1' });
 
   return app;
 }

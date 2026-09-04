@@ -36,6 +36,13 @@ const REQUIRED_TABLES = [
   'notifications',
   'scheduled_notifications',
   'job_locks',
+  'moods',
+  'diaries',
+  'diary_media',
+  'gem_rules',
+  'gem_transactions',
+  'rewards',
+  'reward_orders',
 ] as const;
 
 async function main() {

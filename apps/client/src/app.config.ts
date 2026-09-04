@@ -12,6 +12,7 @@ export default {
     'pages/notifications/index',
     'pages/settings/index',
     'pages/memories/index',
+    'pages/mom/index',
     'pages/dev/design-system/index',
   ],
   window: {

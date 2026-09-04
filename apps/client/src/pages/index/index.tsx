@@ -353,7 +353,9 @@ function TodayShell({ initialTab }: { initialTab: BottomNavKey | null }) {
                   className={styles.memoryHit}
                   role="button"
                   aria-label="心情打卡"
-                  onClick={() => comingSoon('心情')}
+                  onClick={() =>
+                    void Taro.navigateTo({ url: '/pages/mom/index?view=mood-compose' })
+                  }
                 >
                   <Image
                     className={`${styles.sticker} ${styles.smileSticker}`}
@@ -507,6 +509,8 @@ function TodayShell({ initialTab }: { initialTab: BottomNavKey | null }) {
               void Taro.navigateTo({ url: '/pages/knowledge/index' });
             } else if (item.id === 'health') {
               void Taro.navigateTo({ url: '/pages/health/index' });
+            } else if (item.id === 'mom') {
+              void Taro.navigateTo({ url: '/pages/mom/index' });
             } else if (item.id === 'settings') {
               void Taro.navigateTo({ url: '/pages/settings/index' });
             } else comingSoon(item.title);

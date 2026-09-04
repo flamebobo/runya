@@ -19,6 +19,7 @@ import {
 } from '@/components';
 import { Glyph } from '@/components/icons/Glyph';
 import { platformAdapters } from '@/adapters/platform';
+import { useAutoDraft } from '@/hooks/useAutoDraft';
 import {
   createEphemeralPreviewUrl,
   getDurableMediaMetadata,
@@ -463,6 +464,24 @@ export function HealthEventForm({
   const [message, setMessage] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
+  // AGENTS §53：Health Note 长文本需要本地草稿。仅新建场景（编辑时初值即服务端真值）。
+  // useAutoDraft 自带 debounce + useDidHide + 卸载落盘；保存成功后 clear。
+  const healthDraft = useAutoDraft<{ note: string }>({
+    key: `health_note_new`,
+    values: { note },
+    paused: Boolean(current),
+  });
+  const [healthDraftApplied, setHealthDraftApplied] = useState(false);
+  useEffect(() => {
+    if (healthDraftApplied || current || !healthDraft.restored) return;
+    const draftNote = healthDraft.restored.note;
+    if (typeof draftNote === 'string' && draftNote.trim()) {
+      setNote(draftNote);
+      setMessage('已恢复上次没写完的备注');
+    }
+    setHealthDraftApplied(true);
+  }, [current, healthDraft.restored, healthDraftApplied]);
+
   async function submit() {
     const trimmedTitle = title.trim();
     const scheduledAt = combineDateTime(date, time);
@@ -501,6 +520,7 @@ export function HealthEventForm({
             ? '健康事项已更新。'
             : '健康事项已保存。',
       );
+      await healthDraft.clear();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : '还没保存好，请再试一次。');
     } finally {

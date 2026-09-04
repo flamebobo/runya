@@ -51,6 +51,10 @@ describe('database foundation', () => {
       expect(await tableExists(databasePath, 'notifications')).toBe(true);
       expect(await tableExists(databasePath, 'scheduled_notifications')).toBe(true);
       expect(await tableExists(databasePath, 'job_locks')).toBe(true);
+      expect(await tableExists(databasePath, 'gem_rules')).toBe(true);
+      expect(await tableExists(databasePath, 'gem_transactions')).toBe(true);
+      expect(await tableExists(databasePath, 'rewards')).toBe(true);
+      expect(await tableExists(databasePath, 'reward_orders')).toBe(true);
 
       const client = createSqlClient(databasePath);
       await client.execute('PRAGMA foreign_keys = ON');

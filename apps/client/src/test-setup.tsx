@@ -22,6 +22,8 @@ vi.mock('@tarojs/taro', () => ({
     reLaunch: vi.fn(),
     onAppShow: vi.fn(),
     offAppShow: vi.fn(),
+    // 页面生命周期钩子：jsdom 无真实页面，注册即忽略（useAutoDraft 等使用）。
+    useDidHide: () => undefined,
     useRouter: () => ({ params: {} }),
   },
   useLaunch: (callback: () => void) => callback(),
