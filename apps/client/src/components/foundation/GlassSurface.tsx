@@ -10,6 +10,7 @@ export interface GlassSurfaceProps {
   tone?: SemanticTone;
   radius?: 'control' | 'chip' | 'quick' | 'card' | 'hero' | 'heroLg' | 'floating';
   interactive?: boolean;
+  onClick?: () => void;
   className?: string;
   children?: React.ReactNode;
 }
@@ -19,6 +20,7 @@ export function GlassSurface({
   tone,
   radius = 'card',
   interactive = false,
+  onClick,
   className,
   children,
 }: GlassSurfaceProps) {
@@ -32,6 +34,8 @@ export function GlassSurface({
         interactive ? styles.interactive : undefined,
         className,
       )}
+      role={onClick ? 'button' : undefined}
+      onClick={onClick}
     >
       {children}
     </View>

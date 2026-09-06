@@ -108,4 +108,48 @@ describe('useAutoDraft', () => {
       { baseVersion: undefined },
     );
   });
+
+  it('flushes the old draft values under the old key when switching editors', async () => {
+    const { rerender } = renderHook(
+      ({ draftKey, body }) => useAutoDraft({ key: draftKey, values: { body } }),
+      { initialProps: { draftKey: 'diary_a', body: '原文 A' } },
+    );
+    rerender({ draftKey: 'diary_a', body: '未写完的 A' });
+    rerender({ draftKey: 'diary_b', body: '原文 B' });
+    await waitFor(() => expect(mockedSave).toHaveBeenCalledWith('diary_a', { body: '未写完的 A' }, { baseVersion: undefined }));
+    expect(mockedSave).not.toHaveBeenCalledWith('diary_a', { body: '原文 B' }, expect.anything());
+  });
+
+  it('keeps the editing baseVersion when the server advances', async () => {
+    const { result, rerender } = renderHook(
+      ({ version, body }) => useAutoDraft({ key: 'diary_a', values: { body }, serverVersion: version }),
+      { initialProps: { version: 1, body: '原文' } },
+    );
+    rerender({ version: 1, body: '我的修改' });
+    rerender({ version: 2, body: '我的修改' });
+    await act(async () => { await result.current.flush(); });
+    expect(mockedSave).toHaveBeenLastCalledWith('diary_a', { body: '我的修改' }, { baseVersion: 1 });
+    expect(result.current.conflict).toMatchObject({ baseVersion: 1, serverVersion: 2 });
+  });
+
+  it('preserves a conflicting stored draft when untouched server values are flushed', async () => {
+    mockedLoad.mockResolvedValue({ value: { body: '旧草稿仍要保留' }, baseVersion: 1, savedAt: 42 });
+    const { result } = renderHook(() => useAutoDraft({ key: 'diary_a', values: { body: '服务器新内容' }, serverVersion: 2 }));
+    await waitFor(() => expect(result.current.conflict).not.toBeNull());
+    await act(async () => { await result.current.flush(); });
+    expect(mockedSave).not.toHaveBeenCalled();
+  });
+
+  it('flushes unsaved text on blur and route leave', async () => {
+    const { rerender, unmount } = renderHook(
+      ({ body }) => useAutoDraft({ key: 'diary_a', values: { body } }),
+      { initialProps: { body: '' } },
+    );
+    rerender({ body: '失焦前的文字' });
+    act(() => document.dispatchEvent(new Event('blur')));
+    await waitFor(() => expect(mockedSave).toHaveBeenCalledWith('diary_a', { body: '失焦前的文字' }, { baseVersion: undefined }));
+    rerender({ body: '离开前的文字' });
+    unmount();
+    await waitFor(() => expect(mockedSave).toHaveBeenLastCalledWith('diary_a', { body: '离开前的文字' }, { baseVersion: undefined }));
+  });
 });

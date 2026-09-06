@@ -1,6 +1,9 @@
 import path from 'node:path';
 import { defineConfig, type UserConfigExport } from '@tarojs/cli';
 
+/** webpack-dev-server 4 默认也占用 `/ws`。产品实时通道（Tech Design §57.1）必须独占这条路径。 */
+const WEBPACK_HMR_PATH = '/__webpack_hmr';
+
 export default defineConfig(async (merge) => {
   const base: UserConfigExport = {
     projectName: 'runew',
@@ -32,6 +35,13 @@ export default defineConfig(async (merge) => {
     cache: {
       enable: false,
     },
+    // Taro's default quote_keys turns private fields into invalid quoted names.
+    // Keep this at project scope so the typed Taro config applies it to H5 builds.
+    terser: {
+      config: {
+        output: { quote_keys: false },
+      },
+    },
     mini: {
       postcss: {
         pxtransform: {
@@ -57,13 +67,23 @@ export default defineConfig(async (merge) => {
       },
       devServer: {
         port: Number(process.env.CLIENT_PORT) || 8086,
+        webSocketServer: {
+          type: 'ws',
+          options: { path: WEBPACK_HMR_PATH },
+        },
         proxy: {
           '/api': {
             target: process.env.SERVER_URL ?? 'http://localhost:3000',
             changeOrigin: true,
           },
+          '/ws': {
+            target: process.env.SERVER_URL ?? 'http://localhost:3000',
+            changeOrigin: true,
+            ws: true,
+          },
         },
         client: {
+          webSocketURL: { pathname: WEBPACK_HMR_PATH },
           overlay: {
             errors: true,
             warnings: false,

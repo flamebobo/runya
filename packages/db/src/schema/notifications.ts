@@ -91,6 +91,7 @@ export const scheduledNotifications = sqliteTable(
     category: text('category').notNull(),
     sourceType: text('source_type').notNull(),
     sourceId: text('source_id').notNull(),
+    occurrenceKey: text('occurrence_key'),
     fireAt: integer('fire_at').notNull(),
     dndOverride: integer('dnd_override', { mode: 'boolean' }).notNull().default(false),
     status: text('status').notNull().default('SCHEDULED'),
@@ -100,13 +101,19 @@ export const scheduledNotifications = sqliteTable(
     updatedAt: integer('updated_at').notNull(),
   },
   (table) => ({
-    // 唯一键含 fire_at 与 category：重排提醒时间 = 旧行 CANCELED + 新行 INSERT。
+    // 健康提醒按 fire_at 去重；家庭纪念日按 occurrence_key 去重，避免 DND 改写 fire_at 后重复派发。
     deliveryUnique: uniqueIndex('uq_scheduled_notifications_user_source_fire').on(
       table.userId,
       table.sourceType,
       table.sourceId,
       table.fireAt,
       table.category,
+    ),
+    occurrenceUnique: uniqueIndex('uq_scheduled_notifications_occurrence').on(
+      table.userId,
+      table.sourceType,
+      table.sourceId,
+      table.occurrenceKey,
     ),
     dueIdx: index('idx_scheduled_notifications_status_fire').on(
       table.status,

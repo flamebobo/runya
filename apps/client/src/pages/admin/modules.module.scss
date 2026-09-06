@@ -1,0 +1,41 @@
+.menu { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.menuItem { min-width: 0; min-height: 82px; padding: 12px; display: flex; align-items: center; gap: 10px; transition: transform 160ms ease, border-color 160ms ease; }
+.menuItemActive { border-color: var(--color-lavender-strong); box-shadow: 0 8px 24px rgba(127, 105, 151, .16); transform: translateY(-1px); }
+.menuIcon { width: 42px; height: 42px; flex: 0 0 42px; display: flex; align-items: center; justify-content: center; border-radius: 15px; color: var(--color-sage-strong); background: var(--color-sage-soft); }
+.menuCopy { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 4px; }
+.menuLabel { min-width: 0; font-size: var(--font-body-sm); font-weight: 800; overflow-wrap: anywhere; }
+.menuCaption { color: var(--color-text-secondary); font-size: 11px; line-height: 1.35; overflow-wrap: anywhere; }
+.panelStack { display: flex; flex-direction: column; gap: 12px; }
+.panelCard, .stateCard { padding: 15px; display: flex; flex-direction: column; gap: 12px; }
+.panelHeading { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-width: 0; }
+.panelTitle { min-width: 0; font-size: var(--font-card-title); font-weight: 800; overflow-wrap: anywhere; }
+.panelHint { color: var(--color-text-secondary); font-size: 11px; line-height: 1.45; text-align: right; }
+.metricGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.metric { min-width: 0; min-height: 108px; padding: 14px; display: flex; flex-direction: column; justify-content: space-between; gap: 4px; }
+.metricLabel, .metricHint { color: var(--color-text-secondary); font-size: 11px; }
+.metricValue { min-width: 0; font-size: 24px; line-height: 1.1; font-weight: 850; overflow-wrap: anywhere; }
+.countGrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.countItem { min-width: 0; padding: 9px 8px; border-radius: var(--radius-quick); background: rgba(255,255,255,.2); }
+.countValue { display: block; font-size: 16px; font-weight: 800; }
+.countLabel { display: block; margin-top: 3px; color: var(--color-text-secondary); font-size: 10px; overflow-wrap: anywhere; }
+.dataRow, .auditRow { min-width: 0; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 0; border-top: 1px solid var(--color-border-warm); }
+.dataRow:first-of-type, .auditRow:first-of-type { border-top: 0; }
+.rowCopy { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 3px; }
+.rowTitle { min-width: 0; font-size: var(--font-body-sm); font-weight: 750; overflow-wrap: anywhere; }
+.rowHint { min-width: 0; color: var(--color-text-secondary); font-size: 11px; line-height: 1.45; overflow-wrap: anywhere; }
+.rowActions { display: flex; align-items: center; gap: 4px; flex: 0 0 auto; }
+.positive { color: var(--color-sage-strong); font-weight: 800; font-size: 12px; }
+.negative { color: var(--color-blush-strong); font-weight: 800; font-size: 12px; }
+.muted { color: var(--color-text-tertiary); font-size: 11px; }
+.dangerCard { padding: 15px; display: flex; flex-direction: column; gap: 8px; }
+.dangerCard .panelTitle { color: var(--color-blush-strong); }
+
+@media (max-width: 360px) {
+  .menu { grid-template-columns: 1fr; }
+  .countGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .menuItem { transition: none; }
+  .menuItemActive { transform: none; }
+}

@@ -23,6 +23,7 @@ import { SectionHeader } from '@/components/foundation/SectionHeader';
 import {
   PrimaryActionButton,
   SecondaryGlassButton,
+  TextAction,
 } from '@/components/buttons';
 import { GlassTextArea, SegmentedControl } from '@/components/forms';
 import { Glyph, type GlyphName } from '@/components/icons/Glyph';
@@ -40,7 +41,11 @@ import {
 } from '@/hooks/useMom';
 import { useAutoDraft } from '@/hooks/useAutoDraft';
 import { useBootstrapQuery } from '@/hooks/useBootstrap';
-import { useUiOverlayStore } from '@/stores/runtime';
+import {
+  useAuthRuntimeStore,
+  useFamilyRuntimeStore,
+  useUiOverlayStore,
+} from '@/stores/runtime';
 import { ApiError } from '@/api/client';
 import { formatBabyAgeLabel } from '@/utils/babyAge';
 import { rootTabUrl } from '@/utils/rootNavigation';
@@ -248,6 +253,9 @@ function MomRouter({
             else if (item.id === 'growth') {
               setDrawerOpen(false);
               void Taro.navigateTo({ url: '/pages/growth/index' });
+            } else if (item.id === 'baby') {
+              setDrawerOpen(false);
+              void Taro.navigateTo({ url: '/pages/baby/index' });
             } else {
               setDrawerOpen(false);
               showToast(`${item.title}正在布置，先看看妈妈空间`);
@@ -257,10 +265,13 @@ function MomRouter({
         onClose={() => setDrawerOpen(false)}
         onSearchClick={() => {
           setDrawerOpen(false);
-          showToast('搜索正在布置');
+          void Taro.navigateTo({ url: '/pages/search/index' });
         }}
         onNotificationClick={() => showToast('通知正在布置')}
-        onAdminClick={() => showToast('管理模式正在布置')}
+        onAdminClick={() => {
+          setDrawerOpen(false);
+          void Taro.navigateTo({ url: '/pages/admin/index' });
+        }}
       />
     </>
   );
@@ -778,9 +789,11 @@ function DiaryCompose({
   const [message, setMessage] = useState('');
   const createDiary = useCreateDiary();
   const { showToast } = useUiOverlayStore();
+  const userId = useAuthRuntimeStore((state) => state.userId) ?? 'anonymous';
+  const familyId = useFamilyRuntimeStore((state) => state.familyId) ?? 'none';
 
   const draft = useAutoDraft<DiaryDraftValues>({
-    key: 'mom_diary_compose',
+    key: `mom_diary_compose:${userId}:${familyId}`,
     values: { title, body },
   });
 
@@ -830,7 +843,13 @@ function DiaryCompose({
             label="丢弃草稿"
             fullWidth={false}
             className={styles.draftBannerAction}
-            onClick={() => void draft.discard()}
+            onClick={() => {
+              void draft.discard().then(() => {
+                setTitle('');
+                setBody('');
+                setDraftApplied(true);
+              });
+            }}
           />
         </GlassSurface>
       ) : null}
@@ -1019,16 +1038,17 @@ function DiaryEditForm({ diary, onDone }: { diary: DiaryPublic; onDone: () => vo
   const [message, setMessage] = useState('');
   const [conflict, setConflict] = useState(false);
   const updateDiary = useUpdateDiary();
+  const userId = useAuthRuntimeStore((state) => state.userId) ?? 'anonymous';
+  const familyId = useFamilyRuntimeStore((state) => state.familyId) ?? 'none';
 
   const draft = useAutoDraft<DiaryDraftValues>({
-    key: `mom_diary_edit_${diary.id}`,
+    key: `mom_diary_edit:${userId}:${familyId}:${diary.id}`,
     values: { title, body },
     serverVersion: diary.version,
   });
 
-  // 已有内容不为空时不恢复草稿：表单初值就是服务端真值。
-  // serverVersion 随 diary.version 变化，draft.flush 每次都会带上最新 baseVersion。
-  const [draftApplied, setDraftApplied] = useState(diary.body.length === 0 && !diary.title);
+  // 恢复只发生在草稿和服务端版本一致时；版本不一致时保留服务器内容并要求用户决定。
+  const [draftApplied, setDraftApplied] = useState(false);
   useEffect(() => {
     if (draftApplied || !draft.restored) return;
     const draftTitle = draft.restored.title;
@@ -1049,7 +1069,7 @@ function DiaryEditForm({ diary, onDone }: { diary: DiaryPublic; onDone: () => vo
       await updateDiary.mutateAsync({
         id: diary.id,
         body: { title: title.trim() || null, body: body.trim() },
-        version: diary.version,
+        version: draft.baseVersion ?? diary.version,
       });
       await draft.clear();
       onDone();
@@ -1065,16 +1085,19 @@ function DiaryEditForm({ diary, onDone }: { diary: DiaryPublic; onDone: () => vo
   return (
     <View className={styles.editForm}>
       {draft.conflict ? (
-        <Text className={styles.errorText} aria-live="polite">
-          这篇日记刚在别处更新过，这份草稿基于旧版本，已停止自动恢复。
-        </Text>
+        <View className={styles.stack}>
+          <Text className={styles.errorText} aria-live="polite">
+            这篇日记刚在别处更新过，这份草稿基于旧版本，已停止自动恢复。
+          </Text>
+          <TextAction label="丢弃草稿并使用当前版本" onClick={() => void draft.discard()} />
+        </View>
       ) : null}
       <GlassTextArea label="标题" value={title} placeholder="给今天一个名字（可不填）" onInput={setTitle} />
       <GlassTextArea label="正文" value={body} placeholder="此刻想说的" onInput={setBody} />
       {message ? <Text className={styles.errorText}>{message}</Text> : null}
       <PrimaryActionButton
         label="保存修改"
-        state={updateDiary.isPending ? 'loading' : 'default'}
+        state={draft.conflict ? 'disabled' : updateDiary.isPending ? 'loading' : 'default'}
         onClick={() => void save()}
       />
       <ConfirmDialog
@@ -1228,9 +1251,11 @@ function VisibilityOption({
 function OneLineNote() {
   const [text, setText] = useState('');
   const [saved, setSaved] = useState(false);
+  const userId = useAuthRuntimeStore((state) => state.userId) ?? 'anonymous';
+  const familyId = useFamilyRuntimeStore((state) => state.familyId) ?? 'none';
 
   const draft = useAutoDraft<Record<string, unknown>>({
-    key: 'mom_knowledge_note',
+    key: `mom_knowledge_note:${userId}:${familyId}`,
     values: { text },
   });
 

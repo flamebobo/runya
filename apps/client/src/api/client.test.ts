@@ -38,4 +38,20 @@ describe('apiRequest body handling', () => {
       }),
     );
   });
+
+  it('forwards a stable idempotency key for retryable creates', async () => {
+    await apiRequest('/families/FAMILY_ID/tasks', {
+      method: 'POST',
+      body: { id: 'TASK_ID', title: '一起收拾玩具' },
+      idempotencyKey: 'OPERATION_ID',
+    });
+
+    expect(requestMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        method: 'POST',
+        data: { id: 'TASK_ID', title: '一起收拾玩具' },
+        header: expect.objectContaining({ 'Idempotency-Key': 'OPERATION_ID' }),
+      }),
+    );
+  });
 });

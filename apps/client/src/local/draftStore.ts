@@ -3,6 +3,18 @@ import { platformAdapters } from '@/adapters/platform';
 // 草稿只保存表單暫存，不保存業務真相；提交成功後由呼叫方清除。
 const PREFIX = 'runew_draft_';
 
+// Serialize operations per draft key so a route leave/remount cannot observe
+// stale storage, and a clear cannot be overtaken by an in-flight save.
+const operationQueues = new Map<string, Promise<void>>();
+
+function enqueue<T>(storageKey: string, operation: () => Promise<T>): Promise<T> {
+  const previous = operationQueues.get(storageKey) ?? Promise.resolve();
+  const current = previous.catch(() => undefined).then(operation);
+  const tail = current.then(() => undefined, () => undefined);
+  operationQueues.set(storageKey, tail);
+  return current;
+}
+
 export interface DraftRecord {
   value: Record<string, unknown>;
   savedAt: number;
@@ -52,13 +64,16 @@ export async function saveDraft(
   value: Record<string, unknown>,
   metadata: DraftMetadata = {},
 ): Promise<void> {
-  await platformAdapters.storage.setItem(
-    `${PREFIX}${key}`,
-    JSON.stringify({
-      value,
-      savedAt: Date.now(),
-      ...(metadata.baseVersion === undefined ? {} : { baseVersion: metadata.baseVersion }),
-    }),
+  const storageKey = `${PREFIX}${key}`;
+  await enqueue(storageKey, () =>
+    platformAdapters.storage.setItem(
+      storageKey,
+      JSON.stringify({
+        value,
+        savedAt: Date.now(),
+        ...(metadata.baseVersion === undefined ? {} : { baseVersion: metadata.baseVersion }),
+      }),
+    ),
   );
 }
 
@@ -69,7 +84,8 @@ export async function loadDraft(key: string): Promise<Record<string, unknown> | 
 }
 
 export async function loadDraftRecord(key: string): Promise<DraftRecord | null> {
-  const raw = await platformAdapters.storage.getItem(`${PREFIX}${key}`);
+  const storageKey = `${PREFIX}${key}`;
+  const raw = await enqueue(storageKey, () => platformAdapters.storage.getItem(storageKey));
   if (!raw) return null;
   try {
     return normalizeDraft(JSON.parse(raw));
@@ -79,5 +95,6 @@ export async function loadDraftRecord(key: string): Promise<DraftRecord | null> 
 }
 
 export async function clearDraft(key: string): Promise<void> {
-  await platformAdapters.storage.removeItem(`${PREFIX}${key}`);
+  const storageKey = `${PREFIX}${key}`;
+  await enqueue(storageKey, () => platformAdapters.storage.removeItem(storageKey));
 }

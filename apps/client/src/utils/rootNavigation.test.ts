@@ -6,9 +6,9 @@ describe('rootTabUrl', () => {
     expect(rootTabUrl('today')).toBe('/pages/index/index');
   });
 
-  it('uses the root shell for every switchable tab', () => {
+  it('uses the root shell for switchable tabs and the dedicated family route', () => {
     expect(rootTabUrl('records')).toBe('/pages/index/index?tab=records');
     expect(rootTabUrl('memories')).toBe('/pages/index/index?tab=memories');
-    expect(rootTabUrl('family')).toBe('/pages/index/index?tab=family');
+    expect(rootTabUrl('family')).toBe('/pages/family/index');
   });
 });

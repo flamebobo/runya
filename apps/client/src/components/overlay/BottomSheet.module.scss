@@ -20,12 +20,17 @@
   position: absolute;
   inset: 0;
   background: rgba(74, 57, 47, 0.28);
+  animation: fadeIn var(--motion-base) var(--motion-ease);
 }
 
 .sheet {
   position: relative;
+  display: flex;
+  flex-direction: column;
   width: 100%;
   max-width: 430px;
+  max-height: 88%;
+  overflow: hidden;
   padding: var(--space-20);
   padding-bottom: calc(var(--space-20) + var(--safe-bottom));
   border-radius: var(--radius-floating) var(--radius-floating) 0 0;
@@ -34,17 +39,55 @@
   box-shadow: var(--shadow-floating);
   backdrop-filter: blur(22px) saturate(1.28);
   -webkit-backdrop-filter: blur(22px) saturate(1.28);
+  animation: sheetIn var(--motion-slow) var(--motion-ease);
+}
+
+.handle {
+  flex: 0 0 auto;
+  width: 36px;
+  height: 4px;
+  margin: 0 auto 12px;
+  border-radius: 999px;
+  background: var(--color-text-tertiary);
+  opacity: 0.35;
+}
+
+.header {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: var(--space-12);
 }
 
 .title {
-  display: block;
+  min-width: 0;
+  flex: 1;
   font-size: var(--font-section-title);
-  font-weight: 700;
-  margin-bottom: var(--space-12);
+  font-weight: 800;
+  line-height: 1.3;
+  color: var(--color-text-primary);
+  text-shadow: var(--text-emboss);
+}
+
+.close {
+  flex: 0 0 auto;
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: -8px -8px -8px 0;
+  color: var(--color-text-secondary);
 }
 
 .content {
   width: 100%;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
 }
 
 .dialog {
@@ -56,12 +99,36 @@
   background: rgba(255, 252, 247, 0.98);
   border: 1px solid var(--color-border-warm);
   box-shadow: var(--shadow-floating);
+  animation: sheetIn var(--motion-slow) var(--motion-ease);
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes sheetIn {
+  from {
+    transform: translateY(18px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+:global([data-theme='night']) .sheet,
+:global([data-theme='night']) .dialog {
+  background: rgba(58, 51, 46, 0.94);
 }
 
 .dialogTitle {
   display: block;
   font-size: var(--font-section-title);
-  font-weight: 700;
+  font-weight: 800;
+  color: var(--color-text-primary);
+  text-shadow: var(--text-emboss);
 }
 
 .dialogMessage {

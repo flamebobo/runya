@@ -5,11 +5,12 @@ import { createUlid, utcNowMs } from '@runew/shared-utils';
 import { notificationPreferencesSchema } from '@runew/contracts';
 import {
   jobLocks,
+  families,
   notifications as notificationsTable,
   scheduledNotifications,
 } from '@runew/db';
 import { and, eq } from 'drizzle-orm';
-import { afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { buildApp } from '../../app.js';
 import { startScheduler } from './scheduler.js';
 
@@ -77,6 +78,7 @@ describe('notification scheduler', () => {
     }
     return {
       userId,
+      familyId: onboarding.json().data.family.id as string,
       babyId: onboarding.json().data.baby.id as string,
       headers: { ...WEAPP_HEADERS, authorization: `Bearer ${token}` },
     };
@@ -171,6 +173,82 @@ describe('notification scheduler', () => {
     expect(delivered[0]!.targetType).toBe('HEALTH_EVENT');
     expect(delivered[0]!.targetId).toBe(eventId);
     expect(delivered[0]!.body).not.toMatch(/诊断|风险判断|医疗结论/);
+  });
+
+  it('schedules and delivers a family anniversary notification once', async () => {
+    const family = await readyFamily({ dndEnabled: false });
+    const anniversary = await app.inject({
+      method: 'POST',
+      url: `/api/v1/families/${family.familyId}/anniversaries`,
+      headers: family.headers,
+      payload: { title: '第一次见面', date: '2026-05-20', note: '一起记得这一天' },
+    });
+    expect(anniversary.statusCode).toBe(201);
+    const anniversaryId = anniversary.json().data.id as string;
+    const fireAt = Date.UTC(2026, 4, 20, 1, 0, 0);
+    vi.useFakeTimers({ toFake: ['Date'], now: fireAt - 24 * 60 * 60 * 1000 });
+    const scheduler = startScheduler(app.db, app.log);
+    try {
+      await scheduler.runOnce();
+      const scheduled = await app.db
+        .select()
+        .from(scheduledNotifications)
+        .where(eq(scheduledNotifications.sourceId, anniversaryId));
+      expect(scheduled).toHaveLength(1);
+      expect(scheduled[0]!.sourceType).toBe('FAMILY_ANNIVERSARY');
+      expect(scheduled[0]!.fireAt).toBe(fireAt);
+
+      // The scheduler job lock is intentionally 55s; advance beyond it before
+      // simulating the next tick so the same process can run the due dispatch.
+      vi.setSystemTime(fireAt + 60_000);
+      await scheduler.runOnce();
+      const delivered = await app.db
+        .select()
+        .from(notificationsTable)
+        .where(eq(notificationsTable.targetId, anniversaryId));
+      expect(delivered).toHaveLength(1);
+      expect(delivered[0]!.title).toBe('家庭纪念日');
+      expect(delivered[0]!.body).toContain('共同记忆');
+      const rows = await app.db
+        .select()
+        .from(scheduledNotifications)
+        .where(eq(scheduledNotifications.sourceId, anniversaryId));
+      expect(rows.filter((row) => row.status === 'SENT')).toHaveLength(1);
+      expect(rows.some((row) => row.fireAt > fireAt && row.status === 'SCHEDULED')).toBe(true);
+    } finally {
+      scheduler.stop();
+      vi.useRealTimers();
+    }
+  });
+
+  it('reconciles gems daily across restarts without changing notification cadence', async () => {
+    const family = await readyFamily();
+    const { familyId } = family;
+    const now = Date.now();
+    vi.useFakeTimers({ toFake: ['Date'], now });
+    const first = startScheduler(app.db, app.log);
+    const restarted = startScheduler(app.db, app.log);
+    try {
+      await app.db.update(families).set({ gemBalanceCache: 12 }).where(eq(families.id, familyId));
+      await first.runOnce();
+      const initial = await app.db.select().from(families).where(eq(families.id, familyId));
+      expect(initial[0]!.gemBalanceCache).toBe(0);
+      await app.db.update(families).set({ gemBalanceCache: 12 }).where(eq(families.id, familyId));
+      vi.setSystemTime(now + 60_000);
+      await restarted.runOnce();
+      const withinDay = await app.db.select().from(families).where(eq(families.id, familyId));
+      expect(withinDay[0]!.gemBalanceCache).toBe(12);
+      const notificationJob = await app.db.select().from(jobLocks).where(eq(jobLocks.jobName, 'due-notifications'));
+      expect(notificationJob[0]!.lastRunAt).toBe(now + 60_000);
+      vi.setSystemTime(now + 24 * 60 * 60 * 1000);
+      await restarted.runOnce();
+      const nextDay = await app.db.select().from(families).where(eq(families.id, familyId));
+      expect(nextDay[0]!.gemBalanceCache).toBe(0);
+    } finally {
+      first.stop();
+      restarted.stop();
+      vi.useRealTimers();
+    }
   });
 
   it('uses job locks so concurrent ticks do not double-dispatch', async () => {

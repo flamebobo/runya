@@ -23,9 +23,9 @@ import { requireAuth } from '../../plugins/auth.js';
 import { getRunningForBaby } from '../records/service.js';
 import {
   acceptFamilyInvite,
+  addBaby,
   buildBootstrap,
   completeOnboarding,
-  createBaby,
   createFamily,
   createFamilyInvite,
   listBabiesForFamily,
@@ -38,11 +38,15 @@ import {
   mapUser,
   registerUser,
   requireBabyInFamily,
+  requireFamilyPermission,
   requireFamilyMembership,
   updateBaby,
 } from './service.js';
-import { families, familyMembers, users } from '@runew/db';
-import { eq } from 'drizzle-orm';
+import { familyInvites, families, familyMembers, idempotencyKeys, users } from '@runew/db';
+import { and, eq } from 'drizzle-orm';
+import { generateIdempotentInviteToken, hashInviteToken, stableRequestHash } from '../../lib/crypto.js';
+import { IDEMPOTENCY_TTL_MS } from '../../lib/auth-constants.js';
+import { normalizeIdempotencyKey, utcNowMs } from '@runew/shared-utils';
 
 function setSessionCookie(reply: FastifyReply, token: string, expiresAt: number) {
   reply.setCookie(SESSION_COOKIE_NAME, token, {
@@ -91,6 +95,108 @@ function requestMetadata(request: FastifyRequest) {
     deviceName: String(request.headers['x-device-name'] ?? ''),
     appVersion: String(request.headers['x-client-version'] ?? ''),
   };
+}
+
+async function createInviteWithIdempotency(
+  app: FastifyInstance,
+  request: FastifyRequest,
+  reply: FastifyReply,
+  familyId: string,
+  body: { relationshipHint?: string; expiresInHours?: number },
+) {
+  const userId = request.auth.userId!;
+  await requireFamilyPermission(app.db, userId, familyId, 'family', 'MANAGE');
+  const rawKey = request.headers['idempotency-key'];
+  const key = normalizeIdempotencyKey(Array.isArray(rawKey) ? rawKey[0] : rawKey);
+  if (!key) {
+    const result = await createFamilyInvite(
+      app.db,
+      userId,
+      familyId,
+      body.relationshipHint,
+      body.expiresInHours,
+    );
+    reply.status(201);
+    return createSuccessEnvelope(result, request.requestId);
+  }
+
+  // Re-check membership before reading a replay so disabling a member revokes access immediately.
+  await requireFamilyMembership(app.db, userId, familyId);
+  const requestHash = stableRequestHash({ familyId, ...body });
+  const scopedKey = `family-invite:${userId}:${familyId}:${key}`;
+  const token = generateIdempotentInviteToken(app.config.SESSION_SECRET, `${scopedKey}:${requestHash}`);
+  const existing = await app.db
+    .select()
+    .from(idempotencyKeys)
+    .where(eq(idempotencyKeys.key, scopedKey))
+    .limit(1);
+  const cached = existing[0];
+  if (cached) {
+    if (cached.endpoint !== `families/${familyId}/invites` || cached.userId !== userId || cached.requestHash !== requestHash) {
+      throw new AppError('IDEMPOTENCY_KEY_REUSED', '幂等键已被不同请求使用', 409);
+    }
+    const cachedData = JSON.parse(cached.responseJson).data as { id: string; familyId: string; expiresAt: number };
+    const invite = await app.db
+      .select()
+      .from(familyInvites)
+      .where(and(eq(familyInvites.id, cachedData.id), eq(familyInvites.familyId, familyId)))
+      .limit(1);
+    if (!invite[0]) throw new AppError('NOT_FOUND', '邀请不存在', 404);
+    reply.status(cached.responseStatus);
+    return createSuccessEnvelope({ ...cachedData, token }, request.requestId);
+  }
+
+  let created: Awaited<ReturnType<typeof createFamilyInvite>>;
+  try {
+    created = await createFamilyInvite(
+      app.db,
+      userId,
+      familyId,
+      body.relationshipHint,
+      body.expiresInHours,
+      token,
+    );
+  } catch (error) {
+    // Concurrent retries share the deterministic token; the loser reads the winner's invite.
+    const invite = await app.db
+      .select()
+      .from(familyInvites)
+      .where(eq(familyInvites.tokenHash, hashInviteToken(token)))
+      .limit(1);
+    if (!invite[0]) throw error;
+    created = {
+      id: invite[0].id,
+      familyId: invite[0].familyId,
+      token,
+      expiresAt: invite[0].expiresAt,
+    };
+  }
+
+  const response = createSuccessEnvelope(
+    { id: created.id, familyId: created.familyId, expiresAt: created.expiresAt },
+    request.requestId,
+  );
+  try {
+    await app.db.insert(idempotencyKeys).values({
+      key: scopedKey,
+      userId,
+      endpoint: `families/${familyId}/invites`,
+      requestHash,
+      responseStatus: 201,
+      responseJson: JSON.stringify(response),
+      createdAt: utcNowMs(),
+      expiresAt: utcNowMs() + IDEMPOTENCY_TTL_MS,
+    });
+  } catch (error) {
+    const winner = await app.db
+      .select()
+      .from(idempotencyKeys)
+      .where(eq(idempotencyKeys.key, scopedKey))
+      .limit(1);
+    if (!winner[0]) throw error;
+  }
+  reply.status(201);
+  return createSuccessEnvelope(created, request.requestId);
 }
 
 export async function identityRoutes(app: FastifyInstance) {
@@ -148,6 +254,7 @@ export async function identityRoutes(app: FastifyInstance) {
 
   app.post('/auth/logout', { preHandler: requireAuth }, async (request, reply) => {
     await logoutSession(app.db, request.auth.sessionId!);
+    app.realtimeHub.revokeSession(request.auth.sessionId!, 'logout');
     clearSessionCookies(reply);
     return createSuccessEnvelope({ ok: true }, request.requestId);
   });
@@ -225,7 +332,7 @@ export async function identityRoutes(app: FastifyInstance) {
 
   app.get('/families/:familyId', { preHandler: requireAuth }, async (request) => {
     const { familyId } = request.params as { familyId: string };
-    await requireFamilyMembership(app.db, request.auth.userId!, familyId);
+    await requireFamilyPermission(app.db, request.auth.userId!, familyId, 'family', 'VIEW');
     const rows = await app.db.select().from(families).where(eq(families.id, familyId)).limit(1);
     if (!rows[0]) {
       throw new AppError('NOT_FOUND', '家庭不存在', 404);
@@ -235,7 +342,7 @@ export async function identityRoutes(app: FastifyInstance) {
 
   app.get('/families/:familyId/members', { preHandler: requireAuth }, async (request) => {
     const { familyId } = request.params as { familyId: string };
-    await requireFamilyMembership(app.db, request.auth.userId!, familyId);
+    await requireFamilyPermission(app.db, request.auth.userId!, familyId, 'family', 'VIEW');
     const rows = await app.db
       .select({ member: familyMembers, user: users })
       .from(familyMembers)
@@ -249,17 +356,10 @@ export async function identityRoutes(app: FastifyInstance) {
     );
   });
 
-  app.post('/families/:familyId/invites', { preHandler: requireAuth }, async (request) => {
+  app.post('/families/:familyId/invites', { preHandler: requireAuth }, async (request, reply) => {
     const { familyId } = request.params as { familyId: string };
     const body = createFamilyInviteBodySchema.parse(request.body);
-    const invite = await createFamilyInvite(
-      app.db,
-      request.auth.userId!,
-      familyId,
-      body.relationshipHint,
-      body.expiresInHours,
-    );
-    return createSuccessEnvelope(invite, request.requestId);
+    return createInviteWithIdempotency(app, request, reply, familyId, body);
   });
 
   app.post('/family-invites/:token/accept', { preHandler: requireAuth }, async (request) => {
@@ -276,7 +376,7 @@ export async function identityRoutes(app: FastifyInstance) {
 
   app.get('/families/:familyId/babies', { preHandler: requireAuth }, async (request) => {
     const { familyId } = request.params as { familyId: string };
-    await requireFamilyMembership(app.db, request.auth.userId!, familyId);
+    await requireFamilyPermission(app.db, request.auth.userId!, familyId, 'baby', 'VIEW');
     const items = await listBabiesForFamily(app.db, familyId);
     return createSuccessEnvelope({ items }, request.requestId);
   });
@@ -284,12 +384,13 @@ export async function identityRoutes(app: FastifyInstance) {
   app.post('/families/:familyId/babies', { preHandler: requireAuth }, async (request, reply) => {
     const { familyId } = request.params as { familyId: string };
     const body = createBabyBodySchema.parse(request.body);
+    await requireFamilyPermission(app.db, request.auth.userId!, familyId, 'baby', 'CREATE');
     const baby = await withIdempotency(app, request, reply, {
       endpoint: `families/${familyId}/babies`,
       userId: request.auth.userId!,
       payload: body,
       handler: async () => {
-        const created = await createBaby(app.db, request.auth.userId!, familyId, body);
+        const created = await addBaby(app.db, request.auth.userId!, familyId, body);
         return {
           statusCode: 201,
           body: createSuccessEnvelope(created, request.requestId),
@@ -317,6 +418,13 @@ export async function identityRoutes(app: FastifyInstance) {
     );
     reply.header('ETag', `"v${updated.version}"`);
     return createSuccessEnvelope(updated, request.requestId);
+  });
+
+  app.delete('/babies/:babyId', { preHandler: requireAuth }, async () => {
+    // Baby deletion is a destructive, high-value operation. It is exposed
+    // through the Admin security domain so a family member cannot bypass
+    // re-authentication and the immutable audit trail.
+    throw new AppError('ADMIN_REAUTH_REQUIRED', '删除宝宝档案需要管理员确认', 403);
   });
 
   app.addHook('preHandler', async (request) => {

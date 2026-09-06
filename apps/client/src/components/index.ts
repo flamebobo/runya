@@ -1,3 +1,4 @@
+export * from './foundation/CuteIconChip';
 export * from './foundation/GlassSurface';
 export * from './foundation/PageShell';
 export * from './foundation/SectionHeader';

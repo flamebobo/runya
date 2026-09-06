@@ -19,6 +19,18 @@ const HEALTH_LOCAL_METADATA_KEYS = [
   'pendingAttachment',
 ] as const;
 
+const LOCAL_SYNC_ENTITY_TYPES = new Set<SyncEntityType>([
+  'DIAPER_RECORD',
+  'FOOD_RECORD',
+  'GROWTH_RECORD',
+  'MILESTONE',
+  'HEALTH_EVENT',
+]);
+
+function isLocalSyncEntityType(entityType: string): entityType is SyncEntityType {
+  return LOCAL_SYNC_ENTITY_TYPES.has(entityType as SyncEntityType);
+}
+
 // Sync snapshots只包含健康事项的基础字段；提醒和本机附件仍是客户端在等待
 // 下一次业务 API 回读前需要展示的本地元数据，不能在 push/pull 后凭空消失。
 function mergeLocalHealthMetadata(
@@ -206,6 +218,9 @@ async function runPull(familyId: string, startCursor: number) {
     const page = await pullChanges(familyId, cursor);
     await setSyncEpoch(page.serverEpoch);
     for (const change of page.changes) {
+      // Reward orders are query-backed server state. They must advance the
+      // cursor, but cannot enter the record-only offline entity cache.
+      if (!isLocalSyncEntityType(change.entityType)) continue;
       if (change.op === 'DELETE' || change.deleted) {
         const local = await getEntity(change.entityType, change.entityId);
         if (local?.pendingOpId) continue;

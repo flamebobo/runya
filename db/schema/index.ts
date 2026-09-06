@@ -6,3 +6,4 @@ export * from './growth';
 export * from './media';
 export * from './memories';
 export * from './mom';
+export * from './family';

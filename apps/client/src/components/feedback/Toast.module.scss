@@ -4,17 +4,29 @@
   bottom: calc(110px + var(--safe-bottom));
   transform: translateX(-50%);
   z-index: var(--z-toast);
+  display: flex;
+  align-items: center;
+  gap: 10px;
   max-width: calc(100% - 40px);
-  padding: 12px 18px;
+  padding: 10px 14px 10px 10px;
   border-radius: var(--radius-control);
-  background: rgba(74, 57, 47, 0.86);
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  color: var(--color-text-inverse);
+  background: rgba(255, 252, 247, 0.88);
+  border: 1px solid var(--color-border-white);
+  color: var(--color-text-primary);
   font-size: var(--font-body-sm);
   line-height: 1.45;
-  backdrop-filter: blur(16px) saturate(1.2);
-  -webkit-backdrop-filter: blur(16px) saturate(1.2);
+  backdrop-filter: blur(22px) saturate(1.4);
+  -webkit-backdrop-filter: blur(22px) saturate(1.4);
   box-shadow: var(--shadow-floating);
+}
+
+.toastText {
+  min-width: 0;
+  flex: 1;
+}
+
+:global([data-theme='night']) .root {
+  background: rgba(58, 51, 46, 0.9);
 }
 
 .skeletonWrap {
@@ -43,17 +55,7 @@
 }
 
 .stateMark {
-  width: 48px;
-  height: 48px;
   margin-bottom: var(--space-16);
-  border-radius: 24px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--color-apricot-strong);
-  background: rgba(247, 224, 199, 0.72);
-  border: 1px solid rgba(243, 167, 100, 0.28);
-  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.7);
 }
 
 .stateTitle {

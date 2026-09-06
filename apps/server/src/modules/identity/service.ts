@@ -1,9 +1,11 @@
 import {
+  babyChanges,
   babies,
   devices,
   families,
   familyInvites,
   familyMembers,
+  familyMemberPermissions,
   userAuthCredentials,
   userSessions,
   users,
@@ -30,12 +32,18 @@ import {
 } from '@runew/domain-types';
 import type { Platform } from '@runew/domain-types';
 import { createUlid, utcNowMs } from '@runew/shared-utils';
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, eq, gt, isNull } from 'drizzle-orm';
 import type { LibSQLDatabase } from 'drizzle-orm/libsql';
 import type { schema } from '@runew/db';
 import { createDefaultRewards } from '../gems/defaults.js';
 import { AppError } from '../../lib/errors.js';
-import { generateInviteToken, generateSessionToken, hashClientMetadata, hashInviteToken, hashToken } from '../../lib/crypto.js';
+import {
+  generateInviteToken,
+  generateSessionToken,
+  hashClientMetadata,
+  hashInviteToken,
+  hashToken,
+} from '../../lib/crypto.js';
 import { hashPassword, verifyPassword } from '../../lib/password.js';
 import { SESSION_TTL_MS, normalizeUsername } from '../../lib/auth-constants.js';
 
@@ -74,6 +82,11 @@ export function mapBaby(row: typeof babies.$inferSelect): BabyPublic {
     nickname: row.nickname,
     sex: (row.sex as BabyPublic['sex']) ?? null,
     birthday: row.birthday,
+    birthTime: row.birthTime,
+    avatarMediaId: row.avatarMediaId,
+    birthHeightCm: row.birthHeightCm,
+    birthWeightKg: row.birthWeightKg,
+    notes: row.notes,
     version: row.version,
   };
 }
@@ -102,7 +115,12 @@ export async function registerUser(
   db: Database,
   body: RegisterBody,
   platform: Platform,
-  metadata: { ip?: string; userAgent?: string; deviceName?: string; appVersion?: string },
+  metadata: {
+    ip?: string;
+    userAgent?: string;
+    deviceName?: string;
+    appVersion?: string;
+  },
 ) {
   const username = normalizeUsername(body.username);
   const existing = await db
@@ -145,7 +163,12 @@ export async function loginUser(
   db: Database,
   body: LoginBody,
   platform: Platform,
-  metadata: { ip?: string; userAgent?: string; deviceName?: string; appVersion?: string },
+  metadata: {
+    ip?: string;
+    userAgent?: string;
+    deviceName?: string;
+    appVersion?: string;
+  },
 ) {
   const username = normalizeUsername(body.username);
   const credentialRows = await db
@@ -207,7 +230,12 @@ export async function createSessionForUser(
   db: Database,
   userId: string,
   platform: Platform,
-  metadata: { ip?: string; userAgent?: string; deviceName?: string; appVersion?: string },
+  metadata: {
+    ip?: string;
+    userAgent?: string;
+    deviceName?: string;
+    appVersion?: string;
+  },
 ) {
   const user = await getUserById(db, userId);
   if (!user) {
@@ -249,7 +277,12 @@ export async function createSessionForUser(
 export async function resolveSession(
   db: Database,
   token: string,
-): Promise<{ userId: string; sessionId: string; platform: Platform; deviceId: string | null }> {
+): Promise<{
+  userId: string;
+  sessionId: string;
+  platform: Platform;
+  deviceId: string | null;
+}> {
   const rows = await db
     .select()
     .from(userSessions)
@@ -314,6 +347,16 @@ export async function listFamiliesForUser(db: Database, userId: string) {
   }));
 }
 
+/** Returns the user's current active family for single-family P0 routes. */
+export async function getActiveFamilyId(db: Database, userId: string) {
+  const memberships = await listFamiliesForUser(db, userId);
+  const membership = memberships[0];
+  if (!membership) {
+    throw new AppError('FAMILY_ACCESS_DENIED', '尚未加入任何家庭', 400);
+  }
+  return membership.family.id;
+}
+
 export async function requireFamilyMembership(
   db: Database,
   userId: string,
@@ -333,6 +376,37 @@ export async function requireFamilyMembership(
   const member = rows[0];
   if (!member) {
     throw new AppError('FAMILY_ACCESS_DENIED', '无权访问该家庭', 403);
+  }
+  return member;
+}
+
+/**
+ * Applies the member override after the active-membership and family-scope checks.
+ * Role defaults remain the product default; an explicit DENY is the only override
+ * needed for the current family collaboration surface.
+ */
+export async function requireFamilyPermission(
+  db: Database,
+  userId: string,
+  familyId: string,
+  resource: string,
+  action: string,
+) {
+  const member = await requireFamilyMembership(db, userId, familyId);
+  const denied = await db
+    .select({ id: familyMemberPermissions.id })
+    .from(familyMemberPermissions)
+    .where(
+      and(
+        eq(familyMemberPermissions.familyMemberId, member.id),
+        eq(familyMemberPermissions.resource, resource),
+        eq(familyMemberPermissions.action, action),
+        eq(familyMemberPermissions.effect, 'DENY'),
+      ),
+    )
+    .limit(1);
+  if (denied[0]) {
+    throw new AppError('PERMISSION_DENIED', '当前成员没有该家庭资源权限', 403);
   }
   return member;
 }
@@ -373,7 +447,11 @@ export async function createFamily(
   });
   await createDefaultRewards(db, familyId, userId, now);
 
-  const familyRows = await db.select().from(families).where(eq(families.id, familyId)).limit(1);
+  const familyRows = await db
+    .select()
+    .from(families)
+    .where(eq(families.id, familyId))
+    .limit(1);
   return mapFamily(familyRows[0]!);
 }
 
@@ -406,12 +484,48 @@ export async function createBaby(
     nickname: body.nickname ?? null,
     sex: body.sex ?? null,
     birthday: body.birthday,
+    birthTime: body.birthTime ?? null,
+    avatarMediaId: body.avatarMediaId ?? null,
+    birthHeightCm: body.birthHeightCm ?? null,
+    birthWeightKg: body.birthWeightKg ?? null,
+    notes: body.notes ?? null,
     createdBy: userId,
     createdAt: now,
     updatedBy: userId,
     updatedAt: now,
   });
 
+  const rows = await db.select().from(babies).where(eq(babies.id, babyId)).limit(1);
+  return mapBaby(rows[0]!);
+}
+
+/** M11: adding a second baby is an explicit action and must not reuse the first row. */
+export async function addBaby(
+  db: Database,
+  userId: string,
+  familyId: string,
+  body: CreateBabyBody,
+) {
+  await requireFamilyMembership(db, userId, familyId);
+  const now = utcNowMs();
+  const babyId = createUlid();
+  await db.insert(babies).values({
+    id: babyId,
+    familyId,
+    name: body.name,
+    nickname: body.nickname ?? null,
+    sex: body.sex ?? null,
+    birthday: body.birthday,
+    birthTime: body.birthTime ?? null,
+    avatarMediaId: body.avatarMediaId ?? null,
+    birthHeightCm: body.birthHeightCm ?? null,
+    birthWeightKg: body.birthWeightKg ?? null,
+    notes: body.notes ?? null,
+    createdBy: userId,
+    createdAt: now,
+    updatedBy: userId,
+    updatedAt: now,
+  });
   const rows = await db.select().from(babies).where(eq(babies.id, babyId)).limit(1);
   return mapBaby(rows[0]!);
 }
@@ -553,9 +667,10 @@ export async function createFamilyInvite(
   familyId: string,
   relationshipHint?: string,
   expiresInHours = 72,
+  tokenOverride?: string,
 ) {
   await requireFamilyMembership(db, userId, familyId);
-  const token = generateInviteToken();
+  const token = tokenOverride ?? generateInviteToken();
   const now = utcNowMs();
   const inviteId = createUlid();
 
@@ -600,43 +715,78 @@ export async function acceptFamilyInvite(
     throw new AppError('GONE', '邀请链接已过期', 410);
   }
 
-  const existing = await db
-    .select()
-    .from(familyMembers)
-    .where(
-      and(
-        eq(familyMembers.familyId, invite.familyId),
-        eq(familyMembers.userId, userId),
-      ),
-    )
-    .limit(1);
+  try {
+    return await db.transaction(async (tx) => {
+      // Claim first with a conditional update. Two connections racing here cannot both consume one token.
+      const claimed = await tx
+        .update(familyInvites)
+        .set({ usedAt: now, usedBy: userId })
+        .where(
+          and(
+            eq(familyInvites.id, invite.id),
+            isNull(familyInvites.usedAt),
+            gt(familyInvites.expiresAt, now),
+          ),
+        )
+        .returning();
+      if (!claimed[0]) {
+        throw new AppError(
+          'GONE',
+          invite.usedAt ? '邀请链接已被使用' : '邀请链接已过期',
+          410,
+        );
+      }
 
-  if (!existing[0]) {
-    const memberId = createUlid();
-    await db.insert(familyMembers).values({
-      id: memberId,
-      familyId: invite.familyId,
-      userId,
-      relationship,
-      role: FamilyMemberRole.MEMBER,
-      status: FamilyMemberStatus.ACTIVE,
-      joinedAt: now,
-      createdAt: now,
-      updatedAt: now,
+      const existing = await tx
+        .select()
+        .from(familyMembers)
+        .where(
+          and(
+            eq(familyMembers.familyId, invite.familyId),
+            eq(familyMembers.userId, userId),
+          ),
+        )
+        .limit(1);
+      if (existing[0]?.status === FamilyMemberStatus.DISABLED) {
+        throw new AppError(
+          'FAMILY_ACCESS_DENIED',
+          '该成员已被停用，请联系家庭管理员恢复',
+          403,
+        );
+      }
+      if (!existing[0]) {
+        await tx.insert(familyMembers).values({
+          id: createUlid(),
+          familyId: invite.familyId,
+          userId,
+          relationship,
+          role: FamilyMemberRole.MEMBER,
+          status: FamilyMemberStatus.ACTIVE,
+          joinedAt: now,
+          createdAt: now,
+          updatedAt: now,
+        });
+      }
+
+      const familyRows = await tx
+        .select()
+        .from(families)
+        .where(eq(families.id, invite.familyId))
+        .limit(1);
+      return mapFamily(familyRows[0]!);
     });
+  } catch (error) {
+    // SQLite can report BUSY while another connection is committing the claim; expose the domain result.
+    if (
+      error &&
+      typeof error === 'object' &&
+      'code' in error &&
+      error.code === 'SQLITE_BUSY'
+    ) {
+      throw new AppError('GONE', '邀请链接已被使用', 410);
+    }
+    throw error;
   }
-
-  await db
-    .update(familyInvites)
-    .set({ usedAt: now, usedBy: userId })
-    .where(eq(familyInvites.id, invite.id));
-
-  const familyRows = await db
-    .select()
-    .from(families)
-    .where(eq(families.id, invite.familyId))
-    .limit(1);
-  return mapFamily(familyRows[0]!);
 }
 
 export async function updateBaby(
@@ -652,19 +802,63 @@ export async function updateBaby(
   }
 
   const now = utcNowMs();
+  const changes = [
+    ['name', baby.name, patch.name],
+    ['nickname', baby.nickname, patch.nickname],
+    ['sex', baby.sex, patch.sex],
+    ['birthday', baby.birthday, patch.birthday],
+    ['birthTime', baby.birthTime, patch.birthTime],
+    ['avatarMediaId', baby.avatarMediaId, patch.avatarMediaId],
+    ['birthHeightCm', baby.birthHeightCm, patch.birthHeightCm],
+    ['birthWeightKg', baby.birthWeightKg, patch.birthWeightKg],
+    ['notes', baby.notes, patch.notes],
+  ].filter(([, oldValue, newValue]) => newValue !== undefined && oldValue !== newValue);
   await db
     .update(babies)
     .set({
       name: patch.name ?? baby.name,
-      nickname: patch.nickname === undefined ? baby.nickname : patch.nickname ?? null,
-      sex: patch.sex === undefined ? baby.sex : patch.sex ?? null,
+      nickname: patch.nickname === undefined ? baby.nickname : (patch.nickname ?? null),
+      sex: patch.sex === undefined ? baby.sex : (patch.sex ?? null),
       birthday: patch.birthday ?? baby.birthday,
+      birthTime: patch.birthTime === undefined ? baby.birthTime : patch.birthTime,
+      avatarMediaId:
+        patch.avatarMediaId === undefined ? baby.avatarMediaId : (patch.avatarMediaId ?? null),
+      birthHeightCm:
+        patch.birthHeightCm === undefined ? baby.birthHeightCm : (patch.birthHeightCm ?? null),
+      birthWeightKg:
+        patch.birthWeightKg === undefined ? baby.birthWeightKg : (patch.birthWeightKg ?? null),
+      notes: patch.notes === undefined ? baby.notes : (patch.notes ?? null),
       updatedBy: userId,
       updatedAt: now,
       version: baby.version + 1,
     })
     .where(eq(babies.id, babyId));
 
+  if (changes.length > 0) {
+    await db.insert(babyChanges).values(
+      changes.map(([field, oldValue, newValue]) => ({
+        id: createUlid(),
+        familyId: baby.familyId,
+        babyId,
+        actorUserId: userId,
+        field: String(field),
+        oldValue: oldValue == null ? null : String(oldValue),
+        newValue: newValue == null ? null : String(newValue),
+        changedAt: now,
+      })),
+    );
+  }
+
   const rows = await db.select().from(babies).where(eq(babies.id, babyId)).limit(1);
   return mapBaby(rows[0]!);
+}
+
+export async function softDeleteBaby(db: Database, userId: string, babyId: string) {
+  const baby = await requireBabyInFamily(db, userId, babyId);
+  const now = utcNowMs();
+  await db
+    .update(babies)
+    .set({ deletedAt: now, updatedBy: userId, updatedAt: now, version: baby.version + 1 })
+    .where(eq(babies.id, babyId));
+  return { id: babyId, deletedAt: now };
 }

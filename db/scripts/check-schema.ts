@@ -43,6 +43,19 @@ const REQUIRED_TABLES = [
   'gem_transactions',
   'rewards',
   'reward_orders',
+  'baby_preferences',
+  'baby_changes',
+  'user_settings',
+  'backup_runs',
+  'export_jobs',
+  'search_documents',
+  'search_documents_fts',
+  'realtime_tickets',
+  'admin_credentials',
+  'admin_sessions',
+  'admin_reauth_grants',
+  'audit_logs',
+  'system_settings',
 ] as const;
 
 async function main() {

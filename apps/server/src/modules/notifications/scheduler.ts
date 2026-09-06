@@ -5,13 +5,17 @@ import {
   notificationPreferences,
   notifications,
   scheduledNotifications,
+  families,
+  familyAnniversaries,
+  familyMembers,
 } from '@runew/db';
 import type { schema } from '@runew/db';
 import { createUlid, utcNowMs } from '@runew/shared-utils';
-import { and, eq, lte, sql } from 'drizzle-orm';
+import { and, eq, isNull, lte, ne, or, sql } from 'drizzle-orm';
 import type { LibSQLDatabase } from 'drizzle-orm/libsql';
 import type { FastifyBaseLogger } from 'fastify';
 import { effectiveFireAt, isInDnd } from './dnd.js';
+import { reconcileGemBalance } from '../gems/service.js';
 
 type Database = LibSQLDatabase<typeof schema>;
 
@@ -19,9 +23,12 @@ type Database = LibSQLDatabase<typeof schema>;
 export const SCAN_INTERVAL_MS = 60_000;
 // 锁持有时间覆盖最长一轮扫描；进程崩溃锁自动过期，重启后可安全接管。
 const LOCK_TTL_MS = 55_000;
+const GEM_RECONCILE_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
 const JOB_DUE_NOTIFICATIONS = 'due-notifications';
 const JOB_EXPIRE_EVENTS = 'expire-health-events';
+const JOB_RECONCILE_GEMS = 'reconcile-gem-balances';
+const JOB_SCHEDULE_ANNIVERSARIES = 'schedule-anniversary-notifications';
 
 // P0 只支持固定偏移（Asia/Shanghai = +8）；多时区用户在 preferences 加列即可。
 const P0_TZ_OFFSET_MINUTES = 480;
@@ -40,6 +47,105 @@ function minutesOf(timestampMs: number, offsetMinutes: number): number {
   return Math.floor((localMs % 86_400_000) / 60_000);
 }
 
+function nextAnniversaryOccurrence(date: string, now: number): { key: string; fireAt: number } | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
+  if (!match) return null;
+  const monthText = match[2];
+  const dayText = match[3];
+  if (!monthText || !dayText) return null;
+  const month = Number(monthText);
+  const day = Number(dayText);
+  if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+  const localYear = new Date(now + P0_TZ_OFFSET_MINUTES * 60_000).getUTCFullYear();
+  for (let year = localYear; year <= localYear + 4; year += 1) {
+    const candidateDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
+    if (day > candidateDay) continue;
+    const candidate = Date.UTC(year, month - 1, day, 1, 0, 0);
+    if (candidate > now) {
+      return { key: `${year}-${monthText}-${dayText}`, fireAt: candidate };
+    }
+  }
+  return null;
+}
+
+async function scheduleAnniversaryNotifications(db: Database, now: number) {
+  const rows = await db
+    .select({ anniversary: familyAnniversaries, member: familyMembers })
+    .from(familyAnniversaries)
+    .innerJoin(
+      familyMembers,
+      and(
+        eq(familyMembers.familyId, familyAnniversaries.familyId),
+        eq(familyMembers.status, 'ACTIVE'),
+      ),
+    );
+  let scheduled = 0;
+  const prefCache = new Map<string, Awaited<ReturnType<typeof loadPrefs>>>();
+  for (const row of rows) {
+    let prefs = prefCache.get(row.member.userId);
+    if (!prefs) {
+      prefs = await loadPrefs(db, row.member.userId);
+      prefCache.set(row.member.userId, prefs);
+    }
+    if (!prefs.anniversariesEnabled) continue;
+    const occurrence = nextAnniversaryOccurrence(row.anniversary.date, now);
+    if (occurrence === null) continue;
+    const previous = await db
+      .select({ occurrenceKey: scheduledNotifications.occurrenceKey })
+      .from(scheduledNotifications)
+      .where(
+        and(
+          eq(scheduledNotifications.userId, row.member.userId),
+          eq(scheduledNotifications.sourceType, 'FAMILY_ANNIVERSARY'),
+          eq(scheduledNotifications.sourceId, row.anniversary.id),
+          eq(scheduledNotifications.status, 'SCHEDULED'),
+          or(
+            isNull(scheduledNotifications.occurrenceKey),
+            ne(scheduledNotifications.occurrenceKey, occurrence.key),
+          ),
+        ),
+      );
+    if (previous.length > 0) {
+      await db
+        .update(scheduledNotifications)
+        .set({ status: 'CANCELED', updatedAt: now })
+        .where(
+          and(
+            eq(scheduledNotifications.userId, row.member.userId),
+            eq(scheduledNotifications.sourceType, 'FAMILY_ANNIVERSARY'),
+            eq(scheduledNotifications.sourceId, row.anniversary.id),
+            eq(scheduledNotifications.status, 'SCHEDULED'),
+            or(
+              isNull(scheduledNotifications.occurrenceKey),
+              ne(scheduledNotifications.occurrenceKey, occurrence.key),
+            ),
+          ),
+        );
+    }
+    const result = await db
+      .insert(scheduledNotifications)
+      .values({
+        id: createUlid(),
+        userId: row.member.userId,
+        familyId: row.anniversary.familyId,
+        category: 'ANNIVERSARIES',
+        sourceType: 'FAMILY_ANNIVERSARY',
+        sourceId: row.anniversary.id,
+        fireAt: occurrence.fireAt,
+        occurrenceKey: occurrence.key,
+        dndOverride: false,
+        status: 'SCHEDULED',
+        attempts: 0,
+        lastErrorCode: null,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .onConflictDoNothing();
+    scheduled += result.rowsAffected;
+  }
+  return scheduled;
+}
+
 async function loadPrefs(db: Database, userId: string) {
   const rows = await db
     .select()
@@ -54,6 +160,7 @@ async function loadPrefs(db: Database, userId: string) {
       endMinute: row?.dndEndMinute ?? 8 * 60,
     },
     healthEnabled: row?.healthEnabled ?? true,
+    anniversariesEnabled: row?.anniversariesEnabled ?? true,
   };
 }
 
@@ -81,6 +188,61 @@ async function dispatchOne(
   item: typeof scheduledNotifications.$inferSelect,
   now: number,
 ) {
+  if (item.sourceType === 'FAMILY_ANNIVERSARY') {
+    const rows = await db
+      .select({ title: familyAnniversaries.title, date: familyAnniversaries.date })
+      .from(familyAnniversaries)
+      .innerJoin(
+        familyMembers,
+        and(
+          eq(familyMembers.familyId, familyAnniversaries.familyId),
+          eq(familyMembers.userId, item.userId),
+          eq(familyMembers.status, 'ACTIVE'),
+        ),
+      )
+      .where(
+        and(
+          eq(familyAnniversaries.id, item.sourceId),
+          eq(familyAnniversaries.familyId, item.familyId ?? ''),
+        ),
+      )
+      .limit(1);
+    const source = rows[0];
+    if (!source || !item.occurrenceKey || item.occurrenceKey.slice(4) !== source.date.slice(4)) {
+      await setScheduledStatus(db, item.id, 'CANCELED', now);
+      return 'canceled' as const;
+    }
+    try {
+      await db.transaction(async (tx) => {
+        await tx.insert(notifications).values({
+          id: createUlid(),
+          userId: item.userId,
+          familyId: item.familyId,
+          category: item.category,
+          title: '家庭纪念日',
+          body: `${source.title}，今天一起记住这份共同记忆`,
+          targetType: 'FAMILY_ANNIVERSARY',
+          targetId: item.sourceId,
+          payloadJson: null,
+          createdAt: now,
+        });
+        const updated = await tx
+          .update(scheduledNotifications)
+          .set({ status: 'SENT', attempts: item.attempts + 1, updatedAt: now })
+          .where(
+            and(
+              eq(scheduledNotifications.id, item.id),
+              eq(scheduledNotifications.status, 'SCHEDULED'),
+            ),
+          );
+        if (updated.rowsAffected !== 1) throw new Error('RACE_LOST');
+      });
+      return 'delivered' as const;
+    } catch (error) {
+      if (error instanceof Error && error.message === 'RACE_LOST') return 'skipped' as const;
+      throw error;
+    }
+  }
   // sourceId 是 health_reminders.id；join 出事件取标题。提醒被删或事件被删 → 作废。
   const rows = await db
     .select({
@@ -169,7 +331,10 @@ async function dispatchDue(db: Database, now: number, logger: FastifyBaseLogger)
     }
 
     // 用户关闭健康类通知：作废而不是无限推迟。
-    if (!prefs.healthEnabled && item.category === 'HEALTH') {
+    if (
+      (item.category === 'HEALTH' && !prefs.healthEnabled) ||
+      (item.category === 'ANNIVERSARY' && !prefs.anniversariesEnabled)
+    ) {
       await setScheduledStatus(db, item.id, 'CANCELED', now);
       continue;
     }
@@ -272,14 +437,16 @@ async function runLockedJob<T>(
   now: number,
   ownerId: string,
   run: () => Promise<T>,
+  successIntervalMs = LOCK_TTL_MS,
 ): Promise<T | null> {
   if (!(await acquireJobLock(db, jobName, now, ownerId))) return null;
   try {
     const result = await run();
     await db
       .update(jobLocks)
-      .set({ lastError: null })
-      .where(eq(jobLocks.jobName, jobName));
+      // 成功后持久化下次运行时间；失败保留短锁，重启后也能重试。
+      .set({ lastError: null, lockedUntil: now + successIntervalMs })
+      .where(and(eq(jobLocks.jobName, jobName), eq(jobLocks.ownerId, ownerId)));
     return result;
   } catch (error) {
     await db
@@ -309,6 +476,22 @@ export function startScheduler(
     try {
       const now = utcNowMs();
       try {
+        const scheduled = await runLockedJob(
+          db,
+          JOB_SCHEDULE_ANNIVERSARIES,
+          now,
+          ownerId,
+          () => scheduleAnniversaryNotifications(db, now),
+        );
+        if (scheduled && scheduled > 0)
+          logger.info({ scheduled }, 'scheduler: anniversary notifications scheduled');
+      } catch (error) {
+        logger.error(
+          { err: error, jobName: JOB_SCHEDULE_ANNIVERSARIES },
+          'scheduler job failed',
+        );
+      }
+      try {
         const result = await runLockedJob(db, JOB_DUE_NOTIFICATIONS, now, ownerId, () =>
           dispatchDue(db, now, logger),
         );
@@ -322,6 +505,16 @@ export function startScheduler(
           'scheduler job failed',
         );
         return;
+      }
+      try {
+        const reconciled = await runLockedJob(db, JOB_RECONCILE_GEMS, utcNowMs(), ownerId, async () => {
+          const rows = await db.select({ id: families.id }).from(families);
+          for (const row of rows) await reconcileGemBalance(db, row.id);
+          return rows.length;
+        }, GEM_RECONCILE_INTERVAL_MS);
+        if (reconciled && reconciled > 0) logger.info({ families: reconciled }, 'scheduler: gem balances reconciled');
+      } catch (error) {
+        logger.error({ err: error, jobName: JOB_RECONCILE_GEMS }, 'scheduler job failed');
       }
       const expireNow = utcNowMs();
       try {

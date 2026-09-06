@@ -18,6 +18,7 @@ import { and, asc, desc, eq, gte, isNull, lt } from 'drizzle-orm';
 import type { LibSQLDatabase } from 'drizzle-orm/libsql';
 import { AppError } from '../../lib/errors.js';
 import { requireBabyInFamily } from '../identity/service.js';
+import { restoreTrashItem } from '../m11/service.js';
 import { appendSyncLog } from '../sync/log.js';
 
 export type Database = LibSQLDatabase<typeof schema>;
@@ -294,25 +295,12 @@ export async function deleteGrowth(db: Database, userId: string, id: string) {
   return { ok: true as const };
 }
 
-export async function restoreGrowth(db: Database, userId: string, id: string) {
+export async function restoreGrowth(db: Database, userId: string, id: string, deviceId: string | null = null) {
   const row = await getGrowthRow(db, id, true);
   await requireBabyInFamily(db, userId, row.babyId);
   if (row.deletedAt == null) return mapGrowth(row);
-  const now = utcNowMs();
-  await db
-    .update(growthRecords)
-    .set({ deletedAt: null, deletedBy: null, updatedBy: userId, updatedAt: now, version: row.version + 1 })
-    .where(eq(growthRecords.id, id));
+  await restoreTrashItem(db, userId, row.familyId, 'GROWTH_RECORD', id, deviceId);
   const restored = mapGrowth(await getGrowthRow(db, id));
-  await logEntityChange(db, {
-    familyId: restored.familyId,
-    userId,
-    entityType: 'GROWTH_RECORD',
-    entityId: id,
-    op: 'RESTORE',
-    version: restored.version,
-    payload: growthPayload(restored),
-  }, now);
   return restored;
 }
 
@@ -434,25 +422,12 @@ export async function deleteMilestone(db: Database, userId: string, id: string) 
   return { ok: true as const };
 }
 
-export async function restoreMilestone(db: Database, userId: string, id: string) {
+export async function restoreMilestone(db: Database, userId: string, id: string, deviceId: string | null = null) {
   const row = await getMilestoneRow(db, id, true);
   await requireBabyInFamily(db, userId, row.babyId);
   if (row.deletedAt == null) return mapMilestone(row);
-  const now = utcNowMs();
-  await db
-    .update(milestones)
-    .set({ deletedAt: null, deletedBy: null, updatedBy: userId, updatedAt: now, version: row.version + 1 })
-    .where(eq(milestones.id, id));
+  await restoreTrashItem(db, userId, row.familyId, 'MILESTONE', id, deviceId);
   const restored = mapMilestone(await getMilestoneRow(db, id));
-  await logEntityChange(db, {
-    familyId: restored.familyId,
-    userId,
-    entityType: 'MILESTONE',
-    entityId: id,
-    op: 'RESTORE',
-    version: restored.version,
-    payload: milestonePayload(restored),
-  }, now);
   return restored;
 }
 

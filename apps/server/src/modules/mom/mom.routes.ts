@@ -3,6 +3,7 @@ import {
   createDiaryBodySchema,
   createMoodBodySchema,
   createSuccessEnvelope,
+  diarySearchQuerySchema,
   diaryPublicSchema,
   momHomeSummarySchema,
   moodCalendarResponseSchema,
@@ -25,6 +26,7 @@ import {
   listDiaries,
   listMoods,
   restoreDiary,
+  searchDiaries,
   restoreMood,
   updateDiary,
   updateMood,
@@ -94,7 +96,7 @@ export async function momRoutes(fastify: FastifyInstance) {
     const userId = request.auth.userId!;
     const { id } = request.params as { id: string };
     return createSuccessEnvelope(
-      moodPublicSchema.parse(await restoreMood(request.db, userId, id)),
+      moodPublicSchema.parse(await restoreMood(request.db, userId, id, request.auth.deviceId)),
       request.id,
     );
   });
@@ -149,6 +151,16 @@ export async function momRoutes(fastify: FastifyInstance) {
     });
   });
 
+  fastify.get('/mom/diaries/search', { preHandler: requireAuth }, async (request) => {
+    const userId = request.auth.userId!;
+    const query = diarySearchQuerySchema.parse(request.query);
+    const items = await searchDiaries(request.db, userId, query);
+    return createSuccessEnvelope(
+      items.map((item) => diaryPublicSchema.parse(item)),
+      request.id,
+    );
+  });
+
   fastify.get('/mom/diaries/:id', { preHandler: requireAuth }, async (request) => {
     const userId = request.auth.userId!;
     const { id } = request.params as { id: string };
@@ -178,7 +190,7 @@ export async function momRoutes(fastify: FastifyInstance) {
     const userId = request.auth.userId!;
     const { id } = request.params as { id: string };
     return createSuccessEnvelope(
-      diaryPublicSchema.parse(await restoreDiary(request.db, userId, id)),
+      diaryPublicSchema.parse(await restoreDiary(request.db, userId, id, request.auth.deviceId)),
       request.id,
     );
   });

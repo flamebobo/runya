@@ -1,0 +1,25 @@
+.inviteBox {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.identityLabel {
+  display: block;
+  font-size: var(--font-caption);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--color-text-secondary);
+}
+
+.identityGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.error {
+  display: block;
+  color: var(--color-danger-text);
+  font-size: var(--font-body);
+}

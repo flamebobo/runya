@@ -112,6 +112,9 @@ export const knowledgeLibraryResponseSchema = z.object({
       title: z.string(),
       summary: z.string(),
       category: knowledgeCategorySchema,
+      sourceName: z.string(),
+      minAgeDays: z.number().int().min(0).nullable(),
+      maxAgeDays: z.number().int().min(0).nullable(),
     }),
   ),
 });

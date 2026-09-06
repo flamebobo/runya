@@ -398,7 +398,7 @@ describe('health api', () => {
       headers: family.headers,
       payload: { relationshipHint: 'DAD', expiresInHours: 72 },
     });
-    expect(invite.statusCode).toBe(200);
+    expect(invite.statusCode).toBe(201);
 
     const accepted = await app.inject({
       method: 'POST',

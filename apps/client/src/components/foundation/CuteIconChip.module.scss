@@ -1,0 +1,152 @@
+.chip {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border: 1px solid var(--color-border-white);
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.55);
+}
+
+.sm {
+  width: 40px;
+  height: 40px;
+  border-radius: 20px;
+}
+
+.md {
+  width: 48px;
+  height: 48px;
+  border-radius: 24px;
+}
+
+.inner {
+  position: absolute;
+  border-radius: 50%;
+  background: rgba(255, 252, 247, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.62);
+  pointer-events: none;
+}
+
+.sm .inner {
+  inset: 5px;
+}
+
+.md .inner {
+  inset: 9px;
+}
+
+.glyph {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 0;
+}
+
+.spark {
+  position: absolute;
+  top: -1px;
+  right: -1px;
+  z-index: 2;
+  width: 7px;
+  height: 7px;
+  clip-path: polygon(
+    50% 0,
+    62% 38%,
+    100% 50%,
+    62% 62%,
+    50% 100%,
+    38% 62%,
+    0 50%,
+    38% 38%
+  );
+}
+
+.sprout {
+  position: absolute;
+  bottom: 2px;
+  left: 2px;
+  z-index: 2;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+}
+
+.tone-apricot {
+  background: var(--color-apricot-soft);
+  color: var(--color-apricot-strong);
+}
+
+.tone-sage {
+  background: var(--color-sage-soft);
+  color: var(--color-sage-strong);
+}
+
+.tone-lavender {
+  background: var(--color-lavender-soft);
+  color: var(--color-lavender-strong);
+}
+
+.tone-sky {
+  background: var(--color-sky-soft);
+  color: var(--color-sky-strong);
+}
+
+.tone-blush {
+  background: var(--color-blush-soft);
+  color: var(--color-blush-strong);
+}
+
+.tone-apricot .spark,
+.tone-apricot .sprout {
+  background: var(--color-apricot);
+}
+
+.tone-sage .spark,
+.tone-sage .sprout {
+  background: var(--color-sage);
+}
+
+.tone-lavender .spark,
+.tone-lavender .sprout {
+  background: var(--color-lavender);
+}
+
+.tone-sky .spark,
+.tone-sky .sprout {
+  background: var(--color-sky);
+}
+
+.tone-blush .spark,
+.tone-blush .sprout {
+  background: var(--color-blush);
+}
+
+.dashed {
+  background: transparent;
+  border-style: dashed;
+  border-color: var(--color-border-warm);
+  box-shadow: none;
+  color: var(--color-text-secondary);
+}
+
+.dashed .inner {
+  display: none;
+}
+
+.selected {
+  box-shadow:
+    0 0 0 2px rgba(243, 160, 91, 0.38),
+    inset 0 1px 1px rgba(255, 255, 255, 0.8);
+}
+
+:global([data-theme='night']) .inner {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: var(--color-border-white);
+}
+
+:global([data-theme='night']) .dashed {
+  background: transparent;
+}

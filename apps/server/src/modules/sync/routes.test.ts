@@ -1,7 +1,8 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { runMigrations, systemMetadata, SYSTEM_METADATA_KEYS } from '@runew/db';
+import { runMigrations, systemMetadata, SYSTEM_METADATA_KEYS, syncOperations } from '@runew/db';
+import { eq } from 'drizzle-orm';
 import { createUlid } from '@runew/shared-utils';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { buildApp } from '../../app.js';
@@ -143,6 +144,12 @@ describe('sync api', () => {
       .json()
       .data.items.filter((item: { kind: string }) => item.kind === 'DIAPER');
     expect(diaperItems).toHaveLength(1);
+    const gems = await app.inject({
+      method: 'GET', url: '/api/v1/gems/transactions', headers: family.headers,
+    });
+    expect(gems.statusCode).toBe(200);
+    expect(gems.json().data).toHaveLength(1);
+    expect(gems.json().data[0]).toMatchObject({ sourceId: op.entityId, amount: 1, reasonText: DIAPER });
   });
 
   it('rejects same operationId with different payload (ENTITY_ID_REUSED)', async () => {
@@ -181,6 +188,50 @@ describe('sync api', () => {
     });
     expect(conflict.statusCode).toBe(409);
     expect(conflict.json().error.code).toBe('ENTITY_ID_REUSED');
+  });
+
+  it('awards an offline food create only once across repeated pushes', async () => {
+    const family = await readyFamily();
+    const op = {
+      ...diaperCreateOp({ familyId: family.familyId, babyId: family.babyId }),
+      entityType: 'FOOD_RECORD',
+      fullPayload: { babyId: family.babyId, foodName: '南瓜泥', recordedAt: Date.now() },
+    };
+    const request = {
+      method: 'POST' as const, url: '/api/v1/sync/push', headers: family.headers,
+      payload: { deviceId: 'test-device', familyId: family.familyId, operations: [op] },
+    };
+    expect((await app.inject(request)).statusCode).toBe(200);
+    expect((await app.inject(request)).statusCode).toBe(200);
+    const gems = await app.inject({ method: 'GET', url: '/api/v1/gems/transactions', headers: family.headers });
+    expect(gems.statusCode).toBe(200);
+    expect(gems.json().data).toHaveLength(1);
+    expect(gems.json().data[0]).toMatchObject({ sourceId: op.entityId, amount: 1, reasonText: 'FOOD_RECORD' });
+  });
+
+  it('rolls back an offline record and its ACK when the gem write fails', async () => {
+    const family = await readyFamily();
+    const op = diaperCreateOp({ familyId: family.familyId, babyId: family.babyId });
+    await app.sqlClient.execute("CREATE TRIGGER test_reject_gem BEFORE INSERT ON gem_transactions BEGIN SELECT RAISE(ABORT, 'test gem failure'); END");
+    try {
+      const failed = await app.inject({
+        method: 'POST', url: '/api/v1/sync/push', headers: family.headers,
+        payload: { deviceId: 'test-device', familyId: family.familyId, operations: [op] },
+      });
+      expect(failed.statusCode).toBe(500);
+      const detail = await app.inject({ method: 'GET', url: `/api/v1/diapers/${op.entityId}`, headers: family.headers });
+      expect(detail.statusCode).toBe(404);
+      expect(await app.db.select().from(syncOperations).where(eq(syncOperations.operationId, op.operationId))).toHaveLength(0);
+    } finally {
+      await app.sqlClient.execute('DROP TRIGGER test_reject_gem');
+    }
+    const retried = await app.inject({
+      method: 'POST', url: '/api/v1/sync/push', headers: family.headers,
+      payload: { deviceId: 'test-device', familyId: family.familyId, operations: [op] },
+    });
+    expect(retried.statusCode).toBe(200);
+    const gems = await app.inject({ method: 'GET', url: '/api/v1/gems/transactions', headers: family.headers });
+    expect(gems.json().data).toHaveLength(1);
   });
 
   it('C: A edits note, B edits recordedAt (non-overlap) → auto merge, both fields land', async () => {

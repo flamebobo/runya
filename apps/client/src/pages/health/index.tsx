@@ -282,6 +282,10 @@ function HealthBody() {
           void Taro.navigateTo({ url: '/pages/settings/index' });
           return;
         }
+        if (item.id === 'baby') {
+          void Taro.navigateTo({ url: '/pages/baby/index' });
+          return;
+        }
         showToast(`${item.title}正在布置，先把今天收好`);
       },
     }));
@@ -549,12 +553,18 @@ function HealthBody() {
           gemAmount={gemAmount}
           items={drawerItems()}
           onClose={() => setDrawerOpen(false)}
-          onSearchClick={() => showToast('搜索正在布置')}
+          onSearchClick={() => {
+            setDrawerOpen(false);
+            void Taro.navigateTo({ url: '/pages/search/index' });
+          }}
           onNotificationClick={() => {
             setDrawerOpen(false);
             void Taro.navigateTo({ url: '/pages/notifications/index' });
           }}
-          onAdminClick={() => showToast('管理模式正在布置')}
+          onAdminClick={() => {
+            setDrawerOpen(false);
+            void Taro.navigateTo({ url: '/pages/admin/index' });
+          }}
         />
       ) : null}
     </PageShell>

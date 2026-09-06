@@ -1,12 +1,17 @@
 import { fireEvent, render, screen } from '@testing-library/react';
-import type { KnowledgeRecommendation } from '@runew/contracts';
+import type { KnowledgeDetail, KnowledgeRecommendation } from '@runew/contracts';
 import { describe, expect, it, vi } from 'vitest';
 import {
   KnowledgeCard,
+  KnowledgeDetailView,
+  KnowledgeLibraryView,
   KnowledgeQuickEntry,
   KnowledgeSearchBar,
+  KnowledgeSearchView,
   formatAgeWindow,
   formatReviewDate,
+  libraryItemToPublic,
+  libraryStateFromParam,
 } from './KnowledgeViews';
 
 const article: KnowledgeRecommendation = {
@@ -25,6 +30,11 @@ const article: KnowledgeRecommendation = {
   updatedAt: Date.UTC(2026, 7, 20),
   version: 1,
   reason: '适合 3–7 个月大的宝宝',
+};
+
+const detailArticle: KnowledgeDetail = {
+  ...article,
+  body: '第一段讲困意信号。\n\n第二段讲对照作息表。',
 };
 
 describe('knowledge cards', () => {
@@ -137,5 +147,99 @@ describe('knowledge quick entries and search bar', () => {
   it('plays the learned-out transition when justLearned is set', () => {
     render(<KnowledgeCard item={article} justLearned onClick={vi.fn()} />);
     expect(screen.getByText('已记下，下一篇继续')).toBeTruthy();
+  });
+});
+
+describe('knowledge library mapping and tabs', () => {
+  it('keeps source and age when mapping a library item onto a card', () => {
+    const publicItem = libraryItemToPublic({
+      knowledgeId: article.id,
+      saved: true,
+      readLater: false,
+      dismissed: false,
+      learnedVersion: null,
+      learnedAt: null,
+      contentVersion: 1,
+      contentUpdated: false,
+      version: 1,
+      title: article.title,
+      summary: article.summary,
+      category: article.category,
+      sourceName: article.sourceName,
+      minAgeDays: article.minAgeDays,
+      maxAgeDays: article.maxAgeDays,
+    });
+
+    expect(libraryStateFromParam('later')).toBe('later');
+    expect(libraryStateFromParam('weird')).toBe('saved');
+    expect(publicItem.sourceName).toBe('美国儿科学会育儿百科');
+    expect(publicItem.minAgeDays).toBe(90);
+    expect(publicItem.maxAgeDays).toBe(210);
+  });
+
+  it('keeps the tab bar mounted and reports the next library state', () => {
+    const onStateChange = vi.fn();
+    render(
+      <KnowledgeLibraryView
+        state="saved"
+        items={[]}
+        onStateChange={onStateChange}
+        onOpen={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole('tablist', { name: '切换收藏、稍后看和已学' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('tab', { name: '稍后看' }));
+    expect(onStateChange).toHaveBeenCalledWith('later');
+    expect(screen.getByRole('tab', { name: '已学' })).toBeTruthy();
+  });
+});
+
+describe('knowledge detail and search screens', () => {
+  it('renders the reading hero, source chip and a 2x2 action pad', () => {
+    const onToggleSaved = vi.fn();
+    render(
+      <KnowledgeDetailView
+        article={detailArticle}
+        saved={false}
+        readLater={false}
+        learnedThisVersion={false}
+        contentUpdated={false}
+        onLearned={vi.fn()}
+        onToggleSaved={onToggleSaved}
+        onToggleLater={vi.fn()}
+        onDismiss={vi.fn()}
+        onFeedback={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText('白天小睡的节奏，可以慢慢观察出来')).toBeTruthy();
+    expect(screen.getByText(/来源 · 美国儿科学会育儿百科/)).toBeTruthy();
+    expect(screen.getByRole('button', { name: '学到了' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: '收藏' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: '稍后看' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: '更多' })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: '收藏' }));
+    expect(onToggleSaved).toHaveBeenCalledTimes(1);
+  });
+
+  it('searches from a hint chip without leaving the empty state chrome', () => {
+    const onDraftChange = vi.fn();
+    const onSearch = vi.fn();
+    render(
+      <KnowledgeSearchView
+        draft=""
+        query=""
+        onDraftChange={onDraftChange}
+        onSearch={onSearch}
+        onOpen={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '辅食' }));
+    expect(onDraftChange).toHaveBeenCalledWith('辅食');
+    expect(onSearch).toHaveBeenCalledWith('辅食');
+    expect(screen.getByText('想了解点什么？')).toBeTruthy();
   });
 });

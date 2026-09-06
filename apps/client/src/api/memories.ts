@@ -139,9 +139,15 @@ export function createBabyQuote(
   });
 }
 
-export function updateBabyQuote(id: string, body: UpdateBabyQuoteBody, token?: string) {
+export function updateBabyQuote(
+  id: string,
+  body: UpdateBabyQuoteBody,
+  version: number,
+  token?: string,
+) {
   return apiRequest<BabyQuotePublic>(`/memories/quotes/${id}`, {
     ...options(token, 'PATCH'),
+    ifMatch: `"v${version}"`,
     body,
   });
 }
@@ -267,10 +273,12 @@ export function createTimeCapsule(
 export function updateTimeCapsule(
   id: string,
   body: UpdateTimeCapsuleBody,
+  version: number,
   token?: string,
 ) {
   return apiRequest<TimeCapsulePublic>(`/memories/capsules/${id}`, {
     ...options(token, 'PATCH'),
+    ifMatch: `"v${version}"`,
     body,
   });
 }

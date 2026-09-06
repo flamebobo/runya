@@ -89,10 +89,15 @@ import {
   saveDurableLocalMedia,
   type DurableLocalMedia,
 } from '@/local/mediaStorage';
-import { clearDraft, loadDraft, saveDraft } from '@/local/draftStore';
 import { resumePendingMediaUploads, uploadDurableMedia } from '@/local/uploadManager';
 import { useBootstrapQuery } from '@/hooks/useBootstrap';
-import { useFamilyRuntimeStore, useUiOverlayStore } from '@/stores/runtime';
+import { useAutoDraft } from '@/hooks/useAutoDraft';
+import { ApiError } from '@/api/client';
+import {
+  useAuthRuntimeStore,
+  useFamilyRuntimeStore,
+  useUiOverlayStore,
+} from '@/stores/runtime';
 import { formatBabyAgeLabel } from '@/utils/babyAge';
 import { rootTabUrl } from '@/utils/rootNavigation';
 
@@ -150,6 +155,20 @@ function memoryQuickAction(value: string | undefined): MemoryQuickAction | null 
     : null;
 }
 
+function memoryTab(value: string | undefined): MemoriesTab | null {
+  return value === 'summary' ||
+    value === 'photos' ||
+    value === 'quotes' ||
+    value === 'audios' ||
+    value === 'firsts' ||
+    value === 'capsules' ||
+    value === 'favorites' ||
+    value === 'onThisDay' ||
+    value === 'annual'
+    ? value
+    : null;
+}
+
 type DeleteRequest = {
   kind: 'photo' | 'quote' | 'audio' | 'first' | 'capsule';
   id: string;
@@ -172,8 +191,14 @@ function getPickedInput(picked: PickedMedia) {
   return input;
 }
 
-function memoryDraftKey(kind: 'quote' | 'capsule', babyId: string) {
-  return `memories:${kind}:${babyId}`;
+function memoryDraftKey(
+  kind: 'quote' | 'capsule',
+  babyId: string,
+  userId = 'anonymous',
+  familyId = 'none',
+  entityId = 'new',
+) {
+  return `memories:${kind}:${userId}:${familyId}:${babyId}:${entityId}`;
 }
 
 type MemoryAttachmentType = 'IMAGE' | 'AUDIO' | 'VIDEO';
@@ -190,7 +215,10 @@ export default function MemoriesPage({ embedded = false }: { embedded?: boolean 
 export function MemoriesBody({ embedded = false }: { embedded?: boolean }) {
   const router = useRouter();
   const quickAction = memoryQuickAction(router.params.action);
+  const requestedTab = memoryTab(router.params.tab);
   const babyId = useFamilyRuntimeStore((state) => state.babyId);
+  const userId = useAuthRuntimeStore((state) => state.userId) ?? 'anonymous';
+  const familyId = useFamilyRuntimeStore((state) => state.familyId) ?? 'none';
   const bootstrap = useBootstrapQuery(false);
   const baby = bootstrap.data?.currentBaby;
   const babyName = baby?.nickname ?? baby?.name ?? '宝宝';
@@ -204,7 +232,7 @@ export function MemoriesBody({ embedded = false }: { embedded?: boolean }) {
     setSheetOpen,
     showToast,
   } = useUiOverlayStore();
-  const [activeTab, setActiveTab] = useState<MemoriesTab>('summary');
+  const [activeTab, setActiveTab] = useState<MemoriesTab>(requestedTab ?? 'summary');
   const [summary, setSummary] = useState<MemoriesHomeSummary | null>(null);
   const [photos, setPhotos] = useState<PhotoMemoryPublic[]>([]);
   const [quotes, setQuotes] = useState<BabyQuotePublic[]>([]);
@@ -217,6 +245,10 @@ export function MemoriesBody({ embedded = false }: { embedded?: boolean }) {
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [uploadNotice, setUploadNotice] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (requestedTab) setActiveTab(requestedTab);
+  }, [requestedTab]);
 
   const [composeSheetVisible, setComposeSheetVisible] = useState(false);
   const [micSheetVisible, setMicSheetVisible] = useState(false);
@@ -245,6 +277,8 @@ export function MemoriesBody({ embedded = false }: { embedded?: boolean }) {
 
   const [quoteModalVisible, setQuoteModalVisible] = useState(false);
   const [editingQuoteId, setEditingQuoteId] = useState<string | null>(null);
+  const [editingQuoteVersion, setEditingQuoteVersion] = useState<number | null>(null);
+  const [quoteSaveConflict, setQuoteSaveConflict] = useState(false);
   const [quoteText, setQuoteText] = useState('');
   const [quoteDate, setQuoteDate] = useState(todayDateInput());
   const [quoteFavorite, setQuoteFavorite] = useState(false);
@@ -283,6 +317,8 @@ export function MemoriesBody({ embedded = false }: { embedded?: boolean }) {
 
   const [capsuleModalVisible, setCapsuleModalVisible] = useState(false);
   const [editingCapsuleId, setEditingCapsuleId] = useState<string | null>(null);
+  const [editingCapsuleVersion, setEditingCapsuleVersion] = useState<number | null>(null);
+  const [capsuleSaveConflict, setCapsuleSaveConflict] = useState(false);
   const [capsuleRecipient, setCapsuleRecipient] = useState('');
   const [capsuleTitle, setCapsuleTitle] = useState('');
   const [capsuleBody, setCapsuleBody] = useState('');
@@ -301,6 +337,41 @@ export function MemoriesBody({ embedded = false }: { embedded?: boolean }) {
   const [deleteRequest, setDeleteRequest] = useState<DeleteRequest | null>(null);
   const [deletedMemory, setDeletedMemory] = useState<DeletedMemory | null>(null);
   const handledQuickAction = useRef<MemoryQuickAction | null>(null);
+  const quoteDraftKey = babyId
+    ? memoryDraftKey('quote', babyId, userId, familyId, editingQuoteId ?? 'new')
+    : 'memories:quote:none';
+  const capsuleDraftKey = babyId
+    ? memoryDraftKey('capsule', babyId, userId, familyId, editingCapsuleId ?? 'new')
+    : 'memories:capsule:none';
+  const quoteDraftSession = useRef('');
+  const capsuleDraftSession = useRef('');
+  const quoteDraft = useAutoDraft({
+    key: quoteDraftKey,
+    values: {
+      quoteText,
+      quoteDate,
+      quoteFavorite,
+      quoteAudioMediaId,
+      quotePendingAudioLocalId: quotePendingAudio?.localId ?? null,
+    },
+    paused: !quoteModalVisible || !babyId,
+    serverVersion: editingQuoteVersion ?? undefined,
+  });
+  const capsuleDraft = useAutoDraft({
+    key: capsuleDraftKey,
+    values: {
+      capsuleRecipient,
+      capsuleTitle,
+      capsuleBody,
+      capsuleOpenDate,
+      capsuleMediaId,
+      capsuleMediaType,
+      capsulePendingMediaLocalId: capsulePendingMedia?.localId ?? null,
+      capsulePendingMediaType,
+    },
+    paused: !capsuleModalVisible || !babyId,
+    serverVersion: editingCapsuleVersion ?? undefined,
+  });
 
   const loadData = useCallback(async () => {
     if (!babyId) {
@@ -688,29 +759,18 @@ export function MemoriesBody({ embedded = false }: { embedded?: boolean }) {
     }
   }
 
-  const openQuoteDraft = useCallback(async () => {
+  const openQuoteDraft = useCallback(() => {
     setEditingQuoteId(null);
-    const draft = babyId
-      ? await loadDraft(memoryDraftKey('quote', babyId)).catch(() => null)
-      : null;
-    const pendingLocalId =
-      typeof draft?.quotePendingAudioLocalId === 'string'
-        ? draft.quotePendingAudioLocalId
-        : null;
-    const pendingAudio = pendingLocalId
-      ? await getDurableMediaMetadata(pendingLocalId).catch(() => null)
-      : null;
-    setQuoteText(typeof draft?.quoteText === 'string' ? draft.quoteText : '');
-    setQuoteDate(
-      typeof draft?.quoteDate === 'string' ? draft.quoteDate : todayDateInput(),
-    );
-    setQuoteFavorite(draft?.quoteFavorite === true);
-    setQuoteAudioMediaId(
-      typeof draft?.quoteAudioMediaId === 'string' ? draft.quoteAudioMediaId : null,
-    );
-    setQuotePendingAudio(pendingAudio ?? null);
+    setEditingQuoteVersion(null);
+    setQuoteSaveConflict(false);
+    quoteDraftSession.current = '';
+    setQuoteText('');
+    setQuoteDate(todayDateInput());
+    setQuoteFavorite(false);
+    setQuoteAudioMediaId(null);
+    setQuotePendingAudio(null);
     setQuoteModalVisible(true);
-  }, [babyId]);
+  }, []);
 
   const openQuoteCreate = useCallback(() => {
     void openQuoteDraft();
@@ -718,6 +778,9 @@ export function MemoriesBody({ embedded = false }: { embedded?: boolean }) {
 
   function openQuoteEdit(quote: BabyQuotePublic) {
     setEditingQuoteId(quote.id);
+    setEditingQuoteVersion(quote.version);
+    setQuoteSaveConflict(false);
+    quoteDraftSession.current = '';
     setQuoteText(quote.quoteText);
     setQuoteDate(dateInputFromTimestamp(quote.happenedAt));
     setQuoteFavorite(quote.favorite);
@@ -727,12 +790,17 @@ export function MemoriesBody({ embedded = false }: { embedded?: boolean }) {
   }
 
   async function handleSaveQuote() {
+    if (quoteDraft.conflict || quoteSaveConflict) return;
     if (!babyId || !quoteText.trim()) {
       Taro.showToast({ title: '写下宝宝说的这句话吧', icon: 'none' });
       return;
     }
     if (quotePendingAudio && !quoteAudioMediaId) {
       Taro.showToast({ title: '语音原件已安全保存在本机，请先重试上传', icon: 'none' });
+      return;
+    }
+    if (editingQuoteId && editingQuoteVersion === null) {
+      Taro.showToast({ title: '语录版本读取失败，请重新打开后保存', icon: 'none' });
       return;
     }
     try {
@@ -742,17 +810,21 @@ export function MemoriesBody({ embedded = false }: { embedded?: boolean }) {
         audioMediaId: quoteAudioMediaId ?? undefined,
         favorite: quoteFavorite,
       };
-      if (editingQuoteId) await updateBabyQuote(editingQuoteId, body);
-      else await createBabyQuote(babyId, body);
+      if (editingQuoteId) {
+        await updateBabyQuote(editingQuoteId, body, editingQuoteVersion!);
+      } else await createBabyQuote(babyId, body);
       setQuoteModalVisible(false);
       await loadData();
-      if (babyId)
-        void clearDraft(memoryDraftKey('quote', babyId)).catch(() => undefined);
+      await quoteDraft.clear();
       Taro.showToast({
         title: editingQuoteId ? '宝宝语录已更新' : '宝宝语录已收藏',
         icon: 'success',
       });
     } catch (error) {
+      if (error instanceof ApiError && error.code === 'ENTITY_VERSION_CONFLICT') {
+        setQuoteSaveConflict(true);
+        return;
+      }
       Taro.showToast({
         title: error instanceof Error ? error.message : '宝宝语录保存失败',
         icon: 'none',
@@ -868,48 +940,21 @@ export function MemoriesBody({ embedded = false }: { embedded?: boolean }) {
     }
   }
 
-  const openCapsuleDraft = useCallback(async () => {
+  const openCapsuleDraft = useCallback(() => {
     setEditingCapsuleId(null);
-    const draft = babyId
-      ? await loadDraft(memoryDraftKey('capsule', babyId)).catch(() => null)
-      : null;
-    const pendingLocalId =
-      typeof draft?.capsulePendingMediaLocalId === 'string'
-        ? draft.capsulePendingMediaLocalId
-        : null;
-    const pendingMedia = pendingLocalId
-      ? await getDurableMediaMetadata(pendingLocalId).catch(() => null)
-      : null;
-    setCapsuleRecipient(
-      typeof draft?.capsuleRecipient === 'string' ? draft.capsuleRecipient : '',
-    );
-    setCapsuleTitle(typeof draft?.capsuleTitle === 'string' ? draft.capsuleTitle : '');
-    setCapsuleBody(typeof draft?.capsuleBody === 'string' ? draft.capsuleBody : '');
-    setCapsuleOpenDate(
-      typeof draft?.capsuleOpenDate === 'string'
-        ? draft.capsuleOpenDate
-        : todayDateInput(),
-    );
-    setCapsuleMediaId(
-      typeof draft?.capsuleMediaId === 'string' ? draft.capsuleMediaId : null,
-    );
-    setCapsuleMediaType(
-      toMemoryAttachmentType(
-        typeof draft?.capsuleMediaType === 'string'
-          ? draft.capsuleMediaType
-          : undefined,
-      ),
-    );
-    setCapsulePendingMedia(pendingMedia ?? null);
-    setCapsulePendingMediaType(
-      toMemoryAttachmentType(
-        typeof draft?.capsulePendingMediaType === 'string'
-          ? draft.capsulePendingMediaType
-          : undefined,
-      ),
-    );
+    setEditingCapsuleVersion(null);
+    setCapsuleSaveConflict(false);
+    capsuleDraftSession.current = '';
+    setCapsuleRecipient('');
+    setCapsuleTitle('');
+    setCapsuleBody('');
+    setCapsuleOpenDate(todayDateInput());
+    setCapsuleMediaId(null);
+    setCapsuleMediaType('IMAGE');
+    setCapsulePendingMedia(null);
+    setCapsulePendingMediaType('IMAGE');
     setCapsuleModalVisible(true);
-  }, [babyId]);
+  }, []);
 
   const openCapsuleCreate = useCallback(() => {
     void openCapsuleDraft();
@@ -918,6 +963,9 @@ export function MemoriesBody({ embedded = false }: { embedded?: boolean }) {
   function openCapsuleEdit(capsule: TimeCapsulePublic) {
     if (capsule.state !== 'DRAFT') return;
     setEditingCapsuleId(capsule.id);
+    setEditingCapsuleVersion(capsule.version);
+    setCapsuleSaveConflict(false);
+    capsuleDraftSession.current = '';
     setCapsuleRecipient(capsule.recipientText ?? '');
     setCapsuleTitle(capsule.title);
     setCapsuleBody(capsule.body);
@@ -930,6 +978,7 @@ export function MemoriesBody({ embedded = false }: { embedded?: boolean }) {
   }
 
   async function handleSaveCapsule(sealNow = false) {
+    if (capsuleDraft.conflict || capsuleSaveConflict) return;
     if (!babyId || !capsuleTitle.trim() || !capsuleBody.trim()) {
       Taro.showToast({ title: '请填写胶囊标题和想说的话', icon: 'none' });
       return;
@@ -938,15 +987,23 @@ export function MemoriesBody({ embedded = false }: { embedded?: boolean }) {
       Taro.showToast({ title: '附件原件已安全保存在本机，请先重试上传', icon: 'none' });
       return;
     }
+    if (editingCapsuleId && editingCapsuleVersion === null) {
+      Taro.showToast({ title: '胶囊版本读取失败，请重新打开后保存', icon: 'none' });
+      return;
+    }
     try {
       if (editingCapsuleId) {
-        await updateTimeCapsule(editingCapsuleId, {
-          title: capsuleTitle,
-          body: capsuleBody,
-          openAt: timestampFromDateInput(capsuleOpenDate),
-          recipientText: capsuleRecipient || null,
-          mediaIds: capsuleMediaId ? [capsuleMediaId] : undefined,
-        });
+        await updateTimeCapsule(
+          editingCapsuleId,
+          {
+            title: capsuleTitle,
+            body: capsuleBody,
+            openAt: timestampFromDateInput(capsuleOpenDate),
+            recipientText: capsuleRecipient || null,
+            mediaIds: capsuleMediaId ? [capsuleMediaId] : undefined,
+          },
+          editingCapsuleVersion!,
+        );
       } else {
         await createTimeCapsule(babyId, {
           title: capsuleTitle,
@@ -959,13 +1016,16 @@ export function MemoriesBody({ embedded = false }: { embedded?: boolean }) {
       }
       setCapsuleModalVisible(false);
       await loadData();
-      if (babyId)
-        void clearDraft(memoryDraftKey('capsule', babyId)).catch(() => undefined);
+      await capsuleDraft.clear();
       Taro.showToast({
         title: sealNow ? '时光胶囊已封存' : '时光胶囊草稿已保存',
         icon: 'success',
       });
     } catch (error) {
+      if (error instanceof ApiError && error.code === 'ENTITY_VERSION_CONFLICT') {
+        setCapsuleSaveConflict(true);
+        return;
+      }
       Taro.showToast({
         title: error instanceof Error ? error.message : '时光胶囊保存失败',
         icon: 'none',
@@ -1184,56 +1244,61 @@ export function MemoriesBody({ embedded = false }: { embedded?: boolean }) {
   }, [handleMemoryQuickAction, quickAction]);
 
   useEffect(() => {
-    if (!babyId || !quoteModalVisible || editingQuoteId) return undefined;
-    const timer = setTimeout(() => {
-      void saveDraft(memoryDraftKey('quote', babyId), {
-        quoteText,
-        quoteDate,
-        quoteFavorite,
-        quoteAudioMediaId,
-        quotePendingAudioLocalId: quotePendingAudio?.localId ?? null,
-      }).catch(() => undefined);
-    }, 500);
-    return () => clearTimeout(timer);
-  }, [
-    babyId,
-    editingQuoteId,
-    quoteAudioMediaId,
-    quoteDate,
-    quoteFavorite,
-    quoteModalVisible,
-    quotePendingAudio,
-    quoteText,
-  ]);
+    if (!babyId || !quoteModalVisible || !quoteDraft.ready) return;
+    if (quoteDraftSession.current === quoteDraftKey) return;
+    quoteDraftSession.current = quoteDraftKey;
+    if (quoteDraft.conflict) return;
+    const restored = quoteDraft.recover();
+    if (!restored) return;
+    setQuoteText(typeof restored.quoteText === 'string' ? restored.quoteText : '');
+    setQuoteDate(typeof restored.quoteDate === 'string' ? restored.quoteDate : todayDateInput());
+    setQuoteFavorite(restored.quoteFavorite === true);
+    setQuoteAudioMediaId(
+      typeof restored.quoteAudioMediaId === 'string' ? restored.quoteAudioMediaId : null,
+    );
+    const pendingLocalId =
+      typeof restored.quotePendingAudioLocalId === 'string'
+        ? restored.quotePendingAudioLocalId
+        : null;
+    if (pendingLocalId) {
+      void getDurableMediaMetadata(pendingLocalId)
+        .then((media) => setQuotePendingAudio(media ?? null))
+        .catch(() => setQuotePendingAudio(null));
+    }
+  }, [babyId, quoteDraft, quoteDraftKey, quoteModalVisible]);
 
   useEffect(() => {
-    if (!babyId || !capsuleModalVisible || editingCapsuleId) return undefined;
-    const timer = setTimeout(() => {
-      void saveDraft(memoryDraftKey('capsule', babyId), {
-        capsuleRecipient,
-        capsuleTitle,
-        capsuleBody,
-        capsuleOpenDate,
-        capsuleMediaId,
-        capsuleMediaType,
-        capsulePendingMediaLocalId: capsulePendingMedia?.localId ?? null,
-        capsulePendingMediaType,
-      }).catch(() => undefined);
-    }, 500);
-    return () => clearTimeout(timer);
-  }, [
-    babyId,
-    capsuleBody,
-    capsuleMediaId,
-    capsuleMediaType,
-    capsuleModalVisible,
-    capsuleOpenDate,
-    capsulePendingMedia,
-    capsulePendingMediaType,
-    capsuleRecipient,
-    capsuleTitle,
-    editingCapsuleId,
-  ]);
+    if (!babyId || !capsuleModalVisible || !capsuleDraft.ready) return;
+    if (capsuleDraftSession.current === capsuleDraftKey) return;
+    capsuleDraftSession.current = capsuleDraftKey;
+    if (capsuleDraft.conflict) return;
+    const restored = capsuleDraft.recover();
+    if (!restored) return;
+    setCapsuleRecipient(typeof restored.capsuleRecipient === 'string' ? restored.capsuleRecipient : '');
+    setCapsuleTitle(typeof restored.capsuleTitle === 'string' ? restored.capsuleTitle : '');
+    setCapsuleBody(typeof restored.capsuleBody === 'string' ? restored.capsuleBody : '');
+    setCapsuleOpenDate(
+      typeof restored.capsuleOpenDate === 'string' ? restored.capsuleOpenDate : todayDateInput(),
+    );
+    setCapsuleMediaId(typeof restored.capsuleMediaId === 'string' ? restored.capsuleMediaId : null);
+    setCapsuleMediaType(toMemoryAttachmentType(
+      typeof restored.capsuleMediaType === 'string' ? restored.capsuleMediaType : undefined,
+    ));
+    setCapsulePendingMediaType(toMemoryAttachmentType(
+      typeof restored.capsulePendingMediaType === 'string'
+        ? restored.capsulePendingMediaType
+        : undefined,
+    ));
+    const pendingLocalId =
+      typeof restored.capsulePendingMediaLocalId === 'string'
+        ? restored.capsulePendingMediaLocalId
+        : null;
+    if (pendingLocalId) {
+      void getDurableMediaMetadata(pendingLocalId)
+        .then((media) => setCapsulePendingMedia(media ?? null))
+        .catch(() => setCapsulePendingMedia(null));
+    }
+  }, [babyId, capsuleDraft, capsuleDraftKey, capsuleModalVisible]);
 
   const renderPhotoCard = (photo: PhotoMemoryPublic) => {
     const media = photo.media[0];
@@ -1318,7 +1383,7 @@ export function MemoriesBody({ embedded = false }: { embedded?: boolean }) {
             icon={<Glyph name="heart" size="sm" />}
             onClick={() =>
               void toggleMemoryFavorite(() =>
-                updateBabyQuote(quote.id, { favorite: !quote.favorite }),
+                updateBabyQuote(quote.id, { favorite: !quote.favorite }, quote.version),
               )
             }
           />
@@ -1902,12 +1967,32 @@ export function MemoriesBody({ embedded = false }: { embedded?: boolean }) {
                 />
               </View>
             ) : null}
+            {quoteDraft.conflict || quoteSaveConflict ? (
+              <View className={styles.uploadPendingRow}>
+                <Text>
+                  {quoteSaveConflict
+                    ? '这条语录刚在别处更新，为避免覆盖，当前修改没有保存。'
+                    : '这份草稿基于旧版本，已停止自动恢复。'}
+                </Text>
+                <TextAction
+                  label="丢弃草稿并查看最新版本"
+                  onClick={() =>
+                    void quoteDraft.discard().then(async () => {
+                      setQuoteSaveConflict(false);
+                      setQuoteModalVisible(false);
+                      await loadData();
+                    })
+                  }
+                />
+              </View>
+            ) : null}
             <SecondaryGlassButton
               label={quoteFavorite ? '已加入珍藏' : '加入我的珍藏'}
               onClick={() => setQuoteFavorite((value) => !value)}
             />
             <PrimaryActionButton
               label={editingQuoteId ? '保存修改' : '保存宝宝语录'}
+              state={quoteDraft.conflict || quoteSaveConflict ? 'disabled' : 'default'}
               onClick={() => void handleSaveQuote()}
             />
           </View>
@@ -2151,9 +2236,29 @@ export function MemoriesBody({ embedded = false }: { embedded?: boolean }) {
                 />
               </View>
             ) : null}
+            {capsuleDraft.conflict || capsuleSaveConflict ? (
+              <View className={styles.uploadPendingRow}>
+                <Text>
+                  {capsuleSaveConflict
+                    ? '这封胶囊刚在别处更新，为避免覆盖，当前修改没有保存。'
+                    : '这份草稿基于旧版本，已停止自动恢复。'}
+                </Text>
+                <TextAction
+                  label="丢弃草稿并查看最新版本"
+                  onClick={() =>
+                    void capsuleDraft.discard().then(async () => {
+                      setCapsuleSaveConflict(false);
+                      setCapsuleModalVisible(false);
+                      await loadData();
+                    })
+                  }
+                />
+              </View>
+            ) : null}
             {editingCapsuleId ? (
               <PrimaryActionButton
                 label="保存草稿修改"
+                state={capsuleDraft.conflict || capsuleSaveConflict ? 'disabled' : 'default'}
                 onClick={() => void handleSaveCapsule(false)}
               />
             ) : (
@@ -2234,18 +2339,26 @@ export function MemoriesBody({ embedded = false }: { embedded?: boolean }) {
               void Taro.navigateTo({ url: '/pages/health/index' });
             } else if (item.id === 'settings') {
               void Taro.navigateTo({ url: '/pages/settings/index' });
+            } else if (item.id === 'baby') {
+              void Taro.navigateTo({ url: '/pages/baby/index' });
             } else {
               showToast(`${item.title}正在布置，先逛逛回忆馆`);
             }
           },
         }))}
         onClose={() => setDrawerOpen(false)}
-        onSearchClick={() => showToast('搜索正在布置')}
+        onSearchClick={() => {
+          setDrawerOpen(false);
+          void Taro.navigateTo({ url: '/pages/search/index' });
+        }}
         onNotificationClick={() => {
           setDrawerOpen(false);
           void Taro.navigateTo({ url: '/pages/notifications/index' });
         }}
-        onAdminClick={() => showToast('管理模式正在布置')}
+        onAdminClick={() => {
+          setDrawerOpen(false);
+          void Taro.navigateTo({ url: '/pages/admin/index' });
+        }}
       />
       <AddMomentOverlay
         open={sheetOpen}

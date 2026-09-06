@@ -1,10 +1,10 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { runMigrations } from '@runew/db';
+import { mediaFiles, runMigrations } from '@runew/db';
 import { createUlid } from '@runew/shared-utils';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { buildApp } from '../../app.js';
+import { LOG_REDACT_PATHS, buildApp } from '../../app.js';
 
 const WEAPP_HEADERS = { 'x-client-platform': 'WEAPP' };
 
@@ -22,6 +22,7 @@ describe('Mom Space PRIVATE boundary (M8)', () => {
   let familyId: string;
   let privateDiaryId: string;
   let familyDiaryId: string;
+  let privateDiaryMediaId: string;
   let moodId: string;
 
   beforeAll(async () => {
@@ -82,7 +83,7 @@ describe('Mom Space PRIVATE boundary (M8)', () => {
       headers: { ...momHeaders, 'idempotency-key': createUlid() },
       payload: { relationshipHint: 'DAD' },
     });
-    expect(inviteRes.statusCode).toBe(200);
+    expect(inviteRes.statusCode).toBe(201);
     const inviteToken = inviteRes.json().data.token as string;
     const acceptRes = await app.inject({
       method: 'POST',
@@ -106,6 +107,31 @@ describe('Mom Space PRIVATE boundary (M8)', () => {
     });
     expect(privateDiary.statusCode).toBe(200);
     privateDiaryId = privateDiary.json().data.id as string;
+
+    privateDiaryMediaId = createUlid();
+    const now = Date.now();
+    await app.db.insert(mediaFiles).values({
+      id: privateDiaryMediaId,
+      familyId,
+      ownerUserId: momRegister.json().data.user.id as string,
+      mediaType: 'IMAGE',
+      status: 'READY',
+      mimeType: 'image/png',
+      originalFilename: 'private-diary.png',
+      sizeBytes: 1,
+      sha256: '0'.repeat(64),
+      keepOriginal: true,
+      createdAt: now,
+      updatedAt: now,
+      version: 1,
+    });
+    const attachPrivateMedia = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/mom/diaries/${privateDiaryId}`,
+      headers: momHeaders,
+      payload: { mediaIds: [privateDiaryMediaId] },
+    });
+    expect(attachPrivateMedia.statusCode).toBe(200);
 
     const familyDiary = await app.inject({
       method: 'POST',
@@ -155,7 +181,7 @@ describe('Mom Space PRIVATE boundary (M8)', () => {
     expect(ids).toContain(privateDiaryId);
   });
 
-  it('dad list does NOT contain mom PRIVATE diary (contains FAMILY one)', async () => {
+  it('dad list hides mom PRIVATE diary and includes FAMILY diary', async () => {
     const res = await app.inject({
       method: 'GET',
       url: '/api/v1/mom/diaries',
@@ -165,6 +191,7 @@ describe('Mom Space PRIVATE boundary (M8)', () => {
     const data = res.json().data as Array<{ id: string; body: string }>;
     const ids = data.map((item) => item.id);
     expect(ids).not.toContain(privateDiaryId);
+    expect(ids).toContain(familyDiaryId);
     // 响应任何位置都不能出现 PRIVATE 正文（先返回再前端隐藏 = 违规）。
     expect(JSON.stringify(data)).not.toContain('只有我自己知道的话');
   });
@@ -177,6 +204,66 @@ describe('Mom Space PRIVATE boundary (M8)', () => {
     });
     expect(res.statusCode).toBe(404);
     expect(JSON.stringify(res.json())).not.toContain('只有我自己知道的话');
+  });
+
+  it('dad can read a FAMILY diary in the active family', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/v1/mom/diaries/${familyDiaryId}`,
+      headers: dadHeaders,
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().data.id).toBe(familyDiaryId);
+    expect(res.json().data.body).toBe('这条家人可以看');
+  });
+
+  it('dad cannot edit a FAMILY diary owned by mom', async () => {
+    const res = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/mom/diaries/${familyDiaryId}`,
+      headers: dadHeaders,
+      payload: { body: '越权修改' },
+    });
+    expect(res.statusCode).toBe(404);
+  });
+
+  it('search keeps PRIVATE diary IDs and text invisible but returns FAMILY diary', async () => {
+    const dadPrivateSearch = await app.inject({
+      method: 'GET',
+      url: '/api/v1/mom/diaries/search?q=%E5%8F%AA%E6%9C%89%E6%88%91%E8%87%AA%E5%B7%B1',
+      headers: dadHeaders,
+    });
+    expect(dadPrivateSearch.statusCode).toBe(200);
+    expect(dadPrivateSearch.json().data).toEqual([]);
+    expect(JSON.stringify(dadPrivateSearch.json())).not.toContain(privateDiaryId);
+    expect(JSON.stringify(dadPrivateSearch.json())).not.toContain('只有我自己知道的话');
+
+    const dadFamilySearch = await app.inject({
+      method: 'GET',
+      url: '/api/v1/mom/diaries/search?q=%E4%B8%80%E5%AE%B6%E4%BA%BA',
+      headers: dadHeaders,
+    });
+    expect(dadFamilySearch.statusCode).toBe(200);
+    expect((dadFamilySearch.json().data as Array<{ id: string }>).map((item) => item.id))
+      .toContain(familyDiaryId);
+  });
+
+  it('dad cannot fetch media attached to a PRIVATE diary', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/v1/media/${privateDiaryMediaId}/content`,
+      headers: dadHeaders,
+    });
+    expect(res.statusCode).toBe(404);
+    expect(JSON.stringify(res.json())).not.toContain(privateDiaryMediaId);
+  });
+
+  it('logger configuration redacts private diary body fields', () => {
+    expect(LOG_REDACT_PATHS).toEqual(expect.arrayContaining([
+      'req.body.body',
+      'req.body.note',
+      'req.body.title',
+    ]));
   });
 
   it('dad direct PATCH on PRIVATE diary → 404', async () => {

@@ -286,6 +286,9 @@ describe('knowledge api', () => {
     expect(learnedItems.map((i: { title: string }) => i.title)).toEqual(['已学的']);
     expect(learnedItems[0].learnedVersion).toBe(1);
     expect(learnedItems[0].learnedAt).toBeGreaterThan(0);
+    expect(savedLib.json().data.items[0].sourceName).toBe('权威育儿指南');
+    expect(savedLib.json().data.items[0]).toHaveProperty('minAgeDays');
+    expect(savedLib.json().data.items[0]).toHaveProperty('maxAgeDays');
   });
 
   it('PUT state is idempotent and PUT twice keeps one row', async () => {

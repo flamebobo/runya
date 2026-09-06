@@ -20,6 +20,7 @@ import { appendSyncLog } from './log.js';
 import { applyGrowthPendingOperation } from '../growth/sync.js';
 import { applyHealthPendingOperation } from '../health/sync.js';
 import { requireFamilyMembership } from '../identity/service.js';
+import { awardRecordGem } from '../gems/service.js';
 
 type DailySyncEntityType = Extract<SyncEntityType, 'DIAPER_RECORD' | 'FOOD_RECORD'>;
 
@@ -515,6 +516,8 @@ export async function applyPendingOperation(
       });
     }
 
+    // /sync/push 已为每个 Operation 开启写事务，奖励与记录一起提交或回滚。
+    await awardRecordGem(db, operation.familyId, userId, entityType, operation.entityId, now);
     const row = await findEntityRow(db, entityType, operation.entityId);
     await appendSyncLog(
       db,

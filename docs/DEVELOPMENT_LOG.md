@@ -782,3 +782,559 @@ M7 READY：Media Platform / Memories 代码、API、数据库、可靠保存、�
 
 - 本次环境没有微信开发者工具真机 / 模拟器运行证据；Weapp 已完成编译验证，媒体设备权限与真实文件系统链路仍需设备验收。
 - 构建警告属于当前 Taro / CSS Modules / `rpx` 基线警告，不影响本次编译退出码。
+
+## M8 / M9 继续实施：宝石事务与回归验证
+
+**日期：** 2026-09-05
+
+### Changed
+
+- 保留现有 M8/M9 工作树与 `.claude/`、`.idea/`，未提交、清理或回退其他改动。
+- 补录睡眠与其他 Record Create 一致，在同一写事务保存记录、宝石奖励及 Sync Log。
+- 离线尿布/辅食 CREATE 在 `/sync/push` 已有的逐操作事务内接入 `awardRecordGem`；Operation 重放不重复奖励，奖励失败时记录与 ACK 一起回滚。
+- 兑换幂等键重用时校验原订单的 rewardId 与 redeemedBy；换用另一愿望返回 409，不返回不匹配的旧订单。
+- 取消与履约在写事务内重读订单状态，修复“取消读取 WAITING 后另一请求已完成，仍写入退款”的竞态；状态变化同时追加 Sync Log，锁争用返回可重试冲突。
+- Reconcile 使用同一事务读取 Ledger 并修复 Cache，避免用旧账本快照覆盖并发写入。
+- Scheduler 的宝石对账成功后，通过现有 job lock 持久化 24 小时后的下次执行时间；重启不重复对账，失败保留短锁以便重试，通知扫描仍为每 60 秒。
+- `@libsql/client` 从 0.14.0 升级至 0.18.0：独立最小程序证实旧版本抢锁失败后后续事务出现 `cannot commit transaction - SQL statements in progress`，新版本及 API 并发后退款测试恢复正常。依赖安装产生的无关 lockfile 平台元数据变动已还原，仅保留该升级的依赖变更。
+
+### Migrations
+
+- 本轮无新 Schema / Migration；继续使用 `0010_m9_gems.sql` 的不可变账本触发器。
+
+### API / Contracts
+
+- 本轮不新增 endpoint 或修改 payload schema；修正既有 Record Create、sync push、redeem、cancel、fulfill 的事务与幂等行为。
+- 保留此前接入的 Gems API、活动家庭解析与客户端页面；这些文件仍在未提交工作树中。
+
+### UI / States
+
+- 本轮未进行 UI 修改与浏览器截图验收，不以构建成功代替视觉或真实交互完成。
+
+### Verification
+
+- `rtk pnpm test`：40 个测试文件、213 个测试通过。
+- Gems 集成测试 10 例通过，覆盖活动家庭、Record 奖励、补录睡眠重放、Daily Cap 不阻止记录保存、兑换幂等/异请求冲突、价格修改后订单快照、余额不足、并发余额只够一单、取消/履约竞态、单次退款与缓存校准。
+- Sync 集成测试 13 例通过，包括尿布/辅食离线重放只奖励一次、奖励写入故障导致 Record/ACK 回滚及随后安全重试。
+- Scheduler 集成测试 9 例通过，包括每日 Reconcile、重启保持调度时间、通知每分钟扫描不变。
+- `db/schema.test.ts` 验证账本 UPDATE/DELETE 被 immutable trigger 拒绝。
+- `rtk proxy pnpm run typecheck`：全部 workspace 通过。`rtk pnpm typecheck` 曾错误转发成根目录 `tsc` 帮助输出，其退出码 1 未计入通过证据。
+- `rtk pnpm lint`、`rtk pnpm db:check`：通过。
+- `rtk pnpm build`：packages、server、H5、Weapp 构建通过；最后追加同步修复后再次执行 server build 通过，客户端无新增变动。
+- `rtk proxy pnpm install --frozen-lockfile --ignore-scripts`：通过。
+- 保留现有 Fastify/Sass/React 测试环境告警及 Taro CSS 顺序、包体积、`rpx/calc` 构建告警；故障注入测试预期触发一次服务器错误日志。
+
+### Known Issues / Next Verification
+
+- M8 的 Diary、Baby Quote、Time Capsule、Health Note 尚未逐项完成统一 Auto Draft 生命周期、Kill 后恢复及 baseVersion 冲突可见处理的端到端验收；Memories 仍有自己的草稿保存路径，不能用 hook 单元测试代替四类表单集成证据。
+- PRIVATE 的 API/List 与媒体测试通过，但 Search、Notifications、Logs、Analytics 的完整负向证据仍待补齐；不存在某条调用路径不等于已完成相应隐私验收。
+- M9 仍需继续检查完整 Reward Detail / Custom Wish / Waiting / Completed / Cancel / Refund 的前端闭环、请求校验与权限边界、奖励规则展示及所有入口。
+- M8/M9 的指定 Frame、卡片/标题/按钮/字体/动画/交互打磨和 375x812、390x844、430x932 实际截图检查仍未执行。微信设备运行也未验收。
+
+### Status
+
+M8 NOT READY；M9 NOT READY。本轮完成的是已列出的后端修复与验证，不是两项 Milestone 的完整交付。
+
+## M8 / M9 继续实施：奖励同步拉取合同与窄屏交互回归
+
+**日期：** 2026-09-05
+
+### Changed
+
+- 奖励详情的操作按钮在窄屏保持横向可读；打开兑换确认弹层时关闭详情 Sheet，避免两个 Overlay 叠加并同时响应。
+- `/sync/pull` 的响应合同新增 `REWARD_ORDER` 变更类型。订单仍不是可离线推送的 Pending Operation 实体。
+- 客户端拉到订单变更时推进 sync cursor，但不写入仅供五类 Record 实体使用的本地离线缓存；订单页面继续以服务端查询结果为准。
+
+### Verification
+
+- `pnpm vitest run apps/client/src/local/syncEngine.test.ts apps/server/src/modules/gems/gems.test.ts`：15 个测试通过，覆盖兑换/退款后 `/sync/pull` 返回 `REWARD_ORDER`，以及订单事件不污染 Record 缓存但推进 cursor。
+- `pnpm test`：41 个测试文件、221 个测试通过。
+- `pnpm typecheck`、`pnpm db:check`：通过。
+- `pnpm lint`：无错误；`apps/client/src/pages/memories/index.tsx` 保留两条既有 Hook dependency 警告。
+- `pnpm --filter @runew/client build:weapp`：Webpack 编译成功；保留既有 CSS Modules、CSS 顺序、`rpx/calc` 与包体积警告。
+- `git diff --check`：通过。H5 `http://localhost:8087/` 健康检查返回 200，奖励页面可加载。
+
+### Status
+
+M8 NOT READY；M9 NOT READY。完整 Draft/Privacy 验收、奖励前端状态闭环、375x812/390x844/430x932 截图检查及微信设备验收仍未完成。
+
+## M8 继续实施：高价值回忆草稿与版本保护
+
+**日期：** 2026-09-05
+
+### Changed
+
+- 宝宝语录与时光胶囊详情、更新响应现在返回 `ETag`；更新请求强制要求 `If-Match`。
+- Quote / Capsule 服务端更新使用条件 `version` 更新。缺失版本返回 `VALIDATION_ERROR`，陈旧版本返回 `ENTITY_VERSION_CONFLICT`，避免高价值正文静默覆盖。
+- 回忆页草稿键改为用户、家庭、宝宝和实体级；编辑 Quote / Draft Capsule 时保存 `baseVersion`，恢复前会校验当前版本。
+- 草稿版本过期或保存时收到版本冲突后，页面禁用保存并提供“丢弃草稿并查看最新版本”，不会用旧内容覆盖服务端内容。
+- 宝宝语录的即时珍藏操作同样发送当前实体版本。
+
+### Verification
+
+- `rtk pnpm vitest run apps/server/src/modules/memories/memories.test.ts`：8 个测试通过，新增 Quote / Capsule 的详情 ETag、缺失 `If-Match`、正常更新与陈旧版本冲突覆盖。
+- `rtk pnpm typecheck`、`rtk pnpm lint`、`rtk git diff --check`：通过。
+- `rtk pnpm --filter @runew/client build:weapp`：编译成功；保留既有 CSS Modules、CSS 顺序、`rpx/calc` 和包体积警告。
+
+### Status
+
+M8 NOT READY；本轮只完成 Diary、Baby Quote、Time Capsule 的版本保护与回忆页 Quote / Capsule 草稿接入，仍缺少四类表单的 Kill 后恢复、隐私完整负向路径及 375x812、390x844、430x932 实际截图验收。
+
+## M8 / M9 继续实施：本地 H5 验收与工程门禁
+
+**日期：** 2026-09-05
+
+### Changed
+
+- 修复 M9 奖励页视觉映射在严格索引访问下可能返回 `undefined` 的类型错误；未知插图键统一降级为默认愿望视觉。
+- 将 Pino 脱敏字段改为兼容 Fastify 日志配置的可变数组，并明确 Fastify 使用 Node 默认 HTTP 服务器泛型，消除 HTTP/2 推导与认证 Hook 类型不匹配。
+- 本地 H5 新建账户验收：Diary 草稿刷新后仍可恢复；新建 Diary 默认 PRIVATE，隐私可见性页面可用；宝石余额不足时兑换不可提交，自定义愿望、确认、等待兑现与已完成订单状态均可交互。
+
+### UI / States
+
+- 已保存本地 H5 视觉证据：`output/playwright/m8-mom-375-home.png`、`output/playwright/m8-mom-430-home.png`、`output/playwright/m8-visibility-375.png`、`output/playwright/m9-gems-375x812-final.png`、`output/playwright/m9-gems-390x844-final.png`、`output/playwright/m9-gems-430x932-final.png` 与 `output/playwright/m9-orders-390-actions.png`。
+
+### Verification
+
+- `rtk proxy pnpm typecheck`：全部 workspace 通过；不使用会错误代理为根目录 `tsc` 帮助输出的 `rtk pnpm typecheck` 作为证据。
+- `rtk pnpm test`：41 个测试文件、228 个测试通过。
+- `rtk pnpm lint`、`rtk pnpm db:check`、`rtk git diff --check`：通过。
+- `rtk pnpm --filter @runew/client build:h5`、`rtk pnpm --filter @runew/client build:weapp`：串行编译成功。
+- H5 保留既有包体积告警；Weapp 保留既有 CSS Modules、样式顺序、`rpx/calc` 与包体积告警。测试仍会输出现有 Fastify `requestIdLogLabel` 弃用、故障注入日志、React `act`/DOM 属性与 Sass legacy API 警告，均未影响退出码。
+
+### Known Issues / Next Verification
+
+- Playwright 在 Taro `textarea` 执行 `fill` 后仍出现两条浏览器控制台错误；本轮草稿功能可实际恢复，但该控制台问题尚未单独定位。
+- 仍缺失微信真机、完整 Draft/Privacy 负向路径、Search/Notifications/Logs/Analytics 隐私路径及所有 M8/M9 指定状态的端到端验收。
+
+### Status
+
+M8 NOT READY；M9 NOT READY。已补齐本地 H5 交互与工程门禁证据，不代表完成真机或完整隐私验收。
+
+## M8 继续实施：健康笔记草稿冲突保护
+
+**日期：** 2026-09-05
+
+### Changed
+
+- Health Note 编辑草稿现在使用现有 `baseVersion` 冲突信号：草稿版本落后于服务端版本时，表单显示可访问的冲突提示并禁用保存，避免旧备注静默覆盖新内容。
+- 用户可选择“丢弃草稿并查看最新版本”；草稿清除后表单恢复当前服务端备注，才允许继续编辑和保存。
+- 新增 `HealthEventForm` 组件测试，覆盖冲突提示、保存阻止和丢弃草稿后的恢复路径。
+
+### Verification
+
+- `rtk pnpm exec vitest run apps/client/src/components/health/HealthForms.test.tsx apps/client/src/hooks/useAutoDraft.test.ts apps/server/src/modules/mom/mom.test.ts`：3 个文件、27 个测试通过。
+- `mom.test.ts` 覆盖 PRIVATE Diary 的 list/search/direct/media 与日志字段脱敏边界。
+
+### Status
+
+M8 NOT READY；本次仅关闭 Health Note 草稿冲突可见与提交保护缺口，微信真机、所有 M8 隐私/草稿端到端路径及其余 M9 验收仍未完成。
+
+## M9 继续实施：宝石屋页面闭环与空目录补种
+
+**日期：** 2026-09-05
+
+### Changed
+
+- 宝石屋补回 `PageShell` 底栏留白、`BottomNav` 与抽屉。中间 `+` 回到「今天」留下记录，不做成商城结算。
+- 旧家庭若还没有愿望行，`GET /rewards` 会补种默认目录（含奶茶、小花、休息、玩具、晚餐、写真）；已有记录（含下架）不重复插入。
+- 愿望卡整卡可点，用插画色井和宝石价格胶囊代替挤在窄卡里的「查看详情」按钮。
+- 补齐目录 / 我的愿望 / 账本的加载、错误、空状态；详情 Sheet、兑换确认、取消退款确认、完成确认、账本流水详情（15.37）。
+- 余额不足时引导去留下记录，不使用下单/秒杀文案。
+
+### Database
+
+- none
+
+### API / Contract
+
+- `GET /rewards` 对空目录家庭有一次幂等补种，不改 payload schema。
+
+### UI / States
+
+- 08.01 目录、08.02 详情、08.03 兑换确认、08.04/08.05/08.06 愿望进度、08.07 账本、08.08 定制愿望、08.09 取消确认。
+- 底栏五热区重新可见。
+
+### Verification
+
+- `pnpm exec vitest run apps/client/src/pages/gems/gemsVisual.test.ts apps/client/src/pages/gems/index.test.tsx apps/server/src/modules/gems/gems.test.ts`：16 个测试通过。
+- `pnpm --filter @runew/client typecheck`、`pnpm --filter @runew/server typecheck`：通过。
+- `pnpm exec eslint apps/client/src/pages/gems`：通过。
+- 375/390/430 实机截图本轮未跑。
+
+### Known Issues
+
+- 正在跑的旧 Node 进程不会自动加载服务端补种逻辑，空目录家庭需重启后端后再打开宝石屋。
+- 微信真机与指定 Frame 的完整视觉验收仍未做。
+
+### Status
+
+M9 NOT READY。账本后端与页面主闭环已接上，视觉三宽度截图与真机验收仍缺。
+
+## M9 继续实施：宝石屋三宽度视觉验收
+
+**日期：** 2026-09-05
+
+### Changed
+
+- 定制愿望的插画标记改为 4 列网格，避免第 7 个心愿标记单独掉到下一行。
+- 本轮用本地 H5 实拍确认：底栏五热区可见、目录六张愿望卡可点、余额不足走「先去留下记录」、空愿望/空账本文案、定制愿望表单。
+
+### Database
+
+- none
+
+### API / Contract
+
+- none
+
+### UI / States
+
+- 08.01 目录：375 / 390 / 430 均有底栏；卡片用色井 + 宝石胶囊，不再挤「查看详情」。
+- 08.02 详情：余额不足显示还差颗数，主按钮为「先去留下记录」。
+- 08.06 / 08.07 空状态：无「暂无数据」，可回到目录或去留下记录。
+- 08.08 定制愿望：名称 / 说明 / 宝石 / 标记 / 加入目录；375 与 390 标记对齐。
+
+### Verification
+
+- `pnpm exec vitest run apps/client/src/pages/gems/gemsVisual.test.ts apps/client/src/pages/gems/index.test.tsx apps/server/src/modules/gems/gems.test.ts`：16 个测试通过。
+- `pnpm --filter @runew/client typecheck`：通过。
+- `pnpm exec eslint apps/client/src/pages/gems`：通过。
+- H5 截图：`output/playwright/m9-gems-375x812-final.png`、`m9-gems-390x844-final.png`、`m9-gems-430x932-final.png`、`m9-gems-390-detail.png`、`m9-gems-390-orders-empty.png`、`m9-gems-390-ledger-empty.png`、`m9-gems-390-custom.png`、`m9-gems-375-custom.png`。
+
+### Known Issues
+
+- 毛玻璃底栏仍会透出后方卡片文字（与「今天」页相同），不是宝石屋单独做的新材质。
+- 微信真机未拍。等待兑现 / 已完成 / 取消确认带底栏的订单态本轮未重拍（本地验收账号宝石为 0）。
+
+### Documentation
+
+- DEVELOPMENT_LOG updated: yes
+
+### Status
+
+M9 NOT READY。H5 三宽度与主状态已有截图证据，真机与带宝石的订单闭环截图仍缺。
+
+
+## M10 · Family Collaboration 首批垂直切片
+
+**日期：** 2026-09-05
+
+### Changed
+- 新增 `family_tasks`、`achievements`、`user_achievements`、`family_anniversaries` Schema 与 0011 migration。
+- 新增家庭任务列表/创建/编辑/完成/删除、纪念日创建/列表、成就列表 API；所有路由先校验当前用户 Family membership。
+- 小家页改为温暖 Warm Glass 协作工作台：成员头像、邀请入口、共同任务、家庭成就、纪念日卡片；不含贡献排行或父母评分。
+
+### Verification
+- `pnpm db:migrate`：通过。
+- `pnpm build:packages`：通过。
+- server/client typecheck：通过。
+- `pnpm exec vitest run apps/server/src/app.test.ts db/schema.test.ts`：8 tests passed。
+- 相关 ESLint：通过。
+
+### Status
+M10 NOT READY：成员详情/权限编辑/禁用恢复、QR/Link/System Share 邀请交互、离线任务冲突、成就写入与完整 API 负向测试仍需补齐。
+
+## M10 继续：成员权限与邀请交互
+
+**日期：** 2026-09-05
+
+### Changed
+- 增加成员详情、权限编辑、成员禁用/恢复 API；管理员操作限制在同一 Family，Owner 不可被停用。
+- Disabled 成员沿用 `requireFamilyMembership` 的 ACTIVE 检查，立即失去家庭资源访问。
+- 增加成就详情、纪念日更新/删除 API。
+- 小家页接入邀请生成、复制邀请 Token、系统分享入口与 72 小时有效提示。
+- 增加客户端家庭 API 封装，覆盖邀请、加入、成员、成就、纪念日读取。
+
+### Verification
+- `pnpm build:packages`：通过。
+- Server / Client typecheck：通过。
+- Family 相关 ESLint 与 `git diff --check`：通过。
+
+### Status
+M10 NOT READY：仍需补充 QR 真图生成、成员详情 UI/权限编辑 UI、创建/加入家庭完整页面、离线任务持久化与冲突测试、M10 全量 API 负向测试和三宽度视觉截图。
+- 新增 `apps/server/src/modules/family/family.test.ts`：验证创建家庭、创建/完成协作任务及无排行字段。
+- `pnpm exec vitest run apps/server/src/modules/family/family.test.ts`：1 test passed。
+
+## M10 继续：真实邀请二维码、创建/加入家庭与原子领取
+
+**日期：** 2026-09-06
+
+### Changed
+- 邀请二维码改为 `qrcode-generator` 生成的真实 QR，邀请内容为完整可解析的家庭加入链接；H5 使用 Web Share，微信小程序使用 `openType="share"` / `useShareAppMessage`。
+- 新增家庭邀请工具：链接生成、Token/链接解析、剪贴板复制与系统分享适配器。
+- 新增 `/pages/family/join/index`：支持 Token 加入、无 Token 创建小家、注册/登录、关系选择；成功后按 bootstrap 状态回到家庭或 onboarding。
+- `acceptFamilyInvite` 改为条件更新 + SQLite transaction，防止同一邀请并发消费；停用成员不会通过再次接受邀请恢复访问。
+- 增加离线家庭任务持久化 Store，并覆盖家庭隔离测试。
+
+### Verification
+- `pnpm build:packages`：通过。
+- Server / Client typecheck：通过。
+- `pnpm exec eslint`（M10 相关目录）：通过。
+- `pnpm exec vitest run apps/server/src/modules/family/invites.test.ts apps/server/src/modules/family/family.test.ts apps/client/src/utils/familyInvite.test.ts`：8 tests passed（并发测试包含 SQLite BUSY 领域映射）。
+- `pnpm --filter @runew/client build:h5`：构建成功；Webpack 有既有 bundle size warning。
+- 发现 SQLite migration 多语句必须用 statement breakpoint；已修正 `0012_m10_task_fields.sql`，并为现有本地开发库补齐新增列（保留原数据）。
+
+### Status
+M10 NOT READY：成员详情/权限编辑 UI、成就与纪念日完整编辑 UI、任务离线同步冲突 UI、微信真机视觉验收、全量 M10 E2E 矩阵仍需完成。
+
+## M10 继续：成员详情、成就与纪念日 UI、任务冲突
+
+**日期：** 2026-09-06
+
+### Changed
+- 家庭成员头像现在可打开成员详情，展示关系、角色、状态和资源查看权限；支持逐项切换 VIEW 权限及停用/恢复成员。
+- 家庭成就卡片接入真实成就列表与空状态 BottomSheet。
+- 家庭纪念日卡片接入创建表单与已有纪念日列表。
+- 家庭任务补充重复规则、负责人、家庭经验字段；负责人必须是同一家庭的 ACTIVE 成员。
+- 任务 PATCH 支持 `If-Match` 版本校验，冲突返回 `ENTITY_VERSION_CONFLICT`，客户端提供对应 API 封装。
+
+### Verification
+- Client / Server typecheck：通过。
+- M10 相关 ESLint：通过。
+- `pnpm exec vitest run apps/server/src/modules/family apps/client/src/utils/familyInvite.test.ts`：8 tests passed。
+- `git diff --check`：通过。
+
+### Status
+M10 NOT READY：家庭页面仍需拆分完整成员/任务子路由，补齐任务离线冲突 UI、纪念日编辑/删除 UI、成就授予流程、真实 H5/微信三宽度截图与完整 E2E 矩阵。
+
+## M9 视觉：宝石屋首页收紧与愿望贴纸
+
+**日期：** 2026-09-05
+
+### Changed
+- 余额卡从居中大数字 Hero 收成横条钱包：顶栏已有宝石数，首页不再重复放大同一个数字。
+- 三视图不再用等宽 `SegmentedControl`（那是日/周/月指标控件）。改为短籤「目录 / 我的 / 账本」，12px 字重、内容贴合，热区仍 ≥48px。
+- 愿望卡去掉挤在格子里的说明文案，改成色井 + 独立贴纸插画（奶茶 / 花 / 休息 / 玩具 / 晚餐 / 写真 / 心愿）。结构仍统一，差异来自 Illustration + Tint。
+- 详情 Sheet 与定制标记同步使用同一套贴纸。
+
+### Database
+- none
+
+### API / Contract
+- none
+
+### UI / States
+- 08.01 目录首屏：矮钱包条、短籤、贴纸愿望卡。
+- 08.02 详情插画与目录贴纸一致。
+- 08.08 定制愿望标记改为贴纸缩略图。
+
+### Verification
+- `pnpm exec vitest run apps/client/src/pages/gems/gemsVisual.test.ts apps/client/src/pages/gems/index.test.tsx`：5 个测试通过。
+- `pnpm --filter @runew/client typecheck`：通过。
+- `pnpm exec eslint apps/client/src/pages/gems apps/client/src/assets/illustrations/gems`：通过。
+- 本轮 H5 登录态已过期，未重拍 375/390/430。
+
+### Known Issues
+- 未更新三宽度截图；真机未拍。
+
+### Documentation
+- DEVELOPMENT_LOG updated: yes
+
+### Status
+M9 视觉未完成验收截图。行为闭环未改。
+
+## M9 视觉：定制愿望贴纸库
+
+**日期：** 2026-09-06
+
+### Changed
+- 定制愿望「小标记」从 7 个扩到 28 个家庭愿望贴纸：吃喝、休息、出门、宝宝、家里、心情。
+- 选择格改为满宽 6 列，热区仍 ≥48px。未知 `illustrationKey` 仍回落到心愿。
+
+### Database
+- none
+
+### API / Contract
+- none。`illustrationKey` 仍为自由字符串。
+
+### UI / States
+- 08.08 定制愿望标记库。
+
+### Verification
+- `pnpm exec vitest run apps/client/src/pages/gems/gemsVisual.test.ts apps/client/src/pages/gems/index.test.tsx`：6 个测试通过。
+- `pnpm --filter @runew/client typecheck`：通过。
+- `pnpm exec eslint apps/client/src/pages/gems apps/client/src/assets/illustrations/gems`：通过。
+
+### Status
+贴纸库已可点选。三宽度截图仍缺。
+
+## M9 视觉：贴纸标记可预览类型
+
+**日期：** 2026-09-06
+
+### Changed
+- 定制愿望 28 个贴纸按「吃喝 / 休息 / 出门 / 宝宝与家 / 心情」分组。
+- 鼠标移入或手指按上时，标题下显示「类型 · 名称」，例如「吃喝 · 奶茶」。点选仍是选定标记。
+- `rest` 显示名改为「睡觉」，`travel` 改为「旅行」，避免和分组名撞车。默认 6 个目录 key 未改。
+
+### Database
+- none
+
+### API / Contract
+- none
+
+### UI / States
+- 08.08 定制愿望标记库：分组标题 + 即时类型预览。
+
+### Verification
+- `pnpm exec vitest run apps/client/src/pages/gems/gemsVisual.test.ts apps/client/src/pages/gems/index.test.tsx`：7 个测试通过。
+- `pnpm --filter @runew/client typecheck`：通过。
+- `pnpm exec eslint apps/client/src/pages/gems`：通过。
+- 未重拍 375/390/430。
+
+### Status
+贴纸类型可预览。三宽度截图仍缺。
+
+## M9 视觉：定制愿望 Sheet 可收起
+
+**日期：** 2026-09-06
+
+### Changed
+- BottomSheet 限制在视口 88% 内，标题与「收起」固定，正文滚动；高内容不再把关闭区顶出屏幕。
+- 定制愿望贴纸改为按类型短籤切换，一次只展示当前类，避免五组贴纸把手机表单撑满。
+
+### Database
+- none
+
+### API / Contract
+- none
+
+### UI / States
+- 全局 BottomSheet：手柄、收起、限高。
+- 08.08 定制愿望标记改为类型短籤。
+
+### Verification
+- `pnpm exec vitest run apps/client/src/pages/gems/gemsVisual.test.ts apps/client/src/pages/gems/index.test.tsx`：7 个测试通过。
+- `pnpm exec eslint apps/client/src/pages/gems apps/client/src/components/overlay`：通过。
+- 本轮完整 `pnpm --filter @runew/client typecheck` 被无关的 `FamilyHome.tsx` Task 类型错误挡住；宝石屋与 BottomSheet 文件无新的类型报错。
+- 未重拍 375/390/430。
+
+### Status
+定制愿望可收起。三宽度截图仍缺。
+# M10 家庭协作：纪念日与成就详情客户端闭环（2026-09-06）
+
+- 客户端新增家庭成就详情读取，并在成就列表中打开详情 BottomSheet。
+- 家庭纪念日列表接入编辑、删除操作；编辑沿用同一表单，删除后即时更新本地列表。
+- 所有请求继续使用当前 `familyId` 路径，由服务端执行家庭成员与权限校验。
+- 验证：`pnpm exec tsc -p apps/client/tsconfig.json --noEmit` 通过；ESLint 目标 TS 文件无错误。
+# M10 家庭任务：离线读写接入（2026-09-06）
+
+- FamilyHome 断网时从 `familyTaskStore` 恢复当前家庭任务。
+- 断网创建/完成任务先写入本地持久存储并即时展示，明确提示待联网同步，不伪造远端成功。
+- 验证：Family task store 与 invite QR 定向测试共 3 项通过；FamilyHome/API ESLint 无错误。
+- 客户端全量 TypeScript 检查现已通过。
+- 完成任务时识别 `ENTITY_VERSION_CONFLICT`，以温和提示 BottomSheet 引导家庭成员重新确认，避免静默覆盖。
+- 修复 `0011_m10_family.sql` 缺少 statement breakpoint 导致空库只执行首条语句的问题；Anniversary CRUD 与 Achievement Detail 集成测试现已覆盖并通过。
+- 新增家庭成就创建 API 与共享 Contract，集成测试覆盖创建、详情及无排名字段约束；服务端 TypeScript 检查通过。
+- FamilyHome 的家庭成就 BottomSheet 已接入创建表单（标题、表情、共同记忆描述），创建后即时加入列表。
+- 新增独立 `/pages/family/index` 路由，复用 AppBootstrapGate、PageShell、AppTopBar 与 FamilyHome，家庭协作不再只能通过 Today 内嵌 Tab 访问。
+- `rootTabUrl('family')` 与独立页面 BottomNav 已接通，底部“小家”入口现在进入独立 Family 页面并保留返回其他主 Tab 的能力。
+- FamilyHome 任务列表补齐编辑、删除入口；编辑使用 `If-Match` 版本控制，冲突继续提示重新确认。
+- 离线编辑/删除任务也先写入本地任务存储并即时反馈，避免断网操作丢失；完整 PendingOperation 远端同步仍待接入。
+- 修复任务行内编辑/删除按钮事件冒泡，避免操作 CRUD 时误触发任务完成。
+- 本地任务仓库新增显式删除标记，离线删除跨应用重启保持生效；对应单元测试已覆盖。
+- 家庭成员与任务行补齐 `role`、`aria-label`、完成状态语义，成员详情改为整行可触控。
+- Onboarding 欢迎页新增“已有邀请？创建或加入小家”入口，连接现有 Family Join 页面。
+- M10 相关回归：服务端 Family/Invite 与客户端离线任务/邀请二维码共 4 个测试文件、11 项测试全部通过。
+- 反竞争式育儿静态门禁通过：Family UI/API/Schema 无贡献排行榜或个人评分字段；仅保留测试中的负向断言。
+- 最新独立 Family 路由、Onboarding 入口、成就表单与离线任务分支 H5 构建成功；保留既有 bundle 体积警告。
+- 纪念日表单补齐可选备注，并支持编辑时回填，完整保留家庭记忆上下文。
+- 新增 `user_achievements` 授予 API：校验成就归属当前家庭，重复授予返回已有记录；Family API 集成测试覆盖 201/幂等 200。
+- 成就详情 BottomSheet 新增“收下这份共同成就”客户端动作，接入授予 API 并显示成功/失败反馈。
+- Disabled 成员详情中的权限编辑行现在标记 `aria-disabled` 并阻止点击，仅保留恢复动作。
+- 空库 schema 回归测试 2/2 通过，确认 M10 家庭表迁移链完整可执行。
+- 综合回归通过：5 个测试文件、13 项测试覆盖 Family/Invite、成就授予、Anniversary CRUD、离线任务、邀请解析与空库迁移；客户端 TypeScript 检查通过。
+- 成就授予接口增加并发唯一冲突回读，避免竞态下返回 500；服务端类型检查与 Family API 测试通过。
+- 新增跨家庭成就详情负向测试，确认错误 Family 访问返回 403。
+- 成就授予接口补充跨家庭 403 负向测试，确保写入路径同样执行 Family 归属校验。
+- FamilyHome 轨道装饰加入轻量漂浮动效，并在 `prefers-reduced-motion: reduce` 下自动停用。
+- FamilyHome 监听网络恢复事件，回读并合并远端任务，同时保留本地未同步任务。
+- 家庭任务本地仓库新增可重放操作队列（CREATE/UPDATE/DELETE/COMPLETE），离线动作会持久化 operationId、familyId、taskId 与 payload；3 项单元测试通过。
+- 家庭任务离线队列接入网络恢复提交：服务端接受客户端任务 ID 并对重复 CREATE 幂等，客户端按序提交后才移除队列。
+- 队列提交兼容性回归通过：3 个测试文件、10 项测试，以及客户端/服务端 TypeScript 检查均通过。
+- FamilyHome 新增待同步任务数量提示与“重试同步”入口；离线新增、完成、编辑、删除会即时累加，网络恢复逐项成功后扣减并重新从持久队列校准。
+- 验证：客户端 TypeScript 检查通过；Family/Invite 与离线任务测试 3 个文件、10 项测试通过。
+- Task Complete 纳入 `If-Match` 版本校验并递增任务版本；网络恢复提交沿用离线操作的基线版本，新增旧版本完成请求 409 回归测试。
+- 加入小家页面补齐创建/加入模式切换：支持粘贴邀请链接或邀请码、`SYSTEM_NATIVE` 扫码二维码，并保留路由 token 直达加入；邀请输入无效时在本地阻止提交。
+- 验证：邀请解析、Family/Invite 集成测试共 9 项通过；客户端 TypeScript 与 Family 页面 ESLint 通过。
+- H5 构建最终验证通过（Webpack 编译成功）；保留既有包体积超限警告，未引入新的构建错误。
+- 启动临时 H5 开发服务器 `http://localhost:10086/` 做实际页面检查；创建/加入模式与邀请输入在移动视图中无重叠、无横向溢出，检查后已关闭临时服务。
+- 家庭任务创建/编辑补齐负责人、日期、重复规则与家庭经验字段；列表显示轻量任务元信息，离线 CREATE/UPDATE 重放保留完整 payload。
+- 验证：家庭相关 4 个测试文件、12 项测试通过；客户端 TypeScript、ESLint 与 H5 构建通过。
+- Family 任务 API 增加跨家庭负责人校验、跨家庭任务 ID 复用拒绝，以及 PATCH/Complete 的原子版本条件；删除任务回归覆盖完成后的列表为空。
+- 服务端 Family 路由 ESLint 通过，Family 测试 7 项通过；全量服务端 TypeScript 仍被既有 `admin/routes.ts` readonly preHandler 类型错误阻挡，非本轮改动引入。
+- 修正负责人选择的 ID 映射：客户端现在传递成员对应的 `userId`，与服务端 Family Membership 校验一致，避免合法负责人被误判为跨家庭。
+- 验证：客户端 TypeScript、FamilyHome ESLint 与 `git diff --check` 通过。
+- 负责人 ID 映射修正后的 H5 构建复验通过（Webpack 编译成功）；仍有既有 bundle 体积超限警告，无新增构建错误。
+- 客户端家庭回归复验通过：离线任务仓库 3 项、邀请解析 2 项测试全部通过。
+- 微信小程序构建复验通过（`pnpm --filter @runew/client build:weapp`）；保留既有 Taro CSS/rpx、CSS Modules 与 bundle 体积警告，无新增编译错误。
+- H5 加入小家页面实际画面复核：创建/加入模式、邀请码输入、扫码入口及主 CTA 在移动画布中无文字重叠或横向溢出。
+- M10 综合回归复验通过：5 个测试文件、14 项测试（Family/Invite、空库 schema、离线任务、邀请解析）全部通过；包含停用/恢复与三项反排行断言。
+- Family 负向回归加强：明确断言 `mom_score`、`dad_score`、`contribution_rank` 均不存在，并验证成员停用后任务 API 立即返回 403、恢复后恢复访问。
+- 验证：客户端 TypeScript、M10 Family 相关 ESLint 与 `git diff --check` 均通过。
+- 家庭任务行改为打开详情 BottomSheet，详情内提供共同完成、编辑、删除动作，覆盖 09.08 任务详情状态并避免误触直接完成。
+- 任务详情改动后的 H5 构建通过（Webpack 编译成功）；仅保留既有 bundle 体积警告。
+- 任务行无障碍语义同步调整：详情入口保留可读标签，移除不再适用的 `aria-pressed` 切换状态。
+- Task CRUD UI 补全备注字段：创建/编辑表单、离线实体与联网重放均保留 `note`；客户端 5 项离线/邀请测试通过，H5 构建成功。
+- Family CRUD 集成测试新增备注持久化断言：创建与编辑后的 `note` 均正确回读，Family 测试 3 项通过。
+- 权限编辑 API 回归补齐：Owner 可更新并读回权限，普通成员被拒绝，真实异家庭成员目标返回 404；Family 相关测试 8 项通过。
+- 纪念日列表新增详情 BottomSheet，展示日期/备注并提供编辑、删除入口，覆盖 UI 13.11 状态；H5 构建复验通过。
+- 家庭任务与纪念日删除入口统一先打开公共 ConfirmDialog，覆盖 15.12/15.13 删除确认状态；取消不会触发删除 API。
+- 删除确认与纪念日详情改动后的 H5 构建成功（Webpack 编译完成）；保留既有 bundle 体积警告。
+- 权限回归补充真实异家庭成员目标校验，Owner/Member/跨家庭三类权限编辑路径均有 API 证据；Family 测试 8 项通过。
+- 任务详情、纪念日详情及删除确认完成后的微信小程序构建复验通过；仅有既有 Taro CSS/rpx、CSS Modules 与 bundle 警告。
+- M10 窄屏样式加固：任务内容允许长中文换行，纪念日/邀请/操作按钮允许换行，减少 375px 宽度下的挤压与横向溢出；H5 构建再次成功。
+- 成员权限替换改为 SQLite 短事务（删除旧权限与写入新权限原子完成），Family 路由 ESLint 与 8 项 Family 测试通过。
+- 邀请创建改为邀请专用幂等路径：作用域绑定用户与家庭，重放前重新校验活跃成员；`response_json` 仅保存邀请元数据，token 由服务端密钥稳定派生，不落库明文；并发同键只生成一条邀请。邀请测试 8 项、相关 ESLint 与 server TypeScript 检查通过。
+- 家庭任务更新禁止请求体修改 `id` 主键；任务/离线同步允许 `note: null`，可真正清空备注。Family 测试 3 项与 Invite 测试 8 项通过。
+- 本轮验证：相关 ESLint、server/client TypeScript、Family/Invite 回归与 `git diff --check` 均通过；仍缺完整设备与端到端证据，未将 M10 标记为 READY。
+- 客户端全量 TypeScript 复验已通过，H5 生产构建成功（保留既有 bundle 体积警告）；Family/Invite 11 项服务端回归与客户端家庭存储/邀请 5 项测试通过。
+- 在线拉取的家庭任务现在写入无待同步标记的本地实体缓存，断网或重启后可恢复最近任务；离线存储新增缓存回归，4 项测试、客户端 ESLint/TypeScript 通过。
+- 家庭协作一致性补强：重复任务 ID 携带不同内容返回 409，重复完成保持原版本，纪念日拒绝不存在的日历日期；M10 窄测 17 项与 server/client TypeScript 复验通过。
+- 任务与纪念日删除改为目标不存在时返回 `NOT_FOUND`，避免离线重放误报成功；对应 Family 回归已覆盖。
+- 家庭任务离线队列加入模块内串行写入，避免并发新增/删除的读改写互相覆盖；队列测试扩展至 5 项并通过。
+- 最终窄测复验：4 个 M10 测试文件、18 项测试全部通过；Server/Client TypeScript 与 `git diff --check` 通过。
+- 任务/纪念日删除增加真实目标存在性检查：不存在时返回 `NOT_FOUND`，并补充重复删除回归；家庭协作窄测继续通过。
+- 数据库迁移前漂移修复通过实际服务库副本验证：副本迁移成功，`search_documents.capsule_state` 已补齐，迁移记录 17 条；原服务库未直接修改。
+- Family 权限边界补强：新增服务端 `requireFamilyPermission`，先校验 ACTIVE membership，再按 `resource + action` 应用显式 `DENY` 覆盖；家庭详情、成员列表、宝宝列表/创建、邀请创建及任务、成就、纪念日读写均接入策略检查，停用成员仍即时失去访问。成员详情开关改为写入显式拒绝，补充 VIEW/CREATE/MANAGE 负向回归，Family/Invite 12 项通过。
+- 权限接入后的 H5 生产构建成功；保留既有 bundle 体积警告。Server/Client/DB 全量 TypeScript 复验通过。
+- Family 任务与纪念日日期字段改用公共 `GlassDateField`（Taro `Picker`），避免手输非法日期并支持未来纪念日；客户端类型、Lint、本地任务/邀请测试与 H5 构建通过。
+- 家庭创建/加入页补齐 `GRANDPARENT` 关系选项，客户端 TypeScript、Family 页面 ESLint 与差异检查通过。
+- Family 在线任务创建统一生成稳定 `taskId + operationId`，请求携带 `Idempotency-Key`；网络/可重试错误会落本地并进入同步队列，重放复用同一 ID，补充客户端幂等请求回归测试。
+- Family 服务端任务回归改为首请求与重试都携带同一任务 ID/幂等键，确认客户端重放形态仍返回同一任务；Family 测试、Server TypeScript 与 ESLint 通过。
+- 本轮最终验证：`rtk pnpm test` 全量 50 个测试文件 / 281 个测试通过；H5 与 Weapp 均编译成功，保留既有构建告警。
+- H5 空白页根因定位：Taro 4.0.9 的 Terser 默认 `quote_keys: true` 会把依赖私有字段压成非法的 `#"e"` 语法；改为仅覆盖 `h5.terser.config.output.quote_keys = false`，恢复生产 JS/CSS 压缩，不再全局关闭 Terser。新增私有字段产物执行回归，H5 25 个 JS 文件全部通过 `vm.Script` 解析。
+- 本轮全量复验：52 个测试文件 / 284 个测试通过，客户端 TypeScript 通过，H5 生产构建成功（保留 bundle 体积警告）；浏览器视觉复验此前因自动审批服务 429 暂停，M10 仍未标记 READY。
+- 家庭任务离线检测与恢复改用统一 `platformAdapters.network`，同时覆盖 H5 与微信小程序的初始断网、网络恢复和任务创建/编辑/删除路径；不再在 Family 页面散落 `navigator.onLine` 或仅监听 `window.online`。
+- Family Task 生命周期补齐：新增 `status`（`OPEN` / `COMPLETED` / `DELETED`）与 `deleted_at` 字段及活动任务索引；删除改为带版本递增的软删除，普通列表、编辑和完成路径过滤已删除任务，保留协作记录。空库迁移、删除后状态回读与全量回归通过。
+- 家庭纪念日提醒补齐：Scheduler 按家庭成员 ACTIVE 状态和 `anniversariesEnabled` 偏好生成下一次年度提醒，派发前再次校验成员与纪念日归属；通知使用 `FAMILY_ANNIVERSARY` 目标和共同记忆文案，唯一索引与 Job Lock 保证重跑不重复。新增真实 API + Scheduler 集成测试通过。
+
+## M5 知识种子：0–12 个月分类覆盖（2026-09-06）
+
+- `db/scripts/seed-knowledge.ts` 从 12 篇扩到 32 篇：8 个分类各 4 段重叠月龄窗（0–119 / 90–209 / 180–299 / 270–400 天），写入前校验 0–365 天每天每类至少一篇。
+- 内容边界保持科普、不写诊断；满 12 个月前蜂蜜、仰睡空床、洗澡一臂看护等硬规则写进对应窗。
+- 种子默认写入正在跑的 `apps/server/data/runew.db`（不再只写仓库根 `data/runew.db`）。
+- `pnpm db:seed:knowledge`：32 篇 PUBLISHED 入库。5 个月 15 天（约 165 天）命中 8 篇。
+
+## M5 知识详情 / 收藏 / 搜索视觉与切换（2026-09-06）
+
+- 详情 / 搜索 / 收藏从页面抽到 `KnowledgeViews`，样式回到 `Knowledge.module.scss`。此前页面引用 `index.module.scss`，标题字重、分类色点、毛玻璃操作全部丢失，看起来像纯文字列表。
+- 详情改为阅读英雄卡 + 来源/月龄/版本玻璃芯片 + 2×2 着色玻璃操作盘（学到了 / 收藏 / 稍后看 / 更多），顶栏用分类名 + 月龄。
+- 收藏 Tab 不再 `redirectTo` 整页重挂；Tab 条在 loading 时保持挂载。库列表改走真实 `sourceName` / 月龄，不再写空来源。
+- 搜索页增加辅食 / 睡眠 / 出牙 / 发育快捷词，主按钮带搜索图标。
+- 契约 `knowledgeLibraryResponseSchema` 兼容扩展 `sourceName`、`minAgeDays`、`maxAgeDays`。
+
+## H5 开发：实时通道与热更新 WebSocket 抢路（2026-09-06）
+
+- webpack-dev-server 4 默认 HMR 也走 `/ws`，与产品实时通道（Tech Design §57.1）撞车，控制台出现 `Invalid frame header` 并不断重连。
+- H5 开发服务器把热更新改到 `/__webpack_hmr`；`/ws` 只代理到 Fastify。产品路径不变。
+
+## 视觉统一：CuteIconChip + 家庭页（2026-09-06）
+
+- 补齐规格里的 `CuteIconChip`：双层玻璃气泡 + sparkle/sprout，默认 48px，快捷磁贴仍用 40px `sm`。
+- `QuickTile` / `ChoiceCard` / `EmptyState` / `ErrorState` 改用同一颗芯片；错误态改盾牌，不再和空状态共用同一颗星。
+- Toast 改暖玻璃；BottomSheet / ConfirmDialog 增加 160–260ms 进入动效，并接夜间 token。夜间主题本身已挂在 `html[data-theme]`，本轮不再另接 PageShell。
+- 家庭页去掉英文 kicker、手写 hex 和功能 Emoji；区块改 `SectionHeader`，输入改 `GlassInput` / `GlassDateField`，成员头像与成就记号改芯片。
+- 加入小家改走 `AuthScreen` + `SegmentedControl` + 与引导页同一套 `ChoiceCard` 身份卡。
+- 验证：客户端 TypeScript 通过；ESLint 目标文件无错误；design-system / 知识视图 / 宝石视觉 / 家庭邀请与离线任务共 5 个测试文件、30 项通过。未重拍 375/390/430。

@@ -50,8 +50,17 @@ export async function openDatabaseAsync(options: DatabaseConnectionOptions): Pro
 
 export async function runMigrations(databasePath: string) {
   const { client, db } = await openDatabaseAsync({ databasePath });
+  await repairKnownSchemaDrift(client);
   await migrate(db, { migrationsFolder });
   await client.close();
+}
+
+/** Repairs databases migrated before capsule_state was added to search_documents. */
+export async function repairKnownSchemaDrift(client: Client) {
+  const result = await client.execute('PRAGMA table_info(search_documents)');
+  if (result.rows.length === 0) return;
+  const hasCapsuleState = result.rows.some((row) => String(row.name ?? '') === 'capsule_state');
+  if (!hasCapsuleState) await client.execute('ALTER TABLE search_documents ADD COLUMN capsule_state text');
 }
 
 export async function getJournalMode(databasePath: string): Promise<string> {

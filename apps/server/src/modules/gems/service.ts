@@ -16,18 +16,32 @@ import type {
   UpdateRewardBody,
 } from '@runew/contracts';
 import { createUlid, utcNowMs } from '@runew/shared-utils';
-import { and, desc, eq, gt, isNull, lt, or, sql } from 'drizzle-orm';
+import { and, desc, eq, gt, isNull, sql } from 'drizzle-orm';
 import type { LibSQLDatabase } from 'drizzle-orm/libsql';
 import { AppError } from '../../lib/errors.js';
 import { appendSyncLog } from '../sync/log.js';
 import { requireFamilyMembership } from '../identity/service.js';
+import { ensureDefaultRewards } from './defaults.js';
 
 type Database = LibSQLDatabase<typeof schema>;
 type DbExecutor = Pick<Database, 'select' | 'insert' | 'update'>;
+type Transaction = Parameters<Parameters<Database['transaction']>[0]>[0];
 
 const RECORD_REASON = 'RECORD_CREATED';
 const RECORD_SOURCE = 'RECORD_REWARD';
 const REFUND_SOURCE = 'REWARD_REFUND';
+
+async function gemWrite<T>(db: Database, run: (tx: Transaction) => Promise<T>): Promise<T> {
+  try {
+    return await db.transaction(run);
+  } catch (error) {
+    if (error && typeof error === 'object' && 'code' in error &&
+        (error.code === 'SQLITE_BUSY' || error.code === 'SQLITE_LOCKED')) {
+      throw new AppError('CONFLICT', '小家正在处理另一笔愿望，请稍后重试', 409, true);
+    }
+    throw error;
+  }
+}
 
 function mapTransaction(row: typeof gemTransactions.$inferSelect): GemTransactionPublic {
   return {
@@ -206,14 +220,17 @@ export async function getGemBalance(
 
 export async function reconcileGemBalance(db: Database, familyId: string) {
   const now = utcNowMs();
-  const ledgerBalance = await ledgerTotal(db, familyId);
-  const familyRows = await db.select().from(families).where(eq(families.id, familyId)).limit(1);
-  const family = familyRows[0];
-  if (!family) throw new AppError('NOT_FOUND', '小家不存在', 404);
-  if (family.gemBalanceCache !== ledgerBalance) {
-    await setBalanceCache(db, familyId, ledgerBalance, now);
-  }
-  return { balance: ledgerBalance, ledgerBalance, drifted: family.gemBalanceCache !== ledgerBalance };
+  return db.transaction(async (tx) => {
+    // 读取账本和修复缓存使用同一写快照，避免覆盖并发奖励或扣款。
+    const ledgerBalance = await ledgerTotal(tx, familyId);
+    const familyRows = await tx.select().from(families).where(eq(families.id, familyId)).limit(1);
+    const family = familyRows[0];
+    if (!family) throw new AppError('NOT_FOUND', '小家不存在', 404);
+    if (family.gemBalanceCache !== ledgerBalance) {
+      await setBalanceCache(tx, familyId, ledgerBalance, now);
+    }
+    return { balance: ledgerBalance, ledgerBalance, drifted: family.gemBalanceCache !== ledgerBalance };
+  });
 }
 
 export async function listGemTransactions(
@@ -259,6 +276,7 @@ async function getRewardRow(db: Database, rewardId: string) {
 
 export async function listRewards(db: Database, userId: string, familyId: string) {
   await requireFamilyMembership(db, userId, familyId);
+  await ensureDefaultRewards(db, familyId, userId, utcNowMs());
   const rows = await db
     .select()
     .from(rewards)
@@ -312,6 +330,9 @@ export async function redeemReward(
           .limit(1);
         const order = orderRows[0];
         if (!order) throw new AppError('CONFLICT', '这笔兑换正在整理中，请稍后查看', 409, true);
+        if (order.rewardId !== rewardId || order.redeemedBy !== userId) {
+          throw new AppError('IDEMPOTENCY_KEY_REUSED', '这次请求的愿望与原兑换不同', 409);
+        }
         return { order: mapOrder(order), balance: existing.balanceAfter };
       }
 
@@ -409,7 +430,7 @@ export async function listRewardOrders(db: Database, userId: string, familyId: s
   return rows.map(mapOrder);
 }
 
-async function getOrderRow(db: Database, orderId: string) {
+async function getOrderRow(db: DbExecutor, orderId: string) {
   const rows = await db.select().from(rewardOrders).where(eq(rewardOrders.id, orderId)).limit(1);
   const order = rows[0];
   if (!order) throw new AppError('NOT_FOUND', '这笔兑换不存在', 404);
@@ -428,41 +449,41 @@ export async function fulfillRewardOrder(
   orderId: string,
   completionPhotoMemoryId?: string | null,
 ) {
-  const current = await getOrderRow(db, orderId);
-  await requireFamilyMembership(db, userId, current.familyId);
-  if (current.status === 'COMPLETED') return mapOrder(current);
-  if (current.status !== 'WAITING' && current.status !== 'REDEEMED') {
-    throw new AppError('CONFLICT', '这笔兑换现在不能完成兑现', 409);
-  }
-  const now = utcNowMs();
-  await db
-    .update(rewardOrders)
-    .set({
-      status: 'COMPLETED',
-      fulfilledAt: now,
-      fulfilledBy: userId,
+  const order = await getOrderRow(db, orderId);
+  await requireFamilyMembership(db, userId, order.familyId);
+  return gemWrite(db, async (tx) => {
+    const current = await getOrderRow(tx, orderId);
+    if (current.status === 'COMPLETED') return mapOrder(current);
+    if (current.status !== 'WAITING' && current.status !== 'REDEEMED') {
+      throw new AppError('CONFLICT', '这笔兑换现在不能完成兑现', 409);
+    }
+    const now = utcNowMs();
+    await tx.update(rewardOrders).set({
+      status: 'COMPLETED', fulfilledAt: now, fulfilledBy: userId,
       completionPhotoMemoryId: completionPhotoMemoryId ?? null,
-      updatedAt: now,
-      version: current.version + 1,
-    })
-    .where(and(eq(rewardOrders.id, orderId), eq(rewardOrders.status, current.status)));
-  return getRewardOrder(db, userId, orderId);
+      updatedAt: now, version: current.version + 1,
+    }).where(eq(rewardOrders.id, orderId));
+    await appendSyncLog(tx, {
+      operationId: createUlid(), familyId: current.familyId, actorUserId: userId,
+      deviceId: null, entityType: 'REWARD_ORDER', entityId: orderId,
+      op: 'UPDATE', entityVersion: current.version + 1,
+    }, now);
+    return mapOrder(await getOrderRow(tx, orderId));
+  });
 }
 
 export async function cancelRewardOrder(db: Database, userId: string, orderId: string) {
-  const current = await getOrderRow(db, orderId);
-  await requireFamilyMembership(db, userId, current.familyId);
-  if (current.status === 'CANCELED') return mapOrder(current);
-  if (current.status === 'COMPLETED') {
-    throw new AppError('CONFLICT', '已经完成的愿望不能取消', 409);
-  }
-  if (current.status !== 'WAITING' && current.status !== 'REDEEMED') {
-    throw new AppError('CONFLICT', '这笔兑换现在不能取消', 409);
-  }
-
-  const now = utcNowMs();
-  const refundKey = `refund:reward_order:${orderId}`;
-  await db.transaction(async (tx) => {
+  const order = await getOrderRow(db, orderId);
+  await requireFamilyMembership(db, userId, order.familyId);
+  return gemWrite(db, async (tx) => {
+    // 状态判断必须在取得写锁之后，否则完成与退款可能同时成功。
+    const current = await getOrderRow(tx, orderId);
+    if (current.status === 'CANCELED') return mapOrder(current);
+    if (current.status !== 'WAITING' && current.status !== 'REDEEMED') {
+      throw new AppError('CONFLICT', '这笔兑换现在不能取消', 409);
+    }
+    const now = utcNowMs();
+    const refundKey = `refund:reward_order:${orderId}`;
     const existingRefund = await tx
       .select()
       .from(gemTransactions)
@@ -491,9 +512,14 @@ export async function cancelRewardOrder(db: Database, userId: string, orderId: s
     await tx
       .update(rewardOrders)
       .set({ status: 'CANCELED', canceledAt: now, updatedAt: now, version: current.version + 1 })
-      .where(and(eq(rewardOrders.id, orderId), or(eq(rewardOrders.status, 'WAITING'), eq(rewardOrders.status, 'REDEEMED'))));
+      .where(eq(rewardOrders.id, orderId));
+    await appendSyncLog(tx, {
+      operationId: createUlid(), familyId: current.familyId, actorUserId: userId,
+      deviceId: null, entityType: 'REWARD_ORDER', entityId: orderId,
+      op: 'UPDATE', entityVersion: current.version + 1,
+    }, now);
+    return mapOrder(await getOrderRow(tx, orderId));
   });
-  return getRewardOrder(db, userId, orderId);
 }
 
 export async function createCustomReward(

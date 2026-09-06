@@ -1,0 +1,508 @@
+.page {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-bottom: calc(36px + var(--safe-bottom));
+}
+
+.wallet {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 64px;
+  padding: 12px 14px;
+}
+
+.walletGem {
+  flex: 0 0 auto;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 16px;
+  color: var(--color-apricot-strong);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0.08) 70%),
+    var(--color-apricot-soft);
+  border: 1px solid rgba(255, 255, 255, 0.78);
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.86);
+}
+
+.walletMain {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.walletLine {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.walletAmount {
+  color: var(--color-text-primary);
+  font-size: var(--font-section-title);
+  font-weight: 800;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+  text-shadow: var(--text-emboss);
+}
+
+.walletUnit,
+.walletCaption,
+.walletHint,
+.cardDescription,
+.detailDescription,
+.detailHint,
+.shortfall,
+.formLabel,
+.status,
+.cardHintSoft {
+  color: var(--color-text-secondary);
+}
+
+.walletUnit {
+  font-size: var(--font-body-sm);
+  font-weight: 700;
+  color: var(--color-text-primary);
+}
+
+.walletCaption,
+.detailHint,
+.cardDescription,
+.formLabel {
+  font-size: var(--font-caption);
+  line-height: 1.45;
+}
+
+.walletHint,
+.shortfall {
+  font-size: var(--font-caption);
+  line-height: 1.45;
+  color: var(--color-apricot-strong);
+}
+
+.viewTabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+
+.viewTab,
+.viewTabActive {
+  min-height: 48px;
+  padding: 0 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-chip);
+  font-size: var(--font-body-sm);
+  font-weight: 600;
+  letter-spacing: 0;
+  line-height: 1;
+  color: var(--color-text-secondary);
+  background: rgba(255, 252, 247, 0.42);
+  border: 1px solid var(--color-border-warm);
+}
+
+.viewTabActive {
+  color: var(--color-apricot-strong);
+  font-weight: 700;
+  background:
+    linear-gradient(rgba(247, 224, 199, 0.55), rgba(247, 224, 199, 0.22)),
+    rgba(255, 252, 247, 0.5);
+  border-color: rgba(232, 125, 56, 0.28);
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.card,
+.order {
+  min-width: 0;
+}
+
+.cardHit,
+.orderHit {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 48px;
+  padding: 10px 10px 12px;
+  cursor: pointer;
+}
+
+.cardArt,
+.detailArt,
+.orderIcon,
+.illustrationChip,
+.detailIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(255, 255, 255, 0.78);
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.8);
+}
+
+.cardArt {
+  position: relative;
+  height: 92px;
+  border-radius: 18px;
+  overflow: hidden;
+}
+
+.cardSticker,
+.detailSticker,
+.illustrationSticker {
+  display: block;
+  pointer-events: none;
+}
+
+.cardSticker {
+  width: 72px;
+  height: 72px;
+}
+
+.tiltleft {
+  transform: rotate(-8deg);
+}
+
+.tiltright {
+  transform: rotate(8deg);
+}
+
+.tiltnone {
+  transform: rotate(0deg);
+}
+
+.detailArt {
+  width: 88px;
+  height: 88px;
+  border-radius: 28px;
+}
+
+.detailSticker {
+  width: 68px;
+  height: 68px;
+}
+
+.detailIcon {
+  width: 64px;
+  height: 64px;
+  border-radius: 22px;
+}
+
+.orderIcon {
+  flex: 0 0 auto;
+  width: 36px;
+  height: 36px;
+  border-radius: 14px;
+}
+
+.artapricot,
+.wellapricot {
+  color: var(--color-apricot-strong);
+  background:
+    radial-gradient(circle at 30% 24%, rgba(255, 255, 255, 0.72), transparent 46%),
+    var(--color-apricot-soft);
+}
+
+.artblush,
+.wellblush {
+  color: var(--color-blush-strong);
+  background:
+    radial-gradient(circle at 30% 24%, rgba(255, 255, 255, 0.72), transparent 46%),
+    var(--color-blush-soft);
+}
+
+.artsage,
+.wellsage {
+  color: var(--color-sage-strong);
+  background:
+    radial-gradient(circle at 30% 24%, rgba(255, 255, 255, 0.72), transparent 46%),
+    var(--color-sage-soft);
+}
+
+.artsky,
+.wellsky {
+  color: var(--color-sky-strong);
+  background:
+    radial-gradient(circle at 30% 24%, rgba(255, 255, 255, 0.72), transparent 46%),
+    var(--color-sky-soft);
+}
+
+.artlavender,
+.welllavender {
+  color: var(--color-lavender-strong);
+  background:
+    radial-gradient(circle at 30% 24%, rgba(255, 255, 255, 0.72), transparent 46%),
+    var(--color-lavender-soft);
+}
+
+.cardName {
+  display: block;
+  overflow: hidden;
+  color: var(--color-text-primary);
+  font-size: var(--font-body-lg);
+  font-weight: 700;
+  line-height: 1.35;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.cardDescription,
+.detailDescription {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.cardFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.priceChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: var(--radius-chip);
+  color: var(--color-apricot-strong);
+  background: rgba(255, 252, 247, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.72);
+}
+
+.priceText {
+  font-size: var(--font-body);
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+}
+
+.cardHintSoft {
+  font-size: var(--font-caption);
+  font-weight: 600;
+}
+
+.orders {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.orderHit {
+  padding: 16px;
+}
+
+.orderTop {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.orderHeading {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.status,
+.statusChip {
+  font-size: var(--font-caption);
+  font-weight: 700;
+  color: var(--color-apricot-strong);
+}
+
+.statusChip {
+  min-height: 28px;
+  padding: 4px 12px;
+  border-radius: var(--radius-chip);
+  background: var(--color-apricot-pale);
+}
+
+.refund {
+  display: block;
+  color: var(--color-sage-strong);
+  font-size: var(--font-body);
+}
+
+.orderActions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+
+.orderActions > button {
+  min-height: 48px;
+}
+
+.ledger {
+  overflow: hidden;
+}
+
+.ledgerRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  min-height: 64px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--color-border-warm);
+  cursor: pointer;
+}
+
+.ledgerRow:last-child {
+  border-bottom: 0;
+}
+
+.ledgerMain {
+  min-width: 0;
+}
+
+.ledgerReason {
+  display: block;
+  color: var(--color-text-primary);
+  font-size: var(--font-body-lg);
+  font-weight: 700;
+}
+
+.ledgerAmount {
+  flex: 0 0 auto;
+  color: var(--color-sage-strong);
+  font-size: 18px;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+}
+
+.negative {
+  color: var(--color-blush-strong);
+}
+
+.form,
+.detail {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.formLabel {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--color-text-primary);
+  font-weight: 700;
+}
+
+.illustrationLegend {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 12px;
+
+  .formLabel {
+    margin-bottom: 0;
+  }
+}
+
+.illustrationHint {
+  color: var(--color-text-primary);
+  font-size: var(--font-caption);
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.kindTabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.kindTab,
+.kindTabActive {
+  min-height: 48px;
+  padding: 0 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-chip);
+  border: 1px solid transparent;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--color-text-secondary);
+}
+
+.kindTabActive {
+  color: var(--color-apricot-strong);
+  font-weight: 700;
+  background:
+    linear-gradient(rgba(247, 224, 199, 0.55), rgba(247, 224, 199, 0.22)),
+    rgba(255, 252, 247, 0.5);
+  border: 1px solid rgba(232, 125, 56, 0.28);
+}
+
+.illustrationRow {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 8px;
+  width: 100%;
+}
+
+.illustrationChip {
+  position: relative;
+  width: 100%;
+  min-width: 0;
+  min-height: 48px;
+  height: 48px;
+  border-radius: 16px;
+  opacity: 0.72;
+  cursor: pointer;
+}
+
+.illustrationSticker {
+  width: 34px;
+  height: 34px;
+}
+
+.illustrationChip:hover,
+.illustrationChipHover,
+.illustrationChipActive {
+  opacity: 1;
+}
+
+.illustrationChipActive {
+  box-shadow:
+    inset 0 1px 1px rgba(255, 255, 255, 0.9),
+    0 0 0 2px rgba(232, 125, 56, 0.28);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tiltleft,
+  .tiltright,
+  .tiltnone {
+    transform: none;
+  }
+}

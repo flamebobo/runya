@@ -20,6 +20,7 @@ import {
 import { Glyph } from '@/components/icons/Glyph';
 import { platformAdapters } from '@/adapters/platform';
 import { useAutoDraft } from '@/hooks/useAutoDraft';
+import { useAuthRuntimeStore, useFamilyRuntimeStore } from '@/stores/runtime';
 import {
   createEphemeralPreviewUrl,
   getDurableMediaMetadata,
@@ -463,26 +464,32 @@ export function HealthEventForm({
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const userId = useAuthRuntimeStore((state) => state.userId) ?? 'anonymous';
+  const familyId = useFamilyRuntimeStore((state) => state.familyId) ?? 'none';
 
-  // AGENTS §53：Health Note 长文本需要本地草稿。仅新建场景（编辑时初值即服务端真值）。
+  // AGENTS §53：Health Note 长文本需要本地草稿；编辑草稿携带服务端版本，避免静默覆盖。
   // useAutoDraft 自带 debounce + useDidHide + 卸载落盘；保存成功后 clear。
   const healthDraft = useAutoDraft<{ note: string }>({
-    key: `health_note_new`,
+    key: `health_note:${userId}:${familyId}:${current?.id ?? 'new'}`,
     values: { note },
-    paused: Boolean(current),
+    serverVersion: current?.version,
   });
   const [healthDraftApplied, setHealthDraftApplied] = useState(false);
   useEffect(() => {
-    if (healthDraftApplied || current || !healthDraft.restored) return;
+    if (healthDraftApplied || !healthDraft.restored) return;
     const draftNote = healthDraft.restored.note;
-    if (typeof draftNote === 'string' && draftNote.trim()) {
+    if (typeof draftNote === 'string') {
       setNote(draftNote);
-      setMessage('已恢复上次没写完的备注');
+      if (draftNote.trim()) setMessage('已恢复上次没写完的备注');
     }
     setHealthDraftApplied(true);
-  }, [current, healthDraft.restored, healthDraftApplied]);
+  }, [healthDraft.restored, healthDraftApplied]);
 
   async function submit() {
+    if (healthDraft.conflict) {
+      setError('这条备注已在别处更新，请先查看最新版本后再修改。');
+      return;
+    }
     const trimmedTitle = title.trim();
     const scheduledAt = combineDateTime(date, time);
     if (!trimmedTitle) {
@@ -513,6 +520,7 @@ export function HealthEventForm({
             ? { pendingAttachment: attachment }
             : {}),
       });
+      await healthDraft.clear();
       onDone(
         attachment
           ? `${current ? '健康事项已更新' : '健康事项已保存'}，附件在本机等待媒体服务。`
@@ -520,7 +528,6 @@ export function HealthEventForm({
             ? '健康事项已更新。'
             : '健康事项已保存。',
       );
-      await healthDraft.clear();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : '还没保存好，请再试一次。');
     } finally {
@@ -570,6 +577,46 @@ export function HealthEventForm({
           ))}
         </View>
       </GlassSurface>
+
+      {healthDraft.conflict ? (
+        <GlassSurface
+          level="tinted"
+          tone="blush"
+          radius="quick"
+          className={classNames(styles.draftBanner, styles.draftConflictBanner)}
+        >
+          <Glyph name="shield" size="sm" />
+          <View className={styles.draftBannerText} role="alert">
+            <Text>这条备注已在别处更新，不能用旧草稿覆盖最新内容。</Text>
+          </View>
+          <SecondaryGlassButton
+            label="丢弃草稿并查看最新版本"
+            fullWidth={false}
+            onClick={() => {
+              void healthDraft.discard().then(() => {
+                setNote(current?.note ?? '');
+                setHealthDraftApplied(true);
+                setError(null);
+              });
+            }}
+          />
+        </GlassSurface>
+      ) : healthDraft.restored && healthDraft.restored.note ? (
+        <GlassSurface level="tinted" tone="sky" radius="quick" className={styles.draftBanner}>
+          <Glyph name="sparkle" size="sm" />
+          <Text className={styles.draftBannerText}>已恢复上次没写完的备注</Text>
+          <SecondaryGlassButton
+            label="丢弃草稿"
+            fullWidth={false}
+            onClick={() => {
+              void healthDraft.discard().then(() => {
+                setNote(current?.note ?? '');
+                setHealthDraftApplied(true);
+              });
+            }}
+          />
+        </GlassSurface>
+      ) : null}
 
       <GlassSurface level="card" radius="card" className={styles.formSection}>
         <GlassInput
@@ -644,7 +691,7 @@ export function HealthEventForm({
       {error ? <Text className={styles.formError}>{error}</Text> : null}
       <PrimaryActionButton
         label={current ? '保存修改' : '保存健康事项'}
-        state={saving ? 'loading' : 'default'}
+        state={saving ? 'loading' : healthDraft.conflict ? 'disabled' : 'default'}
         icon={<Glyph name="heart" size="sm" />}
         onClick={() => void submit()}
       />

@@ -16,6 +16,7 @@ const FAMILY_ID = '01JDEM3SYNCFAMILY000000000';
 const BABY_ID = '01JDEM3SYNCBABY00000000000';
 const ENTITY_ID = '01JDEM3SYNCENTITY000000000';
 const OPERATION_ID = '01JDEM3SYNCOPERATION000000';
+const REWARD_ORDER_ID = '01JDEM3SYNCORDER0000000000';
 const backing = new Map<string, string>();
 
 Object.defineProperty(globalThis, 'localStorage', {
@@ -242,5 +243,31 @@ describe('sync engine durable decisions', () => {
       clientPatch: { heightCm: 72 },
       serverSnapshot: { heightCm: 70 },
     });
+  });
+
+  it('advances the cursor for a server-owned reward order without caching it as a record', async () => {
+    vi.mocked(pullChanges).mockResolvedValue({
+      changes: [
+        {
+          seq: 8,
+          entityType: 'REWARD_ORDER',
+          entityId: REWARD_ORDER_ID,
+          op: 'UPDATE',
+          version: 2,
+          payload: null,
+          deleted: false,
+          occurredAt: Date.UTC(2026, 8, 5),
+        },
+      ],
+      nextCursor: 8,
+      hasMore: false,
+      serverEpoch: 1,
+    });
+
+    await expect(runSyncCycle(FAMILY_ID)).resolves.toEqual({
+      pulled: 1,
+      fullResynced: false,
+    });
+    await expect(getEntity('REWARD_ORDER', REWARD_ORDER_ID)).resolves.toBeNull();
   });
 });

@@ -1,32 +1,30 @@
 import { Text, View } from '@tarojs/components';
 import Taro, { useRouter } from '@tarojs/taro';
 import { useState } from 'react';
-import type { KnowledgePublic } from '@runew/contracts';
 import {
   AppDrawer,
   AppTopBar,
   DEFAULT_DRAWER_ITEMS,
   BottomNav,
-  BottomSheet,
   EmptyState,
   ErrorState,
   PageShell,
   Skeleton,
 } from '@/components';
-import { PrimaryActionButton } from '@/components/buttons';
 import {
-  CATEGORY_META,
   KnowledgeCard,
   KnowledgeQuickEntry,
   KnowledgeSearchBar,
+  KnowledgeDetailView,
+  KnowledgeLibraryView,
+  KnowledgeSearchView,
   CategoryChips,
+  LIBRARY_COPY,
   categoryLabel,
   formatAgeWindow,
-  formatReviewDate,
+  libraryStateFromParam,
 } from '@/components/knowledge/KnowledgeViews';
 import { AppBootstrapGate } from '@/components/shell/AppBootstrapGate';
-import { Glyph } from '@/components/icons/Glyph';
-import { GlassSurface } from '@/components/foundation/GlassSurface';
 import {
   useKnowledgeCountsQuery,
   useKnowledgeDetailQuery,
@@ -58,12 +56,6 @@ function knowledgeView(value: string | undefined): KnowledgeView {
   return 'home';
 }
 
-const LIBRARY_TITLES: Record<'saved' | 'later' | 'learned', { title: string; subtitle: string; empty: string }> = {
-  saved: { title: '我的收藏', subtitle: '值得反复读的，都在这里', empty: '还没有收藏的知识' },
-  later: { title: '稍后看', subtitle: '留一个安静的时刻慢慢读', empty: '稍后看还空着' },
-  learned: { title: '已学', subtitle: '读过的每一版都被认真记下', empty: '学到的知识会出现在这里' },
-};
-
 export default function KnowledgePage() {
   return (
     <AppBootstrapGate>
@@ -76,11 +68,10 @@ function KnowledgeBody() {
   const router = useRouter();
   const view = knowledgeView(router.params.view);
   const articleId = router.params.id ?? '';
-  const [libraryState, setLibraryState] = useState<'saved' | 'later' | 'learned'>('saved');
+  const [libraryState, setLibraryState] = useState(libraryStateFromParam(router.params.state));
   const [activeCategory, setActiveCategory] = useState(router.params.category ?? 'RECOMMEND');
   const [searchDraft, setSearchDraft] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
-  const [moreOpen, setMoreOpen] = useState(false);
   // 乐观收藏态：点击即刻反馈，真值随服务端失效结果回到详情页状态。
   const [savedIds, setSavedIds] = useState<Set<string>>(new Set());
   // 04.07 学到了过渡：标记正在播放“轻折叠移出”动画的卡片。
@@ -165,10 +156,7 @@ function KnowledgeBody() {
           savedCount={counts.data?.saved ?? 0}
           laterCount={counts.data?.later ?? 0}
           learnedCount={counts.data?.learned ?? 0}
-          onOpenLibrary={(state) => {
-            setLibraryState(state);
-            navigate('library', { state });
-          }}
+          onOpenLibrary={(state) => navigate('library', { state })}
         />
         <View className={styles.sectionRow}>
           <Text className={styles.sectionTitle}>适合 {babyName} 现在的</Text>
@@ -271,114 +259,30 @@ function KnowledgeBody() {
   }
 
   function renderSearch() {
-    const searching = searchQuery.trim().length > 0;
     return (
-      <View className={styles.stack}>
-        <KnowledgeSearchBar
-          editable
-          value={searchDraft}
-          onChange={(value) => setSearchDraft(value)}
-          onFocusSearch={() => setSearchQuery(searchDraft.trim())}
-        />
-        <PrimaryActionButton
-          label="搜一搜"
-          state={searchDraft.trim() ? 'default' : 'disabled'}
-          onClick={() => setSearchQuery(searchDraft.trim())}
-        />
-        {searching && searchResult.isLoading ? <Skeleton lines={6} /> : null}
-        {searching && searchResult.data ? (
-          searchResult.data.items.length === 0 ? (
-            <EmptyState
-              title="没有找到相关的知识"
-              description="换个词试试，比如辅食、睡眠、出牙。"
-            />
-          ) : (
-            <>
-              <Text className={styles.searchIntro}>
-                找到 {searchResult.data.items.length} 篇相关内容
-              </Text>
-              {searchResult.data.items.map((item) => (
-                <KnowledgeCard
-                  key={item.id}
-                  item={item}
-                  onClick={() => navigate('detail', { id: item.id })}
-                />
-              ))}
-            </>
-          )
-        ) : null}
-        {!searching ? (
-          <EmptyState
-            title="想了解点什么？"
-            description="搜搜辅食、睡眠、出牙，或任何此刻好奇的事。"
-          />
-        ) : null}
-      </View>
+      <KnowledgeSearchView
+        draft={searchDraft}
+        query={searchQuery}
+        loading={searchResult.isLoading}
+        items={searchResult.data?.items}
+        onDraftChange={setSearchDraft}
+        onSearch={setSearchQuery}
+        onOpen={(id) => navigate('detail', { id })}
+      />
     );
   }
 
   function renderLibrary() {
-    const copy = LIBRARY_TITLES[libraryState];
-    if (library.isLoading) return <Skeleton lines={7} />;
-    if (library.isError || !library.data) {
-      return <ErrorState onRetry={() => void library.refetch()} />;
-    }
-    const items = library.data.items;
     return (
-      <View className={styles.stack}>
-        <View className={styles.segmentRow}>
-          {(['saved', 'later', 'learned'] as const).map((state) => (
-            <View
-              key={state}
-              className={
-                libraryState === state ? styles.segmentActive : styles.segment
-              }
-              role="tab"
-              aria-selected={libraryState === state}
-              aria-label={LIBRARY_TITLES[state].title}
-              onClick={() => {
-                setLibraryState(state);
-                Taro.redirectTo({
-                  url: `/pages/knowledge/index?view=library&state=${state}`,
-                });
-              }}
-            >
-              <Text>{LIBRARY_TITLES[state].title}</Text>
-            </View>
-          ))}
-        </View>
-        {items.length === 0 ? (
-          <EmptyState title={copy.empty} description={copy.subtitle} />
-        ) : (
-          items.map((item) => (
-            <KnowledgeCard
-              key={item.knowledgeId}
-              item={
-                {
-                  id: item.knowledgeId,
-                  title: item.title,
-                  summary: item.summary,
-                  category: item.category,
-                  minAgeDays: null,
-                  maxAgeDays: null,
-                  sourceName: '',
-                  sourceUrl: null,
-                  reviewedAt: 0,
-                  contentVersion: item.contentVersion,
-                  priority: 0,
-                  publishedAt: null,
-                  updatedAt: 0,
-                  version: item.version,
-                } satisfies KnowledgePublic
-              }
-              contentUpdated={item.contentUpdated}
-              saved={item.saved}
-              readLater={item.readLater}
-              onClick={() => navigate('detail', { id: item.knowledgeId })}
-            />
-          ))
-        )}
-      </View>
+      <KnowledgeLibraryView
+        state={libraryState}
+        items={library.data?.items ?? []}
+        loading={library.isLoading}
+        error={library.isError}
+        onStateChange={setLibraryState}
+        onRetry={() => void library.refetch()}
+        onOpen={(id) => navigate('detail', { id })}
+      />
     );
   }
 
@@ -394,227 +298,47 @@ function KnowledgeBody() {
       );
     }
     const article = detail.data;
-    const pendingSaved = detailSaved;
-    const pendingLater = detailState.data?.readLater ?? false;
     const learnedThisVersion =
       detailState.data?.learnedVersion != null &&
       detailState.data.learnedVersion >= article.contentVersion;
-    const contentUpdated = detailState.data?.contentUpdated ?? false;
-    const tone = CATEGORY_META.get(article.category)?.tone ?? 'apricot';
-    const glyph = CATEGORY_META.get(article.category)?.glyph ?? 'book';
     return (
-      <View className={styles.stack}>
-        {contentUpdated ? (
-          <GlassSurface level="tinted" tone="sky" radius="quick" className={styles.updatedBanner}>
-            <Glyph name="bell" size="sm" className={styles.updatedBannerGlyph} />
-            <Text className={styles.updatedBannerText}>
-              这篇内容更新到了第 {article.contentVersion} 版，重新读一遍吧
-            </Text>
-          </GlassSurface>
-        ) : null}
-        <GlassSurface level="hero" radius="hero" className={styles.detailHeroCard}>
-          <View className={styles.detailTop}>
-            <View className={styles[`chip-${tone}`]}>
-              <Glyph name={glyph} size="md" />
-            </View>
-            <Text className={styles.cardCategory}>{categoryLabel(article.category)}</Text>
-            <View className={styles.cardMetaSpacer} />
-            <Text className={styles.cardAge}>
-              {formatAgeWindow(article.minAgeDays, article.maxAgeDays)}
-            </Text>
-          </View>
-          <Text className={styles.detailTitle}>{article.title}</Text>
-          <Text className={styles.detailSummary}>{article.summary}</Text>
-        </GlassSurface>
-
-        <GlassSurface level="card" radius="card">
-          <View className={styles.detailBody}>
-            {article.body.split('\n').filter(Boolean).map((paragraph, index) => (
-              <Text key={index} className={styles.detailParagraph}>
-                {paragraph}
-              </Text>
-            ))}
-          </View>
-        </GlassSurface>
-
-        <GlassSurface level="card" radius="card" className={styles.trustCard}>
-          <View className={styles.trustRow}>
-            <Glyph name="book" size="sm" className={styles.trustGlyph} />
-            <Text className={styles.trustLabel}>来源</Text>
-            <Text className={styles.trustValue}>{article.sourceName}</Text>
-          </View>
-          {article.sourceUrl ? (
-            <View className={styles.trustRow}>
-              <Glyph name="search" size="sm" className={styles.trustGlyph} />
-              <Text className={styles.trustLabel}>原文链接</Text>
-              <Text className={styles.trustValueLink}>{article.sourceUrl}</Text>
-            </View>
-          ) : null}
-          <View className={styles.trustRow}>
-            <Glyph name="smile" size="sm" className={styles.trustGlyph} />
-            <Text className={styles.trustLabel}>适用月龄</Text>
-            <Text className={styles.trustValue}>
-              {formatAgeWindow(article.minAgeDays, article.maxAgeDays)}
-            </Text>
-          </View>
-          <View className={styles.trustRow}>
-            <Glyph name="bell" size="sm" className={styles.trustGlyph} />
-            <Text className={styles.trustLabel}>审核时间</Text>
-            <Text className={styles.trustValue}>{formatReviewDate(article.reviewedAt)}</Text>
-          </View>
-          <View className={styles.trustRow}>
-            <Glyph name="grid" size="sm" className={styles.trustGlyph} />
-            <Text className={styles.trustLabel}>内容版本</Text>
-            <Text className={styles.trustValue}>
-              第 <Text className={styles.trustVersion}>{article.contentVersion}</Text> 版
-            </Text>
-          </View>
-        </GlassSurface>
-
-        <View
-          className={styles.detailActions}
-          role="toolbar"
-          aria-label="知识操作"
-        >
-          <GlassSurface level="tinted" tone="sage" radius="quick" className={styles.learnedActionCard}>
-            <View
-              className={
-                learnedThisVersion
-                  ? `${styles.detailAction} ${styles.detailActionLearned}`
-                  : styles.detailAction
-              }
-              role="button"
-              aria-label={learnedThisVersion ? '当前版本已学' : '标记为已学'}
-              aria-disabled={learnedThisVersion || stateActions.pending}
-              onClick={() => {
-                if (learnedThisVersion || stateActions.pending) return;
-                void stateActions
-                  .markLearned(article)
-                  .then(() => showToast('已记下，这一版学到了'));
-              }}
-            >
-              <Glyph name="smile" size="sm" />
-              <Text>{learnedThisVersion ? '已学这一版' : '学到了'}</Text>
-            </View>
-          </GlassSurface>
-          <GlassSurface level="tinted" tone="blush" radius="quick" className={styles.learnedActionCard}>
-            <View
-              className={
-                pendingSaved
-                  ? `${styles.detailAction} ${styles.detailActionSaved}`
-                  : styles.detailAction
-              }
-              role="button"
-              aria-label={pendingSaved ? '取消收藏' : '收藏这篇'}
-              onClick={() => {
-                const next = !pendingSaved;
-                markSavedLocally(article.id, next);
-                void stateActions
-                  .toggleSaved(article, next)
-                  .then(() => showToast(next ? '已放进收藏' : '已取消收藏'))
-                  .catch(() => markSavedLocally(article.id, !next));
-              }}
-            >
-              <Glyph name="heart" size="sm" />
-              <Text>{pendingSaved ? '已收藏' : '收藏'}</Text>
-            </View>
-          </GlassSurface>
-          <GlassSurface level="tinted" tone="sky" radius="quick" className={styles.learnedActionCard}>
-            <View
-              className={
-                pendingLater
-                  ? `${styles.detailAction} ${styles.detailActionLater}`
-                  : styles.detailAction
-              }
-              role="button"
-              aria-label={pendingLater ? '取消稍后看' : '稍后看'}
-              onClick={() => {
-                const next = !pendingLater;
-                void stateActions
-                  .toggleLater(article, next)
-                  .then(() => showToast(next ? '已加入稍后看' : '已取消稍后看'));
-              }}
-            >
-              <Glyph name="diary" size="sm" />
-              <Text>{pendingLater ? '已加入' : '稍后看'}</Text>
-            </View>
-          </GlassSurface>
-          <View
-            className={styles.detailAction}
-            role="button"
-            aria-label="更多操作"
-            onClick={() => setMoreOpen(true)}
-          >
-            <Glyph name="grid" size="sm" />
-            <Text>更多</Text>
-          </View>
-        </View>
-
-        <BottomSheet open={moreOpen} title="更多" onClose={() => setMoreOpen(false)}>
-          <View
-            className={styles.moreRow}
-            role="button"
-            aria-label="标记为已学"
-            onClick={() => {
-              setMoreOpen(false);
-              void stateActions
-                .markLearned(article)
-                .then(() => showToast('已记下，这一版学到了'));
-            }}
-          >
-            <Glyph name="smile" size="md" className={styles.moreGlyph} />
-            <Text className={styles.moreLabel}>学到了（当前版本）</Text>
-          </View>
-          <View
-            className={styles.moreRow}
-            role="button"
-            aria-label={pendingSaved ? '取消收藏' : '收藏这篇'}
-            onClick={() => {
-              setMoreOpen(false);
-              const next = !pendingSaved;
-              markSavedLocally(article.id, next);
-              void stateActions
-                .toggleSaved(article, next)
-                .then(() => showToast(next ? '已放进收藏' : '已取消收藏'));
-            }}
-          >
-            <Glyph name="heart" size="md" className={styles.moreGlyph} />
-            <Text className={styles.moreLabel}>
-              {pendingSaved ? '取消收藏' : '收藏这篇'}
-            </Text>
-          </View>
-          <View
-            className={styles.moreRow}
-            role="button"
-            aria-label="减少此类推荐"
-            onClick={() => {
-              setMoreOpen(false);
-              void stateActions.dismiss(article).then(() => {
-                showToast('好的，会减少这类推荐');
-                returnToPrevious();
-              });
-            }}
-          >
-            <Glyph name="close" size="md" className={styles.moreGlyph} />
-            <Text className={styles.moreLabel}>减少此类推荐</Text>
-          </View>
-          <View
-            className={styles.moreRow}
-            role="button"
-            aria-label="反馈内容问题"
-            onClick={() => {
-              setMoreOpen(false);
-              void feedback
-                .mutateAsync({ knowledgeId: article.id })
-                .then(() => showToast('已收到，编辑部会看看这篇'))
-                .catch(() => showToast('暂时没送出去，稍后再试试'));
-            }}
-          >
-            <Glyph name="bell" size="md" className={styles.moreGlyph} />
-            <Text className={styles.moreLabel}>内容有问题？告诉我们</Text>
-          </View>
-        </BottomSheet>
-      </View>
+      <KnowledgeDetailView
+        article={article}
+        saved={detailSaved}
+        readLater={detailState.data?.readLater ?? false}
+        learnedThisVersion={learnedThisVersion}
+        contentUpdated={detailState.data?.contentUpdated ?? false}
+        pending={stateActions.pending}
+        onLearned={() => {
+          void stateActions.markLearned(article).then(() => showToast('已记下，这一版学到了'));
+        }}
+        onToggleSaved={() => {
+          const next = !detailSaved;
+          markSavedLocally(article.id, next);
+          void stateActions
+            .toggleSaved(article, next)
+            .then(() => showToast(next ? '已放进收藏' : '已取消收藏'))
+            .catch(() => markSavedLocally(article.id, !next));
+        }}
+        onToggleLater={() => {
+          const next = !(detailState.data?.readLater ?? false);
+          void stateActions
+            .toggleLater(article, next)
+            .then(() => showToast(next ? '已加入稍后看' : '已取消稍后看'));
+        }}
+        onDismiss={() => {
+          void stateActions.dismiss(article).then(() => {
+            showToast('好的，会减少这类推荐');
+            returnToPrevious();
+          });
+        }}
+        onFeedback={() => {
+          void feedback
+            .mutateAsync({ knowledgeId: article.id })
+            .then(() => showToast('已收到，编辑部会看看这篇'))
+            .catch(() => showToast('暂时没送出去，稍后再试试'));
+        }}
+      />
     );
   }
 
@@ -626,13 +350,23 @@ function KnowledgeBody() {
     return renderDetail();
   }
 
+  const detailCopy = detail.data
+    ? {
+        title: categoryLabel(detail.data.category),
+        subtitle: `${formatAgeWindow(detail.data.minAgeDays, detail.data.maxAgeDays)} · 慢慢读`,
+      }
+    : { title: '育儿知识', subtitle: '慢慢读，不着急' };
+
   const VIEW_COPY: Record<
     Exclude<KnowledgeView, 'home'>,
     { title: string; subtitle: string }
   > = {
-    detail: { title: '育儿知识', subtitle: '慢慢读，不着急' },
+    detail: detailCopy,
     search: { title: '搜索知识', subtitle: '此刻好奇的，都可以搜搜看' },
-    library: { title: LIBRARY_TITLES[libraryState].title, subtitle: LIBRARY_TITLES[libraryState].subtitle },
+    library: {
+      title: LIBRARY_COPY[libraryState].title,
+      subtitle: LIBRARY_COPY[libraryState].subtitle,
+    },
     category: { title: '知识分类', subtitle: '按主题慢慢逛' },
   };
 
@@ -679,6 +413,9 @@ function KnowledgeBody() {
               else if (item.id === 'growth') {
                 setDrawerOpen(false);
                 void Taro.navigateTo({ url: '/pages/growth/index' });
+              } else if (item.id === 'baby') {
+                setDrawerOpen(false);
+                void Taro.navigateTo({ url: '/pages/baby/index' });
               } else {
                 setDrawerOpen(false);
                 showToast(`${item.title}正在布置，先看看知识`);
@@ -688,10 +425,13 @@ function KnowledgeBody() {
           onClose={() => setDrawerOpen(false)}
           onSearchClick={() => {
             setDrawerOpen(false);
-            navigate('search');
+            void Taro.navigateTo({ url: '/pages/search/index' });
           }}
           onNotificationClick={() => showToast('通知正在布置')}
-          onAdminClick={() => showToast('管理模式正在布置')}
+          onAdminClick={() => {
+            setDrawerOpen(false);
+            void Taro.navigateTo({ url: '/pages/admin/index' });
+          }}
         />
       ) : null}
     </PageShell>

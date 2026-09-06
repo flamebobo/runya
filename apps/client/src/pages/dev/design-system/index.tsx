@@ -3,6 +3,7 @@ import {
   AppTopBar,
   BottomNav,
   ConfirmDialog,
+  CuteIconChip,
   DangerButton,
   EmptyState,
   ErrorState,
@@ -37,6 +38,12 @@ export default function DesignSystemPage() {
       <AppTopBar variant="standard" title="Design System" onBackClick={() => undefined} />
       <View className={`page-content ${styles.page}`}>
         <SectionHeader title="Foundation" caption="Warm Glass + Cute Accent" />
+        <View className={styles.chips}>
+          <CuteIconChip icon="house" tone="sage" />
+          <CuteIconChip icon="growth" tone="apricot" />
+          <CuteIconChip icon="book" tone="sky" />
+          <CuteIconChip icon="plus" tone="lavender" dashed />
+        </View>
         <GlassSurface level="card" className={styles.block}>
           Glass Card
         </GlassSurface>

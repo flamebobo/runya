@@ -1,9 +1,10 @@
-import { and, desc, eq, gte, isNull, lt, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, isNull, lt, or, sql } from 'drizzle-orm';
 import { diaryMedia, diaries, mediaFiles, moods } from '@runew/db';
 import {
   type CreateDiaryBody,
   type CreateMoodBody,
   type DiaryPublic,
+  type DiarySearchQuery,
   type MediaPublic,
   type MomHomeSummary,
   type MoodCalendarResponse,
@@ -16,6 +17,7 @@ import {
 import { createUlid, utcNowMs } from '@runew/shared-utils';
 import { AppError } from '../../lib/errors.js';
 import type { Database } from '../../plugins/db.js';
+import { restoreTrashItem } from '../m11/service.js';
 
 type MediaKind = 'IMAGE' | 'AUDIO' | 'VIDEO' | 'FILE';
 
@@ -181,15 +183,12 @@ export async function deleteMood(db: Database, userId: string, id: string) {
     .where(and(eq(moods.id, id), eq(moods.userId, userId)));
 }
 
-export async function restoreMood(db: Database, userId: string, id: string) {
+export async function restoreMood(db: Database, userId: string, id: string, deviceId: string | null = null) {
   const row = await db.query.moods.findFirst({ where: eq(moods.id, id) });
   if (!row || row.userId !== userId || !row.deletedAt) {
     throw new AppError('NOT_FOUND', '这条心情不存在或不在最近删除里', 404);
   }
-  await db
-    .update(moods)
-    .set({ deletedAt: null, updatedAt: utcNowMs(), version: row.version + 1 })
-    .where(eq(moods.id, id));
+  await restoreTrashItem(db, userId, row.familyId, 'MOOD', id, deviceId);
   return mapMoodPublic(await getOwnedMood(db, userId, id));
 }
 
@@ -269,11 +268,42 @@ export async function listDiaries(db: Database, userId: string): Promise<DiaryPu
   const rows = await db.query.diaries.findMany({
     where: and(
       eq(diaries.familyId, familyId),
-      eq(diaries.ownerUserId, userId),
+      or(
+        eq(diaries.ownerUserId, userId),
+        eq(diaries.visibility, 'FAMILY'),
+      ),
       isNull(diaries.deletedAt),
     ),
     orderBy: [desc(diaries.recordedAt)],
     limit: 200,
+  });
+  const result: DiaryPublic[] = [];
+  for (const row of rows) {
+    result.push(mapDiaryPublic(row, await loadDiaryMedia(db, row.id)));
+  }
+  return result;
+}
+
+export async function searchDiaries(
+  db: Database,
+  userId: string,
+  query: DiarySearchQuery,
+): Promise<DiaryPublic[]> {
+  const familyId = await getActiveFamilyId(db, userId);
+  const escapedQuery = query.q.replace(/[\\%_]/g, '\\$&');
+  const pattern = `%${escapedQuery}%`;
+  const rows = await db.query.diaries.findMany({
+    where: and(
+      eq(diaries.familyId, familyId),
+      or(
+        eq(diaries.ownerUserId, userId),
+        eq(diaries.visibility, 'FAMILY'),
+      ),
+      isNull(diaries.deletedAt),
+      sql`(${diaries.title} LIKE ${pattern} ESCAPE '\\' OR ${diaries.body} LIKE ${pattern} ESCAPE '\\')`,
+    ),
+    orderBy: [desc(diaries.recordedAt)],
+    limit: 50,
   });
   const result: DiaryPublic[] = [];
   for (const row of rows) {
@@ -370,21 +400,26 @@ export async function getDiaryById(
   userId: string,
   id: string,
 ): Promise<DiaryPublic> {
-  const unscoped = await db.query.diaries.findFirst({
-    where: and(eq(diaries.id, id), isNull(diaries.deletedAt)),
-  });
-  if (unscoped && !diaryVisibleTo(unscoped, userId)) {
-    throw new AppError('NOT_FOUND', '这篇日记不存在', 404);
-  }
+  const familyId = await getActiveFamilyId(db, userId);
   const row = await db.query.diaries.findFirst({
     where: and(
       eq(diaries.id, id),
-      eq(diaries.ownerUserId, userId),
+      eq(diaries.familyId, familyId),
       isNull(diaries.deletedAt),
     ),
   });
-  if (!row) throw new AppError('NOT_FOUND', '这篇日记不存在', 404);
+  if (!row || !diaryVisibleTo(row, userId)) {
+    throw new AppError('NOT_FOUND', '这篇日记不存在', 404);
+  }
   return mapDiaryPublic(row, await loadDiaryMedia(db, row.id));
+}
+
+async function getOwnedDiary(db: Database, userId: string, id: string) {
+  const row = await getDiaryById(db, userId, id);
+  if (row.ownerUserId !== userId) {
+    throw new AppError('NOT_FOUND', '这篇日记不存在', 404);
+  }
+  return row;
 }
 
 export async function updateDiary(
@@ -394,7 +429,7 @@ export async function updateDiary(
   body: UpdateDiaryBody,
   expectedVersion: number | null,
 ): Promise<DiaryPublic> {
-  const row = await getDiaryById(db, userId, id);
+  const row = await getOwnedDiary(db, userId, id);
   if (expectedVersion !== null && row.version !== expectedVersion) {
     throw new AppError('ENTITY_VERSION_CONFLICT', '这篇日记已在别处更新', 409);
   }
@@ -417,7 +452,7 @@ export async function updateDiary(
 }
 
 export async function deleteDiary(db: Database, userId: string, id: string) {
-  const row = await getDiaryById(db, userId, id);
+  const row = await getOwnedDiary(db, userId, id);
   const now = utcNowMs();
   await db
     .update(diaries)
@@ -430,15 +465,12 @@ export async function deleteDiary(db: Database, userId: string, id: string) {
     .where(and(eq(diaries.id, id), eq(diaries.ownerUserId, userId)));
 }
 
-export async function restoreDiary(db: Database, userId: string, id: string) {
+export async function restoreDiary(db: Database, userId: string, id: string, deviceId: string | null = null) {
   const row = await db.query.diaries.findFirst({ where: eq(diaries.id, id) });
   if (!row || row.ownerUserId !== userId || !row.deletedAt) {
     throw new AppError('NOT_FOUND', '这篇日记不存在或不在最近删除里', 404);
   }
-  await db
-    .update(diaries)
-    .set({ deletedAt: null, deletedBy: null, updatedAt: utcNowMs(), version: row.version + 1 })
-    .where(eq(diaries.id, id));
+  await restoreTrashItem(db, userId, row.familyId, 'DIARY', id, deviceId);
   return getDiaryById(db, userId, id);
 }
 

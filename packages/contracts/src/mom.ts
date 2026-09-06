@@ -95,6 +95,10 @@ export const diaryPublicSchema = z.object({
   version: z.number().int().positive(),
 });
 
+export const diarySearchQuerySchema = z.object({
+  q: z.string().trim().min(1, '请输入想找的内容').max(100, '搜索内容不能超过 100 个字'),
+});
+
 export const momHomeSummarySchema = z.object({
   latestMood: moodPublicSchema.nullable().optional(),
   moodCount: z.number().int().nonnegative(),
@@ -120,5 +124,6 @@ export type MoodPublic = z.infer<typeof moodPublicSchema>;
 export type CreateDiaryBody = z.infer<typeof createDiaryBodySchema>;
 export type UpdateDiaryBody = z.infer<typeof updateDiaryBodySchema>;
 export type DiaryPublic = z.infer<typeof diaryPublicSchema>;
+export type DiarySearchQuery = z.infer<typeof diarySearchQuerySchema>;
 export type MomHomeSummary = z.infer<typeof momHomeSummarySchema>;
 export type MoodCalendarResponse = z.infer<typeof moodCalendarResponseSchema>;

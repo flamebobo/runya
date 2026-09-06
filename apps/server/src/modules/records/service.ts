@@ -712,25 +712,33 @@ export async function createSleep(
 
   const now = utcNowMs();
   const id = createUlid();
-  await db.insert(sleepRecords).values({
-    id,
-    familyId: baby.familyId,
-    babyId,
-    status: SleepStatus.COMPLETED,
-    startedAt: body.startedAt,
-    endedAt: body.endedAt,
-    durationSeconds: elapsedSecondsFromRange(
-      body.startedAt,
-      body.endedAt,
-      body.endedAt,
-    ),
-    startTimezone: body.timezoneName ?? DEFAULT_TZ,
-    endTimezone: body.timezoneName ?? DEFAULT_TZ,
-    note: body.note ?? null,
-    createdBy: userId,
-    createdAt: now,
-    updatedBy: userId,
-    updatedAt: now,
+  await db.transaction(async (tx) => {
+    await tx.insert(sleepRecords).values({
+      id,
+      familyId: baby.familyId,
+      babyId,
+      status: SleepStatus.COMPLETED,
+      startedAt: body.startedAt,
+      endedAt: body.endedAt,
+      durationSeconds: elapsedSecondsFromRange(
+        body.startedAt,
+        body.endedAt,
+        body.endedAt,
+      ),
+      startTimezone: body.timezoneName ?? DEFAULT_TZ,
+      endTimezone: body.timezoneName ?? DEFAULT_TZ,
+      note: body.note ?? null,
+      createdBy: userId,
+      createdAt: now,
+      updatedBy: userId,
+      updatedAt: now,
+    });
+    await awardRecordGem(tx, baby.familyId, userId, 'SLEEP_RECORD', id, now);
+    await appendSyncLog(tx, {
+      operationId: createUlid(), familyId: baby.familyId, actorUserId: userId,
+      deviceId: null, entityType: 'SLEEP_RECORD', entityId: id,
+      op: 'CREATE', entityVersion: 1,
+    }, now);
   });
   return mapSleep(await getSleepRow(db, id));
 }
@@ -836,41 +844,43 @@ export async function createDiaper(
   const baby = await requireBabyInFamily(db, userId, babyId);
   const now = utcNowMs();
   const id = createUlid();
-  await db.insert(diaperRecords).values({
-    id,
-    familyId: baby.familyId,
-    babyId,
-    diaperType: body.diaperType,
-    stoolColor: body.stoolColor ?? null,
-    stoolTexture: body.stoolTexture ?? null,
-    recordedAt: body.recordedAt ?? now,
-    timezoneName: body.timezoneName ?? DEFAULT_TZ,
-    note: body.note ?? null,
-    createdBy: userId,
-    createdAt: now,
-    updatedBy: userId,
-    updatedAt: now,
+  await db.transaction(async (tx) => {
+    await tx.insert(diaperRecords).values({
+      id,
+      familyId: baby.familyId,
+      babyId,
+      diaperType: body.diaperType,
+      stoolColor: body.stoolColor ?? null,
+      stoolTexture: body.stoolTexture ?? null,
+      recordedAt: body.recordedAt ?? now,
+      timezoneName: body.timezoneName ?? DEFAULT_TZ,
+      note: body.note ?? null,
+      createdBy: userId,
+      createdAt: now,
+      updatedBy: userId,
+      updatedAt: now,
+    });
+    await awardRecordGem(tx, baby.familyId, userId, 'DIAPER_RECORD', id, now);
+    await appendSyncLog(
+      tx,
+      {
+        operationId: createUlid(),
+        familyId: baby.familyId,
+        actorUserId: userId,
+        deviceId: null,
+        entityType: 'DIAPER_RECORD',
+        entityId: id,
+        op: 'CREATE',
+        entityVersion: 1,
+      },
+      now,
+    );
   });
   const rows = await db
     .select()
     .from(diaperRecords)
     .where(eq(diaperRecords.id, id))
     .limit(1);
-  // 在线创建也进同步日志：离线端 pull 时能看到同一条真相。
-  await appendSyncLog(
-    db,
-    {
-      operationId: createUlid(),
-      familyId: baby.familyId,
-      actorUserId: userId,
-      deviceId: null,
-      entityType: 'DIAPER_RECORD',
-      entityId: id,
-      op: 'CREATE',
-      entityVersion: 1,
-    },
-    now,
-  );
   return mapDiaper(rows[0]!);
 }
 
@@ -969,41 +979,44 @@ export async function createFood(
   const baby = await requireBabyInFamily(db, userId, babyId);
   const now = utcNowMs();
   const id = createUlid();
-  await db.insert(foodRecords).values({
-    id,
-    familyId: baby.familyId,
-    babyId,
-    foodName: body.foodName,
-    amountText: body.amountText ?? null,
-    reaction: body.reaction ?? null,
-    preference: body.preference ?? null,
-    recordedAt: body.recordedAt ?? now,
-    timezoneName: body.timezoneName ?? DEFAULT_TZ,
-    note: body.note ?? null,
-    createdBy: userId,
-    createdAt: now,
-    updatedBy: userId,
-    updatedAt: now,
+  await db.transaction(async (tx) => {
+    await tx.insert(foodRecords).values({
+      id,
+      familyId: baby.familyId,
+      babyId,
+      foodName: body.foodName,
+      amountText: body.amountText ?? null,
+      reaction: body.reaction ?? null,
+      preference: body.preference ?? null,
+      recordedAt: body.recordedAt ?? now,
+      timezoneName: body.timezoneName ?? DEFAULT_TZ,
+      note: body.note ?? null,
+      createdBy: userId,
+      createdAt: now,
+      updatedBy: userId,
+      updatedAt: now,
+    });
+    await awardRecordGem(tx, baby.familyId, userId, 'FOOD_RECORD', id, now);
+    await appendSyncLog(
+      tx,
+      {
+        operationId: createUlid(),
+        familyId: baby.familyId,
+        actorUserId: userId,
+        deviceId: null,
+        entityType: 'FOOD_RECORD',
+        entityId: id,
+        op: 'CREATE',
+        entityVersion: 1,
+      },
+      now,
+    );
   });
   const rows = await db
     .select()
     .from(foodRecords)
     .where(eq(foodRecords.id, id))
     .limit(1);
-  await appendSyncLog(
-    db,
-    {
-      operationId: createUlid(),
-      familyId: baby.familyId,
-      actorUserId: userId,
-      deviceId: null,
-      entityType: 'FOOD_RECORD',
-      entityId: id,
-      op: 'CREATE',
-      entityVersion: 1,
-    },
-    now,
-  );
   return mapFood(rows[0]!);
 }
 

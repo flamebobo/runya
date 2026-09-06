@@ -240,6 +240,9 @@ export async function getLibrary(
         title: row.article.title,
         summary: row.article.summary,
         category: row.article.category as KnowledgePublic['category'],
+        sourceName: row.article.sourceName,
+        minAgeDays: row.article.minAgeDays,
+        maxAgeDays: row.article.maxAgeDays,
       })),
   };
 }

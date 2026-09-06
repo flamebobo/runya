@@ -20,6 +20,18 @@ export const entityTypeSchema = z.enum([
   'HEALTH_EVENT',
 ]);
 
+// Reward orders are server-owned mutations, not offline pending operations.
+// They still appear in pull responses so a reward update cannot poison a
+// family's sync cursor while the client refreshes its query-backed order view.
+export const syncChangeEntityTypeSchema = z.enum([
+  'DIAPER_RECORD',
+  'FOOD_RECORD',
+  'GROWTH_RECORD',
+  'MILESTONE',
+  'HEALTH_EVENT',
+  'REWARD_ORDER',
+]);
+
 // CREATE 的 fullPayload 字段；UPDATE 的 patch / baseSnapshot 复用同一形状（全部可选）。
 export const recordPayloadSchema = z
   .object({
@@ -157,7 +169,7 @@ export const syncPullResponseSchema = z.object({
   changes: z.array(
     z.object({
       seq: z.number().int(),
-      entityType: entityTypeSchema,
+      entityType: syncChangeEntityTypeSchema,
       entityId: ulidSchema,
       op: syncOpSchema,
       version: z.number().int(),

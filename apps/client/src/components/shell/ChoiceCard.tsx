@@ -1,7 +1,8 @@
 import { Text, View } from '@tarojs/components';
 import type { SemanticTone } from '@runew/domain-types';
+import { CuteIconChip } from '@/components/foundation/CuteIconChip';
 import { GlassSurface } from '@/components/foundation/GlassSurface';
-import { Glyph, type GlyphName } from '@/components/icons/Glyph';
+import { type GlyphName } from '@/components/icons/Glyph';
 import classNames from '@/utils/classNames';
 import styles from './ChoiceCard.module.scss';
 
@@ -37,11 +38,7 @@ export function ChoiceCard({
         aria-pressed={selected}
         onClick={onClick}
       >
-        <View className={classNames(styles.iconChip, styles[`chip-${tone}`])}>
-          <View className={classNames(styles.glyph, styles[`glyph-${tone}`])}>
-            <Glyph name={glyph} size="md" />
-          </View>
-        </View>
+        <CuteIconChip icon={glyph} tone={tone} selected={selected} />
         <View className={styles.copy}>
           <Text className={styles.title}>{title}</Text>
           {caption ? <Text className={styles.caption}>{caption}</Text> : null}

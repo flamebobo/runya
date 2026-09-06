@@ -6,7 +6,7 @@ import type {
   UpdateNotificationPreferencesBody,
 } from '@runew/contracts';
 import { createUlid, utcNowMs } from '@runew/shared-utils';
-import { and, desc, eq, isNull } from 'drizzle-orm';
+import { and, desc, eq, isNull, or, sql } from 'drizzle-orm';
 import type { LibSQLDatabase } from 'drizzle-orm/libsql';
 import { AppError } from '../../lib/errors.js';
 import { DEFAULT_DND_END_MINUTE, DEFAULT_DND_START_MINUTE } from '@runew/db';
@@ -111,7 +111,28 @@ export async function listNotifications(
   const rows = await db
     .select()
     .from(notifications)
-    .where(and(eq(notifications.userId, userId), isNull(notifications.deletedAt)))
+    .where(
+      and(
+        eq(notifications.userId, userId),
+        isNull(notifications.deletedAt),
+        or(
+          isNull(notifications.familyId),
+          sql`EXISTS (
+            SELECT 1 FROM family_members fm
+            WHERE fm.family_id = ${notifications.familyId}
+              AND fm.user_id = ${userId}
+              AND fm.status = 'ACTIVE'
+              AND NOT EXISTS (
+                SELECT 1 FROM family_member_permissions fmp
+                WHERE fmp.family_member_id = fm.id
+                  AND fmp.resource = 'family'
+                  AND fmp.action = 'VIEW'
+                  AND fmp.effect = 'DENY'
+              )
+          )`,
+        ),
+      ),
+    )
     .orderBy(desc(notifications.createdAt))
     .limit(100);
   const unread = rows.filter((row) => row.readAt == null).length;

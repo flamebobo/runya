@@ -23,24 +23,34 @@ import { syncRoutes } from './modules/sync/routes.js';
 import { mediaRoutes } from './modules/media/media.routes.js';
 import { memoriesRoutes } from './modules/memories/memories.routes.js';
 import { momRoutes } from './modules/mom/mom.routes.js';
-import Fastify from 'fastify';
+import { gemsRoutes } from './modules/gems/gems.routes.js';
+import { familyRoutes } from './modules/family/routes.js';
+import { adminRoutes } from './modules/admin/routes.js';
+import { m11Routes } from './modules/m11/routes.js';
+import { attachRealtimeHub } from './modules/m11/realtime.js';
+import Fastify, { type RawServerDefault } from 'fastify';
+
+export const LOG_REDACT_PATHS = [
+  'req.headers.authorization',
+  'req.headers.cookie',
+  'req.body.password',
+  'req.body.adminPassword',
+  'req.headers.x-admin-session',
+  'req.headers.x-admin-token',
+  'req.headers.x-admin-reauth-grant',
+  // M8（AGENTS §61）：PRIVATE 正文永不进日志。
+  'req.body.body',
+  'req.body.note',
+  'req.body.title',
+];
 
 export async function buildApp() {
   const config = loadConfig();
 
-  const app = Fastify({
+  const app = Fastify<RawServerDefault>({
     logger: {
       level: config.LOG_LEVEL,
-      redact: [
-        'req.headers.authorization',
-        'req.headers.cookie',
-        'req.body.password',
-        'req.body.adminPassword',
-        // M8（AGENTS §61）：PRIVATE 正文永不进日志。
-        'req.body.body',
-        'req.body.note',
-        'req.body.title',
-      ],
+      redact: LOG_REDACT_PATHS,
     },
     genReqId: () => crypto.randomUUID(),
     requestIdHeader: 'x-request-id',
@@ -76,6 +86,7 @@ export async function buildApp() {
   });
   await app.register(configContextPlugin);
   await app.register(dbPlugin);
+  app.decorate('realtimeHub', attachRealtimeHub(app));
 
   app.addHook('onRequest', attachAuthContext);
 
@@ -105,6 +116,10 @@ export async function buildApp() {
   await app.register(mediaRoutes, { prefix: '/api/v1' });
   await app.register(memoriesRoutes, { prefix: '/api/v1' });
   await app.register(momRoutes, { prefix: '/api/v1' });
+  await app.register(gemsRoutes, { prefix: '/api/v1' });
+  await app.register(familyRoutes, { prefix: '/api/v1' });
+  await app.register(m11Routes, { prefix: '/api/v1' });
+  await app.register(adminRoutes, { prefix: '/api/v1' });
 
   return app;
 }

@@ -45,6 +45,7 @@ import { formatBabyAgeLabel, todayIsoDate } from '@/utils/babyAge';
 import { localDayRange } from '@/utils/recordTime';
 import MemoriesPage from '@/pages/memories';
 import styles from './index.module.scss';
+import { FamilyHome } from '@/components/family/FamilyHome';
 
 const TAB_COPY: Record<
   'records' | 'memories' | 'family',
@@ -459,6 +460,11 @@ function TodayShell({ initialTab }: { initialTab: BottomNavKey | null }) {
             />
           </View>
         </>
+      ) : activeTab === 'family' ? (
+        <>
+          <AppTopBar title={TAB_COPY.family.title} subtitle={TAB_COPY.family.subtitle} gemAmount={gemAmount} onMenuClick={() => setDrawerOpen(true)} />
+          <View className="page-content"><FamilyHome familyId={bootstrap.data?.currentFamily?.id} familyName={bootstrap.data?.currentFamily?.name} /></View>
+        </>
       ) : (
         <>
           <AppTopBar
@@ -511,17 +517,27 @@ function TodayShell({ initialTab }: { initialTab: BottomNavKey | null }) {
               void Taro.navigateTo({ url: '/pages/health/index' });
             } else if (item.id === 'mom') {
               void Taro.navigateTo({ url: '/pages/mom/index' });
+            } else if (item.id === 'gems') {
+              void Taro.navigateTo({ url: '/pages/gems/index' });
             } else if (item.id === 'settings') {
               void Taro.navigateTo({ url: '/pages/settings/index' });
+            } else if (item.id === 'baby') {
+              void Taro.navigateTo({ url: '/pages/baby/index' });
             } else comingSoon(item.title);
           },
         }))}
         onClose={() => setDrawerOpen(false)}
-        onSearchClick={() => comingSoon('搜索')}
+        onSearchClick={() => {
+          setDrawerOpen(false);
+          void Taro.navigateTo({ url: '/pages/search/index' });
+        }}
         onNotificationClick={() =>
           void Taro.navigateTo({ url: '/pages/notifications/index' })
         }
-        onAdminClick={() => comingSoon('管理模式')}
+        onAdminClick={() => {
+          setDrawerOpen(false);
+          void Taro.navigateTo({ url: '/pages/admin/index' });
+        }}
       />
       <AddMomentOverlay
         open={sheetOpen}

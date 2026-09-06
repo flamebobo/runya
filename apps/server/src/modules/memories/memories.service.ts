@@ -33,6 +33,7 @@ import {
 import { createUlid } from '@runew/shared-utils';
 import { AppError } from '../../lib/errors.js';
 import type { Database } from '../../plugins/db.js';
+import { restoreTrashItem } from '../m11/service.js';
 
 type MediaKind = 'IMAGE' | 'AUDIO' | 'VIDEO' | 'FILE';
 
@@ -257,6 +258,7 @@ export async function restorePhotoMemory(
   actorUserId: string,
   familyId: string,
   id: string,
+  deviceId: string | null = null,
 ) {
   const deleted = await db.query.photoMemories.findFirst({
     where: and(
@@ -266,15 +268,7 @@ export async function restorePhotoMemory(
     ),
   });
   if (!deleted) throw new AppError('NOT_FOUND', '找不到可恢复的照片回忆', 404);
-  await db
-    .update(photoMemories)
-    .set({
-      deletedAt: null,
-      updatedBy: actorUserId,
-      updatedAt: Date.now(),
-      version: deleted.version + 1,
-    })
-    .where(and(eq(photoMemories.id, id), eq(photoMemories.familyId, familyId)));
+  await restoreTrashItem(db, actorUserId, familyId, 'PHOTO_MEMORY', id, deviceId);
   return getPhotoMemoryById(db, familyId, id);
 }
 
@@ -362,8 +356,15 @@ export async function updateBabyQuote(
   familyId: string,
   id: string,
   body: UpdateBabyQuoteBody,
+  expectedVersion: number | null,
 ) {
   const quote = await getBabyQuoteById(db, familyId, id);
+  if (expectedVersion === null) {
+    throw new AppError('VALIDATION_ERROR', '更新语录需要 If-Match', 400);
+  }
+  if (expectedVersion !== quote.version) {
+    throw new AppError('ENTITY_VERSION_CONFLICT', '这条宝宝语录已在别处更新', 409);
+  }
   await validateMediaIds(
     db,
     familyId,
@@ -371,7 +372,7 @@ export async function updateBabyQuote(
     quote.babyId,
     'AUDIO',
   );
-  await db
+  const result = await db
     .update(babyQuotes)
     .set({
       quoteText: body.quoteText ?? quote.quoteText,
@@ -384,7 +385,16 @@ export async function updateBabyQuote(
       updatedAt: Date.now(),
       version: quote.version + 1,
     })
-    .where(and(eq(babyQuotes.id, id), eq(babyQuotes.familyId, familyId)));
+    .where(
+      and(
+        eq(babyQuotes.id, id),
+        eq(babyQuotes.familyId, familyId),
+        eq(babyQuotes.version, expectedVersion),
+      ),
+    );
+  if (result.rowsAffected !== 1) {
+    throw new AppError('ENTITY_VERSION_CONFLICT', '这条宝宝语录已在别处更新', 409);
+  }
   return getBabyQuoteById(db, familyId, id);
 }
 
@@ -412,6 +422,7 @@ export async function restoreBabyQuote(
   actorUserId: string,
   familyId: string,
   id: string,
+  deviceId: string | null = null,
 ) {
   const deleted = await db.query.babyQuotes.findFirst({
     where: and(
@@ -421,15 +432,7 @@ export async function restoreBabyQuote(
     ),
   });
   if (!deleted) throw new AppError('NOT_FOUND', '找不到可恢复的宝宝语录', 404);
-  await db
-    .update(babyQuotes)
-    .set({
-      deletedAt: null,
-      updatedBy: actorUserId,
-      updatedAt: Date.now(),
-      version: deleted.version + 1,
-    })
-    .where(and(eq(babyQuotes.id, id), eq(babyQuotes.familyId, familyId)));
+  await restoreTrashItem(db, actorUserId, familyId, 'BABY_QUOTE', id, deviceId);
   return getBabyQuoteById(db, familyId, id);
 }
 
@@ -554,6 +557,7 @@ export async function restoreAudioMemory(
   actorUserId: string,
   familyId: string,
   id: string,
+  deviceId: string | null = null,
 ) {
   const deleted = await db.query.audioMemories.findFirst({
     where: and(
@@ -563,15 +567,7 @@ export async function restoreAudioMemory(
     ),
   });
   if (!deleted) throw new AppError('NOT_FOUND', '找不到可恢复的声音回忆', 404);
-  await db
-    .update(audioMemories)
-    .set({
-      deletedAt: null,
-      updatedBy: actorUserId,
-      updatedAt: Date.now(),
-      version: deleted.version + 1,
-    })
-    .where(and(eq(audioMemories.id, id), eq(audioMemories.familyId, familyId)));
+  await restoreTrashItem(db, actorUserId, familyId, 'AUDIO_MEMORY', id, deviceId);
   return getAudioMemoryById(db, familyId, id);
 }
 
@@ -711,6 +707,7 @@ export async function restoreFirstMoment(
   actorUserId: string,
   familyId: string,
   id: string,
+  deviceId: string | null = null,
 ) {
   const deleted = await db.query.firstMoments.findFirst({
     where: and(
@@ -720,15 +717,7 @@ export async function restoreFirstMoment(
     ),
   });
   if (!deleted) throw new AppError('NOT_FOUND', '找不到可恢复的第一次记录', 404);
-  await db
-    .update(firstMoments)
-    .set({
-      deletedAt: null,
-      updatedBy: actorUserId,
-      updatedAt: Date.now(),
-      version: deleted.version + 1,
-    })
-    .where(and(eq(firstMoments.id, id), eq(firstMoments.familyId, familyId)));
+  await restoreTrashItem(db, actorUserId, familyId, 'FIRST_MOMENT', id, deviceId);
   return getFirstMomentById(db, familyId, id);
 }
 
@@ -828,8 +817,15 @@ export async function updateTimeCapsule(
   familyId: string,
   id: string,
   body: UpdateTimeCapsuleBody,
+  expectedVersion: number | null,
 ) {
   const capsule = await getTimeCapsuleById(db, familyId, id);
+  if (expectedVersion === null) {
+    throw new AppError('VALIDATION_ERROR', '更新时光胶囊需要 If-Match', 400);
+  }
+  if (expectedVersion !== capsule.version) {
+    throw new AppError('ENTITY_VERSION_CONFLICT', '这封时光胶囊已在别处更新', 409);
+  }
   if (capsule.state !== 'DRAFT') {
     throw new AppError('CAPSULE_SEALED', '时光胶囊已封存，不可直接修改', 409);
   }
@@ -851,7 +847,7 @@ export async function updateTimeCapsule(
         eq(timeCapsules.id, id),
         eq(timeCapsules.familyId, familyId),
         eq(timeCapsules.state, 'DRAFT'),
-        eq(timeCapsules.version, capsule.version),
+        eq(timeCapsules.version, expectedVersion),
         isNull(timeCapsules.deletedAt),
       ),
     );
@@ -1015,6 +1011,7 @@ export async function restoreTimeCapsule(
   actorUserId: string,
   familyId: string,
   id: string,
+  deviceId: string | null = null,
 ) {
   const deleted = await db.query.timeCapsules.findFirst({
     where: and(
@@ -1024,10 +1021,7 @@ export async function restoreTimeCapsule(
     ),
   });
   if (!deleted) throw new AppError('NOT_FOUND', '找不到可恢复的时光胶囊', 404);
-  await db
-    .update(timeCapsules)
-    .set({ deletedAt: null, updatedAt: Date.now(), version: deleted.version + 1 })
-    .where(and(eq(timeCapsules.id, id), eq(timeCapsules.familyId, familyId)));
+  await restoreTrashItem(db, actorUserId, familyId, 'TIME_CAPSULE', id, deviceId);
   return getTimeCapsuleById(db, familyId, id);
 }
 

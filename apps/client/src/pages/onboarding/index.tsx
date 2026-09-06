@@ -12,6 +12,7 @@ import { GlassSurface } from '@/components/foundation/GlassSurface';
 import { PageShell } from '@/components/foundation/PageShell';
 import { SectionHeader } from '@/components/foundation/SectionHeader';
 import { AppTopBar } from '@/components/navigation/AppTopBar';
+import { FAMILY_RELATIONSHIP_CARDS } from '@/components/family/relationshipCards';
 import { BabyHeroCard } from '@/components/shell/BabyHeroCard';
 import { ChoiceCard } from '@/components/shell/ChoiceCard';
 import { QuickTile } from '@/components/shell/QuickTile';
@@ -22,19 +23,6 @@ import styles from './index.module.scss';
 type Step = 'welcome' | 'baby' | 'identity' | 'topics';
 
 const STEP_ORDER: Step[] = ['welcome', 'baby', 'identity', 'topics'];
-
-const RELATIONSHIP_CARDS: Array<{
-  value: FamilyRelationship;
-  title: string;
-  caption: string;
-  glyph: GlyphName;
-  tone: SemanticTone;
-}> = [
-  { value: 'MOM', title: '妈妈', caption: '记下很多温柔的小事', glyph: 'smile', tone: 'blush' },
-  { value: 'DAD', title: '爸爸', caption: '把陪伴收进时间线', glyph: 'family', tone: 'sage' },
-  { value: 'GRANDPARENT', title: '祖辈', caption: '把疼爱慢慢收藏', glyph: 'heart', tone: 'lavender' },
-  { value: 'OTHER', title: '其他家人', caption: '这个小家也有我', glyph: 'sparkle', tone: 'sky' },
-];
 
 const TOPIC_TILES: Array<{ id: string; label: string; glyph: GlyphName; tone: SemanticTone }> = [
   { id: '睡眠', label: '睡眠', glyph: 'moon', tone: 'lavender' },
@@ -186,7 +174,7 @@ export default function OnboardingPage() {
           <>
             <SectionHeader title="选择家庭身份" caption="这只是家里怎么称呼你，不是考核" />
             <View className={styles.identityGrid}>
-              {RELATIONSHIP_CARDS.map((item) => (
+              {FAMILY_RELATIONSHIP_CARDS.map((item) => (
                 <ChoiceCard
                   key={item.value}
                   title={item.title}
@@ -230,6 +218,12 @@ export default function OnboardingPage() {
             state={loading ? 'loading' : 'default'}
             onClick={goNext}
           />
+          {step === 'welcome' ? (
+            <TextAction
+              label="已有邀请？创建或加入小家"
+              onClick={() => void Taro.navigateTo({ url: '/pages/family/join/index' })}
+            />
+          ) : null}
           {step !== 'welcome' ? <TextAction label="上一步" onClick={goBack} /> : null}
         </View>
       </View>

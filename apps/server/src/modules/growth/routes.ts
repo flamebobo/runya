@@ -107,7 +107,7 @@ export async function growthRoutes(app: FastifyInstance) {
     async (request, reply) => {
       const { id } = request.params as { id: string };
       const item = await growthTransaction(app, (db) =>
-        restoreGrowth(db, request.auth.userId!, id),
+        restoreGrowth(db, request.auth.userId!, id, request.auth.deviceId),
       );
       etagReply(reply, item.version);
       return createSuccessEnvelope(item, request.requestId);
@@ -184,7 +184,7 @@ export async function growthRoutes(app: FastifyInstance) {
     async (request, reply) => {
       const { id } = request.params as { id: string };
       const item = await growthTransaction(app, (db) =>
-        restoreMilestone(db, request.auth.userId!, id),
+        restoreMilestone(db, request.auth.userId!, id, request.auth.deviceId),
       );
       etagReply(reply, item.version);
       return createSuccessEnvelope(item, request.requestId);

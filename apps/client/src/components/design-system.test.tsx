@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { AppDrawer, DEFAULT_DRAWER_ITEMS } from './navigation/AppDrawer';
 import { BottomNav } from './navigation/BottomNav';
 import { PrimaryActionButton } from './buttons';
+import { CuteIconChip } from './foundation/CuteIconChip';
 import { GlassDateField } from './forms';
 import { ChoiceCard } from './shell/ChoiceCard';
 import { AddMomentOverlay } from './overlay/AddMomentOverlay';
@@ -91,5 +92,11 @@ describe('design system components', () => {
     );
     expect(screen.getByLabelText('爸爸')).toBeTruthy();
     expect(screen.getByLabelText('爸爸').getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('renders CuteIconChip as a decorative 48px bubble', () => {
+    const { container } = render(<CuteIconChip icon="family" tone="sage" />);
+    const chip = container.querySelector('[aria-hidden="true"]');
+    expect(chip).toBeTruthy();
   });
 });

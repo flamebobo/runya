@@ -4,9 +4,12 @@ import Taro from '@tarojs/taro';
 import { platformAdapters } from '@/adapters/platform';
 import { useFamilyRuntimeStore, useSyncRuntimeStore } from '@/stores/runtime';
 import { getPendingCount, runSyncCycle } from '@/local/syncEngine';
+import { openRealtimeChannel, type RealtimeChannel } from '@/local/realtime';
 import { setSyncNowBridge } from '@/hooks/useSyncNowBridge';
+import { persistWeappSession } from '@/api/client';
 
 const POLL_INTERVAL_MS = 20_000;
+const REALTIME_RECONNECT_MS = 10_000;
 
 interface SyncContextValue {
   syncNow: () => void;
@@ -18,8 +21,8 @@ export function useSyncNow() {
   return useContext(SyncContext).syncNow;
 }
 
-// 前台 pull + polling fallback（Tech Design §27.4 的最低要求）。
-// WebSocket sync_hint 不在本里程碑范围；断线用 20s 轮询兜底。
+// 前台 pull + polling fallback（Tech Design §27.4）。实时通道只负责提示，
+// 数据仍由既有 sync cycle 拉取，避免把 PRIVATE body 放进长连接。
 export function SyncProvider({ children }: PropsWithChildren) {
   const familyId = useFamilyRuntimeStore((state) => state.familyId);
   const setPendingCount = useSyncRuntimeStore((state) => state.setPendingCount);
@@ -46,6 +49,67 @@ export function SyncProvider({ children }: PropsWithChildren) {
     }, POLL_INTERVAL_MS);
     return () => clearInterval(timer);
   }, [familyId]);
+
+  useEffect(() => {
+    if (!familyId) return;
+    let cancelled = false;
+    let opening = false;
+    let channel: RealtimeChannel | null = null;
+    let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
+
+    const scheduleReconnect = () => {
+      if (cancelled || reconnectTimer !== undefined) return;
+      reconnectTimer = setTimeout(() => {
+        reconnectTimer = undefined;
+        void connect();
+      }, REALTIME_RECONNECT_MS);
+    };
+
+    const connect = async () => {
+      if (cancelled || opening || channel) return;
+      opening = true;
+      try {
+        const nextChannel = await openRealtimeChannel({
+          familyId,
+          onEvent: (event) => {
+            if (event.type === 'session_revoked') {
+              persistWeappSession(null);
+              void Taro.reLaunch({ url: '/pages/auth/login/index' });
+              return;
+            }
+            if (
+              (event.type === 'sync_hint' || event.type === 'notification_hint') &&
+              (!event.familyId || event.familyId === familyIdRef.current)
+            ) {
+              syncNow();
+            }
+          },
+          onClose: () => {
+            channel = null;
+            scheduleReconnect();
+          },
+        });
+        if (cancelled) {
+          nextChannel?.close();
+          return;
+        }
+        channel = nextChannel;
+        if (!channel) scheduleReconnect();
+      } catch {
+        scheduleReconnect();
+      } finally {
+        opening = false;
+      }
+    };
+
+    void connect();
+    return () => {
+      cancelled = true;
+      if (reconnectTimer !== undefined) clearTimeout(reconnectTimer);
+      channel?.close();
+      channel = null;
+    };
+  }, [familyId, syncNow]);
 
   useEffect(() => {
     if (!familyId) return;

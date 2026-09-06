@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from 'node:crypto';
+import { createHash, createHmac, randomBytes } from 'node:crypto';
 
 export function generateSessionToken(): string {
   return randomBytes(32).toString('base64url');
@@ -14,6 +14,14 @@ export function hashInviteToken(token: string): string {
 
 export function generateInviteToken(): string {
   return randomBytes(24).toString('base64url');
+}
+
+export function generateIdempotentInviteToken(secret: string, scope: string): string {
+  return createHmac('sha256', secret)
+    .update(`runew:family-invite:${scope}`)
+    .digest()
+    .subarray(0, 24)
+    .toString('base64url');
 }
 
 export function hashClientMetadata(value: string): string {

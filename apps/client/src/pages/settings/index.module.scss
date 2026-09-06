@@ -95,3 +95,113 @@
 .homeCardTitle {
   font-size: var(--font-body);
 }
+
+.homeActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding-top: 4px;
+}
+
+.formCard {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px;
+}
+
+.fieldHeading {
+  font-size: var(--font-body);
+  font-weight: 800;
+  color: var(--color-text-primary);
+}
+
+.exportGrid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0 16px 16px;
+}
+
+.dataRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 48px;
+  padding: 8px 0;
+}
+
+.dataRowTitle {
+  min-width: 0;
+  color: var(--color-text-primary);
+  overflow-wrap: anywhere;
+}
+
+.deviceList {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.deviceCard {
+  padding: 8px 16px;
+}
+
+.deviceCopy {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.privacyToggleRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 64px;
+  padding: 8px 0;
+  cursor: pointer;
+}
+
+.toggleOn,
+.toggleOff {
+  display: flex;
+  align-items: center;
+  width: 50px;
+  height: 30px;
+  flex: 0 0 50px;
+  padding: 3px;
+  border-radius: 999px;
+  transition: background-color 180ms ease;
+}
+
+.toggleOn {
+  justify-content: flex-end;
+  background: var(--color-sage-strong);
+}
+
+.toggleOff {
+  justify-content: flex-start;
+  background: var(--color-border-warm);
+}
+
+.toggleKnob {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--color-surface-cream);
+  box-shadow: var(--shadow-control);
+}
+
+@media (max-width: 390px) {
+  .homeActions {
+    flex-direction: column;
+  }
+
+  .homeActions > button {
+    width: 100%;
+  }
+}

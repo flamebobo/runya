@@ -12,6 +12,7 @@ import { and, asc, eq, inArray, isNull } from 'drizzle-orm';
 import type { LibSQLDatabase } from 'drizzle-orm/libsql';
 import { AppError } from '../../lib/errors.js';
 import { requireBabyInFamily } from '../identity/service.js';
+import { restoreTrashItem } from '../m11/service.js';
 import { appendSyncLog } from '../sync/log.js';
 import { planReminders, reminderView } from './schedule.js';
 
@@ -515,7 +516,7 @@ export async function deleteEvent(db: Database, userId: string, id: string) {
   return { ok: true as const };
 }
 
-export async function restoreEvent(db: Database, userId: string, id: string) {
+export async function restoreEvent(db: Database, userId: string, id: string, deviceId: string | null = null) {
   const row = await getEventRow(db, id, true);
   await requireBabyInFamily(db, userId, row.babyId);
   if (row.deletedAt == null) {
@@ -531,16 +532,10 @@ export async function restoreEvent(db: Database, userId: string, id: string) {
         : row.scheduledAt <= now
           ? 'EXPIRED'
           : 'UPCOMING';
+  await restoreTrashItem(db, userId, row.familyId, 'HEALTH_EVENT', id, deviceId);
   await db
     .update(healthEvents)
-    .set({
-      deletedAt: null,
-      deletedBy: null,
-      status: nextStatus,
-      updatedBy: userId,
-      updatedAt: now,
-      version: row.version + 1,
-    })
+    .set({ status: nextStatus, updatedBy: userId, updatedAt: now })
     .where(eq(healthEvents.id, id));
   await restoreDeletedReminders(db, {
     eventId: id,
@@ -552,20 +547,6 @@ export async function restoreEvent(db: Database, userId: string, id: string) {
     now,
   });
   const restored = await getEvent(db, userId, id);
-  await appendSyncLog(
-    db,
-    {
-      operationId: createUlid(),
-      familyId: row.familyId,
-      actorUserId: userId,
-      deviceId: null,
-      entityType: 'HEALTH_EVENT',
-      entityId: id,
-      op: 'RESTORE',
-      entityVersion: restored.version,
-    },
-    now,
-  );
   return restored;
 }
 

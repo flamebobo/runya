@@ -1,4 +1,5 @@
-import type { FastifyInstance } from 'fastify';
+import { buildEtag, parseIfMatch } from '@runew/shared-utils';
+import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { and, eq, isNull } from 'drizzle-orm';
 import {
   annualReviewResponseSchema,
@@ -62,6 +63,11 @@ import {
   updateTimeCapsule,
   updateTimeCapsuleFavorite,
 } from './memories.service.js';
+
+function ifMatchVersion(request: FastifyRequest) {
+  const header = request.headers['if-match'];
+  return parseIfMatch(typeof header === 'string' ? header : undefined);
+}
 
 async function getActiveFamilyId(db: Database, userId: string) {
   const membership = await db.query.familyMembers.findFirst({
@@ -240,7 +246,7 @@ export async function memoriesRoutes(fastify: FastifyInstance) {
       const familyId = await getActiveFamilyId(request.db, userId);
       const { id } = request.params as { id: string };
       return createSuccessEnvelope(
-        await restorePhotoMemory(request.db, userId, familyId, id),
+        await restorePhotoMemory(request.db, userId, familyId, id, request.auth.deviceId),
         request.id,
       );
     },
@@ -284,28 +290,33 @@ export async function memoriesRoutes(fastify: FastifyInstance) {
     },
   );
 
-  fastify.get('/memories/quotes/:id', { preHandler: requireAuth }, async (request) => {
+  fastify.get('/memories/quotes/:id', { preHandler: requireAuth }, async (request, reply) => {
     const userId = request.auth.userId!;
     const familyId = await getActiveFamilyId(request.db, userId);
     const { id } = request.params as { id: string };
-    return createSuccessEnvelope(
-      await getBabyQuoteById(request.db, familyId, id),
-      request.id,
-    );
+    const quote = await getBabyQuoteById(request.db, familyId, id);
+    reply.header('ETag', buildEtag(quote.version));
+    return createSuccessEnvelope(quote, request.id);
   });
 
   fastify.patch(
     '/memories/quotes/:id',
     { preHandler: requireAuth },
-    async (request) => {
+    async (request, reply) => {
       const userId = request.auth.userId!;
       const familyId = await getActiveFamilyId(request.db, userId);
       const { id } = request.params as { id: string };
       const body = updateBabyQuoteBodySchema.parse(request.body);
-      return createSuccessEnvelope(
-        await updateBabyQuote(request.db, userId, familyId, id, body),
-        request.id,
+      const quote = await updateBabyQuote(
+        request.db,
+        userId,
+        familyId,
+        id,
+        body,
+        ifMatchVersion(request),
       );
+      reply.header('ETag', buildEtag(quote.version));
+      return createSuccessEnvelope(quote, request.id);
     },
   );
 
@@ -329,7 +340,7 @@ export async function memoriesRoutes(fastify: FastifyInstance) {
       const familyId = await getActiveFamilyId(request.db, userId);
       const { id } = request.params as { id: string };
       return createSuccessEnvelope(
-        await restoreBabyQuote(request.db, userId, familyId, id),
+        await restoreBabyQuote(request.db, userId, familyId, id, request.auth.deviceId),
         request.id,
       );
     },
@@ -418,7 +429,7 @@ export async function memoriesRoutes(fastify: FastifyInstance) {
       const familyId = await getActiveFamilyId(request.db, userId);
       const { id } = request.params as { id: string };
       return createSuccessEnvelope(
-        await restoreAudioMemory(request.db, userId, familyId, id),
+        await restoreAudioMemory(request.db, userId, familyId, id, request.auth.deviceId),
         request.id,
       );
     },
@@ -507,7 +518,7 @@ export async function memoriesRoutes(fastify: FastifyInstance) {
       const familyId = await getActiveFamilyId(request.db, userId);
       const { id } = request.params as { id: string };
       return createSuccessEnvelope(
-        await restoreFirstMoment(request.db, userId, familyId, id),
+        await restoreFirstMoment(request.db, userId, familyId, id, request.auth.deviceId),
         request.id,
       );
     },
@@ -554,29 +565,34 @@ export async function memoriesRoutes(fastify: FastifyInstance) {
   fastify.get(
     '/memories/capsules/:id',
     { preHandler: requireAuth },
-    async (request) => {
+    async (request, reply) => {
       const userId = request.auth.userId!;
       const familyId = await getActiveFamilyId(request.db, userId);
       const { id } = request.params as { id: string };
-      return createSuccessEnvelope(
-        await getTimeCapsuleById(request.db, familyId, id),
-        request.id,
-      );
+      const capsule = await getTimeCapsuleById(request.db, familyId, id);
+      reply.header('ETag', buildEtag(capsule.version));
+      return createSuccessEnvelope(capsule, request.id);
     },
   );
 
   fastify.patch(
     '/memories/capsules/:id',
     { preHandler: requireAuth },
-    async (request) => {
+    async (request, reply) => {
       const userId = request.auth.userId!;
       const familyId = await getActiveFamilyId(request.db, userId);
       const { id } = request.params as { id: string };
       const body = updateTimeCapsuleBodySchema.parse(request.body);
-      return createSuccessEnvelope(
-        await updateTimeCapsule(request.db, userId, familyId, id, body),
-        request.id,
+      const capsule = await updateTimeCapsule(
+        request.db,
+        userId,
+        familyId,
+        id,
+        body,
+        ifMatchVersion(request),
       );
+      reply.header('ETag', buildEtag(capsule.version));
+      return createSuccessEnvelope(capsule, request.id);
     },
   );
 
@@ -651,7 +667,7 @@ export async function memoriesRoutes(fastify: FastifyInstance) {
       const familyId = await getActiveFamilyId(request.db, userId);
       const { id } = request.params as { id: string };
       return createSuccessEnvelope(
-        await restoreTimeCapsule(request.db, userId, familyId, id),
+        await restoreTimeCapsule(request.db, userId, familyId, id, request.auth.deviceId),
         request.id,
       );
     },

@@ -972,6 +972,25 @@
   color: var(--color-sage-strong);
 }
 
+.draftBanner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  color: var(--color-sky-strong);
+}
+
+.draftBannerText {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--font-caption);
+  line-height: 1.45;
+}
+
+.draftConflictBanner {
+  color: var(--color-danger-text);
+}
+
 .formError {
   color: var(--color-danger-text);
 }

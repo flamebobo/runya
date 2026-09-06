@@ -123,7 +123,7 @@ export async function healthEventRoutes(app: FastifyInstance) {
       const { id } = request.params as { id: string };
       const item = healthEventPublicSchema.parse(
         await app.db.transaction((tx) =>
-          restoreEvent(tx as unknown as typeof app.db, request.auth.userId!, id),
+          restoreEvent(tx as unknown as typeof app.db, request.auth.userId!, id, request.auth.deviceId),
         ),
       );
       etagReply(reply, item.version);

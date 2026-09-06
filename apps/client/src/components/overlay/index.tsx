@@ -1,5 +1,6 @@
 import { View, Text } from '@tarojs/components';
 import { PrimaryActionButton, SecondaryGlassButton } from '@/components/buttons';
+import { Glyph } from '@/components/icons/Glyph';
 import styles from './BottomSheet.module.scss';
 
 export interface BottomSheetProps {
@@ -16,7 +17,15 @@ export function BottomSheet({ open, title, children, onClose }: BottomSheetProps
     <View className={styles.overlay} role="dialog" aria-modal="true" aria-label={title}>
       <View className={styles.backdrop} onClick={onClose} />
       <View className={styles.sheet}>
-        <Text className={styles.title}>{title}</Text>
+        <View className={styles.handle} aria-hidden />
+        <View className={styles.header}>
+          <Text className={styles.title}>{title}</Text>
+          {onClose ? (
+            <View className={styles.close} role="button" aria-label="收起" onClick={onClose}>
+              <Glyph name="close" size="sm" />
+            </View>
+          ) : null}
+        </View>
         <View className={styles.content}>{children}</View>
       </View>
     </View>

@@ -1,6 +1,8 @@
 import { View, Text } from '@tarojs/components';
+import type { SemanticTone } from '@runew/domain-types';
 import { TextAction } from '@/components/buttons';
-import { Glyph } from '@/components/icons/Glyph';
+import { CuteIconChip } from '@/components/foundation/CuteIconChip';
+import { type GlyphName } from '@/components/icons/Glyph';
 import { useUiOverlayStore } from '@/stores/runtime';
 import styles from './Toast.module.scss';
 
@@ -11,7 +13,8 @@ export function Toast() {
 
   return (
     <View className={styles.root} role="status" aria-live="polite">
-      <Text>{message}</Text>
+      <CuteIconChip icon="sparkle" tone="apricot" size="sm" />
+      <Text className={styles.toastText}>{message}</Text>
     </View>
   );
 }
@@ -31,16 +34,20 @@ export function EmptyState({
   description,
   actionLabel,
   onAction,
+  glyph = 'sparkle',
+  tone = 'apricot',
 }: {
   title: string;
   description?: string;
   actionLabel?: string;
   onAction?: () => void;
+  glyph?: GlyphName;
+  tone?: SemanticTone;
 }) {
   return (
     <View className={styles.state} role="status">
       <View className={styles.stateMark} aria-hidden>
-        <Glyph name="sparkle" size="lg" />
+        <CuteIconChip icon={glyph} tone={tone} />
       </View>
       <Text className={styles.stateTitle}>{title}</Text>
       {description ? <Text className={styles.stateDescription}>{description}</Text> : null}
@@ -63,7 +70,7 @@ export function ErrorState({
   return (
     <View className={styles.state} role="alert">
       <View className={styles.stateMark} aria-hidden>
-        <Glyph name="sparkle" size="lg" />
+        <CuteIconChip icon="shield" tone="blush" />
       </View>
       <Text className={styles.stateTitle}>{title}</Text>
       <Text className={styles.stateDescription}>{description}</Text>

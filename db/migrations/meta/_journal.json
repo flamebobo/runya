@@ -78,6 +78,62 @@
       "when": 1788912000000,
       "tag": "0010_m9_gems",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "6",
+      "when": 1788998400000,
+      "tag": "0011_m10_family",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1788998460000,
+      "tag": "0012_m10_task_fields",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "6",
+      "when": 1788998520000,
+      "tag": "0013_m11_core",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "6",
+      "when": 1788998580000,
+      "tag": "0014_m12_admin",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "6",
+      "when": 1788998640000,
+      "tag": "0015_m11_search_hardening",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "6",
+      "when": 1788998700000,
+      "tag": "0016_m11_realtime_ticket_session_binding",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "6",
+      "when": 1788998760000,
+      "tag": "0017_m10_task_lifecycle",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "6",
+      "when": 1788998820000,
+      "tag": "0018_m10_anniversary_occurrence",
+      "breakpoints": true
     }
   ]
 }

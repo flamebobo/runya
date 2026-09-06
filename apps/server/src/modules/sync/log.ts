@@ -6,6 +6,7 @@ import { and, asc, eq, gt } from 'drizzle-orm';
 import type { LibSQLDatabase } from 'drizzle-orm/libsql';
 
 type Database = LibSQLDatabase<typeof schema>;
+type DbExecutor = Pick<Database, 'insert'>;
 
 export interface SyncLogEntry {
   seq: number;
@@ -34,7 +35,7 @@ export interface AppendLogInput {
 // sync_operations 只追加：幂等键撞唯一索引时说明该 operation 已入账，返回 false。
 // 同一 operationId 不同内容属于客户端故障，靠唯一索引天然拒绝，不做 silent overwrite。
 export async function appendSyncLog(
-  db: Database,
+  db: DbExecutor,
   input: AppendLogInput,
   now: number,
 ): Promise<boolean> {

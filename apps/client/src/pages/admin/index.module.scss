@@ -1,0 +1,48 @@
+.page { padding-bottom: calc(32px + var(--safe-bottom)); }
+.content { padding-bottom: 24px; }
+.stack { display: flex; flex-direction: column; gap: 14px; }
+.hero { position: relative; overflow: hidden; padding: 20px 18px; display: flex; gap: 14px; align-items: center; }
+.hero::after { content: '✦'; position: absolute; right: 20px; top: 12px; color: var(--color-lavender-strong); opacity: .45; font-size: 30px; }
+.heroArt { width: 56px; height: 56px; flex: 0 0 56px; display: flex; align-items: center; justify-content: center; border-radius: 20px; color: var(--color-lavender-strong); background: var(--color-lavender-soft); }
+.heroCopy { min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+.heroTitle { font-size: var(--font-card-title); font-weight: 800; text-shadow: var(--text-emboss); }
+.heroCaption { color: var(--color-text-secondary); font-size: var(--font-caption); line-height: 1.5; }
+.formCard, .panel { padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+.sessionBar { padding: 12px 14px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.sessionCopy { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.sessionTitle { font-size: var(--font-body-sm); font-weight: 800; }
+.sessionHint { color: var(--color-sage-strong); font-size: 12px; font-weight: 750; }
+.sectionTitle { display: flex; align-items: center; gap: 8px; font-size: var(--font-card-title); font-weight: 800; }
+.mark { width: 30px; height: 30px; border-radius: 12px; display: flex; align-items: center; justify-content: center; color: var(--color-lavender-strong); background: var(--color-lavender-soft); }
+.modules { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.module { min-height: 72px; padding: 12px; display: flex; flex-direction: column; justify-content: space-between; gap: 8px; }
+.moduleIcon { color: var(--color-sage-strong); }
+.moduleLabel { font-weight: 700; font-size: var(--font-body-sm); }
+.statusRow, .auditRow { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.statusValue { color: var(--color-sage-strong); font-weight: 800; }
+.muted { color: var(--color-text-secondary); font-size: var(--font-caption); line-height: 1.5; }
+.auditList { display: flex; flex-direction: column; gap: 8px; }
+.auditRow { padding: 10px 12px; border-radius: var(--radius-quick); background: rgba(255,255,255,.18); }
+.auditAction { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 700; font-size: var(--font-body-sm); }
+.auditTime { color: var(--color-text-tertiary); font-size: 11px; flex: 0 0 auto; }
+.hint { color: var(--color-text-secondary); font-size: 12px; line-height: 1.55; }
+.moduleIntro { display: flex; flex-direction: column; gap: 3px; padding: 2px 2px 0; }
+.detailHeader { display: flex; align-items: center; gap: 10px; min-width: 0; padding: 2px 2px 0; }
+.detailHeader > :first-child { flex: 0 0 auto; }
+.detailTitle { min-width: 0; flex: 1; font-size: var(--font-page-title); font-weight: 850; overflow-wrap: anywhere; text-shadow: var(--text-emboss); }
+.dangerFlow { display: flex; flex-direction: column; gap: 12px; }
+.dangerMessage, .dangerHint { color: var(--color-text-secondary); font-size: var(--font-body-sm); line-height: 1.55; }
+.dangerHint { font-size: 12px; }
+.confirmSurface { padding: 14px; display: flex; flex-direction: column; gap: 6px; }
+.confirmTitle { color: var(--color-blush-strong); font-weight: 850; }
+.confirmText { color: var(--color-text-secondary); font-size: 12px; line-height: 1.5; }
+
+@media (max-width: 360px) {
+  .modules { grid-template-columns: 1fr; }
+  .sessionBar { align-items: flex-start; flex-direction: column; }
+  .detailHeader { align-items: flex-start; flex-direction: column; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero::after { animation: none; }
+}

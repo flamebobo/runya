@@ -240,6 +240,103 @@ describe('Memories & Time Capsule API', () => {
     expect(reviewRes.json().data.quotesCount).toBeGreaterThanOrEqual(1);
   });
 
+  it('protects baby quote updates with ETag versions', async () => {
+    const createRes = await app.inject({
+      method: 'POST',
+      url: `/api/v1/babies/${babyId}/memories/quotes`,
+      headers: authHeaders,
+      payload: { quoteText: '我要自己拿勺子', happenedAt: Date.now() },
+    });
+    expect(createRes.statusCode).toBe(200);
+    const quote = createRes.json().data as { id: string; version: number };
+
+    const detailRes = await app.inject({
+      method: 'GET',
+      url: `/api/v1/memories/quotes/${quote.id}`,
+      headers: authHeaders,
+    });
+    expect(detailRes.statusCode).toBe(200);
+    expect(detailRes.headers.etag).toBe(`"v${quote.version}"`);
+
+    const missingVersionRes = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/memories/quotes/${quote.id}`,
+      headers: authHeaders,
+      payload: { quoteText: '我要自己拿小勺子' },
+    });
+    expect(missingVersionRes.statusCode).toBe(400);
+    expect(missingVersionRes.json().error.code).toBe('VALIDATION_ERROR');
+
+    const updateRes = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/memories/quotes/${quote.id}`,
+      headers: { ...authHeaders, 'if-match': `"v${quote.version}"` },
+      payload: { quoteText: '我要自己拿小勺子' },
+    });
+    expect(updateRes.statusCode).toBe(200);
+    expect(updateRes.json().data.quoteText).toBe('我要自己拿小勺子');
+    expect(updateRes.headers.etag).toBe(`"v${quote.version + 1}"`);
+
+    const staleVersionRes = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/memories/quotes/${quote.id}`,
+      headers: { ...authHeaders, 'if-match': `"v${quote.version}"` },
+      payload: { favorite: true },
+    });
+    expect(staleVersionRes.statusCode).toBe(409);
+    expect(staleVersionRes.json().error.code).toBe('ENTITY_VERSION_CONFLICT');
+  });
+
+  it('protects time capsule updates with ETag versions', async () => {
+    const createRes = await app.inject({
+      method: 'POST',
+      url: `/api/v1/babies/${babyId}/memories/capsules`,
+      headers: authHeaders,
+      payload: {
+        title: '给未来的你',
+        body: '愿你一直勇敢好奇。',
+        openAt: Date.now() + 365 * 24 * 3600 * 1000,
+      },
+    });
+    expect(createRes.statusCode).toBe(200);
+    const capsule = createRes.json().data as { id: string; version: number };
+
+    const detailRes = await app.inject({
+      method: 'GET',
+      url: `/api/v1/memories/capsules/${capsule.id}`,
+      headers: authHeaders,
+    });
+    expect(detailRes.statusCode).toBe(200);
+    expect(detailRes.headers.etag).toBe(`"v${capsule.version}"`);
+
+    const missingVersionRes = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/memories/capsules/${capsule.id}`,
+      headers: authHeaders,
+      payload: { title: '给长大后的你' },
+    });
+    expect(missingVersionRes.statusCode).toBe(400);
+    expect(missingVersionRes.json().error.code).toBe('VALIDATION_ERROR');
+
+    const updateRes = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/memories/capsules/${capsule.id}`,
+      headers: { ...authHeaders, 'if-match': `"v${capsule.version}"` },
+      payload: { title: '给长大后的你' },
+    });
+    expect(updateRes.statusCode).toBe(200);
+    expect(updateRes.headers.etag).toBe(`"v${capsule.version + 1}"`);
+
+    const staleVersionRes = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/memories/capsules/${capsule.id}`,
+      headers: { ...authHeaders, 'if-match': `"v${capsule.version}"` },
+      payload: { title: '过期修改' },
+    });
+    expect(staleVersionRes.statusCode).toBe(409);
+    expect(staleVersionRes.json().error.code).toBe('ENTITY_VERSION_CONFLICT');
+  });
+
   it('strictly enforces Time Capsule state machine transitions (DRAFT -> SEALED -> OPENED)', async () => {
     const futureOpenAt = Date.now() + 365 * 24 * 3600 * 1000;
 
@@ -263,7 +360,7 @@ describe('Memories & Time Capsule API', () => {
     const patchDraftRes = await app.inject({
       method: 'PATCH',
       url: `/api/v1/memories/capsules/${capsule.id}`,
-      headers: authHeaders,
+      headers: { ...authHeaders, 'if-match': `"v${capsule.version}"` },
       payload: {
         title: '给成年时的润润（修改版）',
       },
@@ -285,7 +382,7 @@ describe('Memories & Time Capsule API', () => {
     const patchSealedRes = await app.inject({
       method: 'PATCH',
       url: `/api/v1/memories/capsules/${capsule.id}`,
-      headers: authHeaders,
+      headers: { ...authHeaders, 'if-match': `"v${sealedCapsule.version}"` },
       payload: {
         title: '尝试非法篡改已封存内容',
       },
